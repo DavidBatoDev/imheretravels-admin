@@ -4,6 +4,13 @@ import { Timestamp } from "firebase/firestore";
 // TOUR PACKAGE CORE TYPES
 // ============================================================================
 
+// A previously-used slug that redirects to the tour's current slug on www.
+// `redirect` is the per-slug override: false keeps the record but stops redirecting.
+export interface PreviousSlug {
+  slug: string;
+  redirect: boolean;
+}
+
 export interface TourPackage {
   id: string; // Auto-generated Firestore ID
   name: string;
@@ -33,6 +40,7 @@ export interface TourPackage {
   comingSoon?: boolean; // Gate full content on www
   isHosted?: boolean; // Marks this tour as a hosted tour (independent of resident-host attachment)
   bookingSlug?: string; // Override slug used in booking/reservation URLs
+  previousSlugs?: PreviousSlug[]; // Old slugs that redirect to the current slug on www
   depositNote?: string; // Full deposit notice text on booking card; falls back to auto-generated
   footnote?: string; // Booking card footnote; falls back to "Additional fees may apply"
 }
@@ -264,6 +272,7 @@ export interface TourFormDataWithStringDates {
   brochureLink?: string;
   stripePaymentLink?: string;
   preDeparturePack?: string;
+  previousSlugs?: PreviousSlug[];
 }
 
 // ============================================================================

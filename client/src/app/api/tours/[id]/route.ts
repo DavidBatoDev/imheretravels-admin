@@ -180,6 +180,34 @@ export async function PATCH(
       );
     }
 
+    // Reconcile previousSlugs (old slugs that redirect to the current slug on www).
+    // Honour any manual edits/toggles the form sent, then auto-record the prior
+    // slug whenever the slug changes on this save.
+    type PrevSlug = { slug: string; redirect: boolean };
+    const manualPrev: PrevSlug[] = Array.isArray(updates.previousSlugs)
+      ? updates.previousSlugs
+      : Array.isArray(currentData.previousSlugs)
+        ? currentData.previousSlugs
+        : [];
+    const newSlug = updates.slug ?? currentData.slug;
+    const bySlug = new Map<string, PrevSlug>();
+    for (const e of manualPrev) {
+      if (e && typeof e.slug === "string" && e.slug && e.slug !== newSlug) {
+        bySlug.set(e.slug, { slug: e.slug, redirect: e.redirect !== false });
+      }
+    }
+    // Auto-record the prior slug on rename. Redirect on by default; never clobber
+    // an existing entry the admin may have already toggled off.
+    if (
+      updates.slug &&
+      currentData.slug &&
+      updates.slug !== currentData.slug &&
+      !bySlug.has(currentData.slug)
+    ) {
+      bySlug.set(currentData.slug, { slug: currentData.slug, redirect: true });
+    }
+    updateData.previousSlugs = Array.from(bySlug.values());
+
     // Handle media updates properly
     if (updates.media) {
       updateData.media = {

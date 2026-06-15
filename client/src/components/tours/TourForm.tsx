@@ -110,6 +110,9 @@ const schema = z.object({
   comingSoon: z.boolean().default(false),
   isHosted: z.boolean().default(false),
   bookingSlug: z.string().optional().or(z.literal("")),
+  previousSlugs: z
+    .array(z.object({ slug: z.string(), redirect: z.boolean() }))
+    .optional(),
   seo: z.object({ title: z.string().optional(), description: z.string().optional() }).optional(),
   destinations: z.array(z.string()).optional(),
   stripePaymentLink: z.string().url().optional().or(z.literal("")),
@@ -680,7 +683,7 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
     defaultValues: {
       name: "", slug: "", url: "", tourCode: "", description: "",
       duration: "1 days", cardHeaderTitle: "11 Day Tour", cardSubHeader: "Destination", status: "draft",
-      comingSoon: false, isHosted: false, bookingSlug: "", seo: { title: "", description: "" },
+      comingSoon: false, isHosted: false, bookingSlug: "", previousSlugs: [], seo: { title: "", description: "" },
       destinations: [],
       stripePaymentLink: "", depositNote: "", footnote: "",
       brochureLink: "", preDeparturePack: "",
@@ -838,6 +841,7 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
         cardSubHeader: (tour as any).cardSubHeader ?? (tour as any).destinations?.[0] ?? "",
         status: tour.status || "draft",
         comingSoon: (tour as any).comingSoon ?? false, isHosted: (tour as any).isHosted ?? false, bookingSlug: (tour as any).bookingSlug ?? "",
+        previousSlugs: (tour as any).previousSlugs ?? [],
         seo: (tour as any).seo ?? { title: "", description: "" },
         destinations: (tour as any).destinations ?? [],
         stripePaymentLink: tour.stripePaymentLink ?? "", depositNote: (tour as any).depositNote ?? "",

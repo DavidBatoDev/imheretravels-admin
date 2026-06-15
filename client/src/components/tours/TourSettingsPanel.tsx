@@ -70,7 +70,19 @@ export default function TourSettingsPanel({ open, onClose, form, tour, coverImag
   const sv = (n: string, v: any) => form.setValue(n as any, v);
 
   const [destInput, setDestInput] = useState("");
+  const [prevSlugInput, setPrevSlugInput] = useState("");
   const destinations: string[] = w("destinations") ?? [];
+  const previousSlugs: { slug: string; redirect: boolean }[] = w("previousSlugs") ?? [];
+
+  // Recover legacy old slugs that predate auto-capture: the original URL pattern
+  // was the tour name slugified. If the current slug differs from that and it's
+  // not already recorded, offer it as a one-click suggestion.
+  const nameSlug = normalizeSlug((w("name") as string) ?? "");
+  const currentSlug = (w("slug") as string) ?? "";
+  const suggestedPrevSlug =
+    nameSlug && nameSlug !== currentSlug && !previousSlugs.some(p => p.slug === nameSlug)
+      ? nameSlug
+      : null;
   const sym = CURRENCY_SYM[(w("pricing.currency") as string) ?? "GBP"] ?? "£";
 
   const { fields: reqFields, append: addReq, remove: rmReq } =
@@ -85,6 +97,36 @@ export default function TourSettingsPanel({ open, onClose, form, tour, coverImag
       }
       setDestInput("");
     }
+  }
+
+  // Normalize free text into a URL slug (kebab-case), matching generateSlug().
+  function normalizeSlug(v: string) {
+    return v
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, "")
+      .replace(/[\s_-]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  }
+
+  function addPrevSlug(e: React.KeyboardEvent<HTMLInputElement>) {
+    if ((e.key === "Enter" || e.key === ",") && prevSlugInput.trim()) {
+      e.preventDefault();
+      const slug = normalizeSlug(prevSlugInput);
+      const currentSlug = (w("slug") as string) ?? "";
+      if (slug && slug !== currentSlug && !previousSlugs.some(p => p.slug === slug)) {
+        sv("previousSlugs", [...previousSlugs, { slug, redirect: true }]);
+      }
+      setPrevSlugInput("");
+    }
+  }
+
+  function setPrevSlugRedirect(slug: string, redirect: boolean) {
+    sv("previousSlugs", previousSlugs.map(p => (p.slug === slug ? { ...p, redirect } : p)));
+  }
+
+  function removePrevSlug(slug: string) {
+    sv("previousSlugs", previousSlugs.filter(p => p.slug !== slug));
   }
 
   const meta = tour?.metadata as any;
@@ -429,6 +471,62 @@ export default function TourSettingsPanel({ open, onClose, form, tour, coverImag
                 <div>
                   <FieldLabel>Booking Slug Override</FieldLabel>
                   <TextInput value={w("bookingSlug") ?? ""} onChange={v => sv("bookingSlug", v)} placeholder="Overrides slug in reservation URLs" />
+                </div>
+
+                {/* Previous slugs — old URLs that redirect to this tour. The slug
+                    field above is auto-recorded here on rename; toggle redirect
+                    off to keep the record but stop redirecting (the old URL 404s). */}
+                <div>
+                  <FieldLabel>Previous Slugs (redirect to this tour)</FieldLabel>
+                  {previousSlugs.length > 0 && (
+                    <div className="mb-2 space-y-1.5">
+                      {previousSlugs.map(p => (
+                        <div
+                          key={p.slug}
+                          className={`flex items-center gap-2 rounded-md border border-light-grey px-2.5 py-1.5 ${p.redirect ? "" : "opacity-60"}`}
+                        >
+                          <span className="min-w-0 flex-1 truncate font-mono text-xs text-midnight">/tours/{p.slug}</span>
+                          <span className="shrink-0 text-[10px] font-medium text-dark-gray/70">
+                            {p.redirect ? "redirecting" : "off · 404s"}
+                          </span>
+                          <Switch
+                            checked={p.redirect}
+                            onCheckedChange={v => setPrevSlugRedirect(p.slug, v)}
+                            className="shrink-0 data-[state=checked]:bg-crimson-red"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removePrevSlug(p.slug)}
+                            className="shrink-0 text-dark-gray transition-colors hover:text-crimson-red"
+                            title="Remove"
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {suggestedPrevSlug && (
+                    <button
+                      type="button"
+                      onClick={() => sv("previousSlugs", [...previousSlugs, { slug: suggestedPrevSlug, redirect: true }])}
+                      className="mb-2 flex w-full items-center gap-2 rounded-md border border-dashed border-crimson-red/40 bg-crimson-red/5 px-2.5 py-1.5 text-left transition-colors hover:bg-crimson-red/10"
+                      title="This tour's name suggests an earlier URL slug"
+                    >
+                      <Plus className="size-3.5 shrink-0 text-crimson-red" />
+                      <span className="min-w-0 flex-1 truncate text-xs text-midnight">
+                        Add likely old slug <span className="font-mono">{suggestedPrevSlug}</span>
+                      </span>
+                    </button>
+                  )}
+                  <input
+                    type="text"
+                    value={prevSlugInput}
+                    onChange={e => setPrevSlugInput(e.target.value)}
+                    onKeyDown={addPrevSlug}
+                    placeholder="Add an old slug, press Enter (e.g. tanzania-exploration-danielle-erin)"
+                    className="w-full border border-border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-crimson-red/40"
+                  />
                 </div>
               </div>
             </section>

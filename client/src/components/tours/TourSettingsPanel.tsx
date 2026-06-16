@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useFieldArray } from "react-hook-form";
 import type { UseFormReturn } from "react-hook-form";
 import {
-  X, Settings, Plus, AlertCircle, Camera, Image as ImageIcon,
+  X, Settings, Plus, AlertCircle,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -20,9 +20,6 @@ interface TourSettingsPanelProps {
   onClose: () => void;
   form: UseFormReturn<any>;
   tour: TourPackage | null;
-  coverImageUrl?: string;
-  onEditCover: () => void;
-  onRemoveCover: () => void;
 }
 
 function SectionHead({ children }: { children: React.ReactNode }) {
@@ -65,7 +62,7 @@ function formatMeta(ts: any): string {
   } catch { return "—"; }
 }
 
-export default function TourSettingsPanel({ open, onClose, form, tour, coverImageUrl, onEditCover, onRemoveCover }: TourSettingsPanelProps) {
+export default function TourSettingsPanel({ open, onClose, form, tour }: TourSettingsPanelProps) {
   const w = (n: string) => form.watch(n as any);
   const sv = (n: string, v: any) => form.setValue(n as any, v);
 
@@ -166,46 +163,6 @@ export default function TourSettingsPanel({ open, onClose, form, tour, coverImag
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto scrollbar-hide">
           <div className="px-6 py-5 space-y-6">
-
-            {/* ── Cover Image ── */}
-            <section>
-              <SectionHead>Cover Image</SectionHead>
-              <div className="group/cover relative aspect-video w-full overflow-hidden rounded-2xl bg-light-grey">
-                {coverImageUrl ? (
-                  <>
-                    <img src={coverImageUrl} alt="Cover" className="h-full w-full object-cover" />
-                    <div className="absolute inset-0 bg-black/0 transition-colors group-hover/cover:bg-black/30" />
-                    <div className="absolute inset-0 flex items-center justify-center gap-2 opacity-0 transition-opacity group-hover/cover:opacity-100">
-                      <button
-                        type="button"
-                        onClick={onEditCover}
-                        className="grid size-10 place-items-center rounded-full bg-white text-midnight shadow-small transition-colors hover:text-crimson-red"
-                        title="Change cover image"
-                      >
-                        <Camera className="h-5 w-5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={onRemoveCover}
-                        className="grid size-10 place-items-center rounded-full bg-crimson-red text-white shadow-small"
-                        title="Remove cover image"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={onEditCover}
-                    className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-dark-gray/50 transition-colors hover:bg-light-grey/70"
-                  >
-                    <ImageIcon className="h-8 w-8" />
-                    <span className="text-xs font-medium">Upload cover image</span>
-                  </button>
-                )}
-              </div>
-            </section>
 
             {/* ── Publish ── */}
             <section>
@@ -566,11 +523,11 @@ export default function TourSettingsPanel({ open, onClose, form, tour, coverImag
                   />
                 </div>
                 <div>
-                  <FieldLabel>Google Maps Embed URL</FieldLabel>
+                  <FieldLabel>Google Maps Link</FieldLabel>
                   <TextInput
                     value={w("details.map.embedUrl") ?? ""}
                     onChange={v => sv("details.map.embedUrl", v)}
-                    placeholder="https://www.google.com/maps/embed?…"
+                    placeholder="Paste any Google Maps link or embed code"
                     type="url"
                   />
                 </div>

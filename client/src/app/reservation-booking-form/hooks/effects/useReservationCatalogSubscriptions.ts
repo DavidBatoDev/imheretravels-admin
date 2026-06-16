@@ -67,7 +67,13 @@ export const useReservationCatalogSubscriptions = ({
           const payload = snapshotDoc.data() as any;
           const name = payload.name ?? payload.title ?? "";
 
-          const dates = (payload.travelDates ?? [])
+          // Only offer dates the admin has marked available — hidden/inactive
+          // travel windows must never be bookable, even via a deep link.
+          const availableTravelDates = (payload.travelDates ?? []).filter(
+            (t: any) => t?.isAvailable !== false,
+          );
+
+          const dates = availableTravelDates
             .map((t: any) => toDateString(t?.startDate))
             .filter(Boolean) as string[];
 
@@ -79,7 +85,7 @@ export const useReservationCatalogSubscriptions = ({
             );
           }
 
-          const travelDateDetails = (payload.travelDates ?? [])
+          const travelDateDetails = availableTravelDates
             .map((t: any) => {
               const parsedDate = toDateString(t?.startDate);
               if (!parsedDate) return null;

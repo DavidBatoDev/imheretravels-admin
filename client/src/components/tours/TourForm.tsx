@@ -56,6 +56,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import TourSettingsPanel from "./TourSettingsPanel";
+import HeroSetupPanel from "./HeroSetupPanel";
 import TravelDatesModal from "./TravelDatesModal";
 import ResetChangesModal from "@/components/shared/ResetChangesModal";
 import ConfirmLeaveModal from "@/components/shared/ConfirmLeaveModal";
@@ -323,6 +324,63 @@ const DEFAULT_TIPS = [
 // Fresh deep copies so editing one tour never mutates the shared default arrays.
 const cloneThingsToKnow = () => DEFAULT_THINGS_TO_KNOW.map((c) => ({ ...c }));
 const cloneTips = () => DEFAULT_TIPS.map((t) => ({ ...t }));
+
+// ─── New-tour pre-fills ─────────────────────────────────────────────────────────
+
+// Rows every new tour starts with (icon + label fixed; value blank so the template
+// shows as a greyed placeholder). Valid icon keys come from ICON_COMPONENTS.
+const DEFAULT_KEY_FACTS = [
+  { icon: "days", label: "Duration", values: [] as string[] },
+  { icon: "location", label: "Destination", values: [] as string[] },
+  { icon: "people", label: "Group Size", values: [] as string[] },
+];
+const DEFAULT_INCLUSIONS = [
+  { icon: "meals", label: "Meals", value: "" },
+  { icon: "transport", label: "Transport", value: "" },
+  { icon: "activities", label: "Activities", value: "" },
+  { icon: "accommodation", label: "Accommodation", value: "" },
+  { icon: "plus", label: "Others", value: "" },
+];
+// Meals & Accommodation use structured number-box editors; only Others carries a text
+// default. Transport/Activities stay free-form bullets with the generic placeholder.
+const INCLUSION_DEFAULTS: Record<string, string> = {
+  Others:
+    "- 24/7 customer experience assistance\n- Airport and domestic transfer assistance\n- Tour Guide",
+};
+
+const cloneKeyFacts = () => DEFAULT_KEY_FACTS.map((k) => ({ ...k, values: [] as string[] }));
+const cloneInclusions = () => DEFAULT_INCLUSIONS.map((i) => ({ ...i }));
+// Per-day itinerary rows every day starts with (all removable via the existing X button).
+const cloneDayDetails = () => [
+  { icon: "accommodation", label: "Accommodation", value: "" },
+  { icon: "activities", label: "Activity", value: "" },
+  { icon: "meals", label: "Meals", value: "" },
+];
+
+// ─── Map embed normalization ─────────────────────────────────────────────────────
+
+// Google blocks framing of normal /maps/place share URLs; only /maps/embed or the
+// keyless ?output=embed form render in an iframe. Normalize whatever the admin pastes
+// (a share link, the @lat,lng URL, or a full <iframe> snippet) into a frameable src.
+function toEmbedUrl(raw?: string): string {
+  let s = (raw ?? "").trim();
+  if (!s) return "";
+  if (s.includes("<iframe")) {
+    const m = s.match(/src=["']([^"']+)["']/i);
+    if (m) s = m[1];
+  }
+  if (s.includes("/maps/embed")) return s;
+  const coords =
+    s.match(/@(-?\d+\.\d+),(-?\d+\.\d+)(?:,(\d+(?:\.\d+)?)z)?/) ||
+    s.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+  if (coords) {
+    const [, lat, lng, zoom] = coords;
+    return `https://maps.google.com/maps?q=${lat},${lng}&z=${zoom ?? 14}&hl=en&output=embed`;
+  }
+  const place = s.match(/\/maps\/place\/([^/@?]+)/);
+  const query = place ? decodeURIComponent(place[1].replace(/\+/g, " ")) : s;
+  return `https://maps.google.com/maps?q=${encodeURIComponent(query)}&output=embed`;
+}
 
 // "+ Add review" trigger with a menu to start blank or from a preset profile.
 function AddReviewMenu({
@@ -613,6 +671,225 @@ function InlineBulletTextarea({
   );
 }
 
+/**
+ * Itinerary "Meals" editor: clickable Breakfast/Lunch/Dinner chips that compose a
+ * human sentence (e.g. "1 Breakfast, 1 Lunch, and 1 Dinner"). The composed text is
+ * stored back as the detail's `value` so www renders it verbatim.
+ */
+const MEAL_OPTIONS = ["Breakfast", "Lunch", "Dinner"] as const;
+function composeMeals(selected: string[]): string {
+  const items = selected.map((m) => `1 ${m}`);
+  if (items.length <= 1) return items.join("");
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}
+// Connector text between selected meal tokens, mirroring composeMeals (Oxford comma).
+function mealConnector(idx: number, total: number): string {
+  if (idx === 0) return "";
+  if (total === 2) return " and ";
+  if (idx === total - 1) return ", and ";
+  return ", ";
+}
+function MealChips({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const selected = MEAL_OPTIONS.filter((m) => new RegExp(`\\b${m}\\b`, "i").test(value ?? ""));
+  const unselected = MEAL_OPTIONS.filter((m) => !selected.includes(m));
+  const remove = (m: string) => onChange(composeMeals(selected.filter((x) => x !== m)));
+  const add = (m: string) => onChange(composeMeals(MEAL_OPTIONS.filter((x) => selected.includes(x) || x === m)));
+  return (
+    <div className="mt-0.5 space-y-2">
+      {/* Added meals render as the composed sentence; each token removes itself on click */}
+      {selected.length > 0 && (
+        <p className="flex flex-wrap items-center font-body text-b4-mobile text-dark-gray">
+          {selected.map((m, idx) => (
+            <span key={m} className="inline-flex items-center whitespace-pre">
+              {mealConnector(idx, selected.length)}
+              <button
+                type="button"
+                onClick={() => remove(m)}
+                className="group/meal inline-flex items-center gap-0.5 hover:text-crimson-red transition-colors"
+              >
+                1 {m}
+                <X className="h-3 w-3 opacity-0 group-hover/meal:opacity-100 transition-opacity" />
+              </button>
+            </span>
+          ))}
+        </p>
+      )}
+      {/* Remaining options stay as dashed-outline chips until added */}
+      {unselected.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {unselected.map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => add(m)}
+              className="rounded-full border border-dashed border-crimson-red bg-transparent px-3 py-1 font-body text-b4-mobile text-crimson-red hover:bg-crimson-red/5 transition-colors"
+            >
+              + 1 {m}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Structured Key Fact editors ────────────────────────────────────────────────
+// These three facts use bespoke inputs instead of free text, composing the same
+// single-string value www expects (e.g. "7 Days and 6 nights", "A → B → C",
+// "Maximum 20 people"). Local state preserves in-progress/empty boxes between edits.
+
+function NumBox({ value, onChange, ariaLabel }: { value: string; onChange: (v: string) => void; ariaLabel: string }) {
+  return (
+    <input
+      type="number"
+      min={0}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder="#"
+      aria-label={ariaLabel}
+      className="w-14 rounded-sm border border-light-grey bg-transparent px-2 py-0.5 text-center font-body text-b2-mobile md:text-b2-desktop text-dark-gray outline-none focus:border-crimson-red transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+    />
+  );
+}
+
+function DurationFact({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const m = (value ?? "").match(/(\d+)\s*Days?\s*and\s*(\d+)\s*nights?/i);
+  const [days, setDays] = useState(m?.[1] ?? "");
+  const [nights, setNights] = useState(m?.[2] ?? "");
+  const push = (d: string, n: string) => onChange(d || n ? `${d} Days and ${n} nights` : "");
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2 font-body text-b2-mobile md:text-b2-desktop text-dark-gray">
+      <NumBox value={days} onChange={(v) => { setDays(v); push(v, nights); }} ariaLabel="Days" />
+      <span>Days and</span>
+      <NumBox value={nights} onChange={(v) => { setNights(v); push(days, v); }} ariaLabel="Nights" />
+      <span>nights</span>
+    </div>
+  );
+}
+
+function GroupSizeFact({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const m = (value ?? "").match(/(\d+)/);
+  const [count, setCount] = useState(m?.[1] ?? "");
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2 font-body text-b2-mobile md:text-b2-desktop text-dark-gray">
+      <span>Maximum</span>
+      <NumBox value={count} onChange={(v) => { setCount(v); onChange(v ? `Maximum ${v} people` : ""); }} ariaLabel="Maximum people" />
+      <span>people</span>
+    </div>
+  );
+}
+
+function DestinationFact({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const initial = (value ?? "").split("→").map((p) => p.trim()).filter(Boolean);
+  const [parts, setParts] = useState<string[]>(initial.length >= 2 ? initial : [...initial, ...Array(2 - initial.length).fill("")]);
+  const update = (next: string[]) => { setParts(next); onChange(next.filter((p) => p.trim()).join(" → ")); };
+  return (
+    <div className="mt-1 flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2 font-body text-b2-mobile md:text-b2-desktop text-dark-gray">
+        {parts.map((p, idx) => (
+          <span key={idx} className="inline-flex items-center gap-2 group/dest">
+            {idx > 0 && <span className="text-dark-gray">→</span>}
+            <input
+              value={p}
+              onChange={(e) => update(parts.map((x, j) => (j === idx ? e.target.value : x)))}
+              placeholder={idx === 0 ? "From" : "Destination"}
+              className="w-32 rounded-sm border border-light-grey bg-transparent px-2 py-0.5 outline-none focus:border-crimson-red transition-colors placeholder:text-dark-gray/30"
+            />
+            {parts.length > 2 && (
+              <button type="button" onClick={() => update(parts.filter((_, j) => j !== idx))}
+                className="text-crimson-red opacity-0 group-hover/dest:opacity-100 transition-opacity">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </span>
+        ))}
+      </div>
+      <button type="button" onClick={() => update([...parts, ""])}
+        className="flex items-center gap-1 font-body text-b4-desktop text-crimson-red hover:text-light-red">
+        <Plus className="h-4 w-4" /> Add destination
+      </button>
+    </div>
+  );
+}
+
+// ─── Structured What's Included editors ─────────────────────────────────────────
+// Compose the same single-string value www expects (e.g. "6 Breakfasts, 5 Lunches",
+// "Hotel (6 nights)").
+
+const MEAL_PLURALS: Record<string, [string, string]> = {
+  Breakfast: ["Breakfast", "Breakfasts"],
+  Lunch: ["Lunch", "Lunches"],
+  Dinner: ["Dinner", "Dinners"],
+};
+const fmtMeal = (n: string, type: string) => {
+  const [s, p] = MEAL_PLURALS[type];
+  return `${n} ${n === "1" ? s : p}`;
+};
+
+function MealsInclusion({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const parse = (type: string) => (value ?? "").match(new RegExp(`(\\d+)\\s*${type}`, "i"))?.[1] ?? "";
+  const [b, setB] = useState(() => parse("Breakfast"));
+  const [l, setL] = useState(() => parse("Lunch"));
+  const [d, setD] = useState(() => parse("Dinner"));
+  const [hasL, setHasL] = useState(() => /lunch/i.test(value ?? ""));
+  const [hasD, setHasD] = useState(() => /dinner/i.test(value ?? ""));
+  const push = (bv: string, lv: string, dv: string, withL: boolean, withD: boolean) => {
+    const parts: string[] = [];
+    if (bv) parts.push(fmtMeal(bv, "Breakfast"));
+    if (withL && lv) parts.push(fmtMeal(lv, "Lunch"));
+    if (withD && dv) parts.push(fmtMeal(dv, "Dinner"));
+    onChange(parts.join(", "));
+  };
+  return (
+    <div className="mt-1 flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2 font-body text-b4-mobile md:text-b4-desktop text-dark-gray">
+        <NumBox value={b} onChange={(v) => { setB(v); push(v, l, d, hasL, hasD); }} ariaLabel="Breakfasts" />
+        <span>Breakfasts</span>
+        {hasL && (
+          <span className="inline-flex items-center gap-2 group/meal">
+            <span>,</span>
+            <NumBox value={l} onChange={(v) => { setL(v); push(b, v, d, true, hasD); }} ariaLabel="Lunches" />
+            <span>Lunches</span>
+            <button type="button" onClick={() => { setHasL(false); push(b, l, d, false, hasD); }}
+              className="text-crimson-red opacity-0 group-hover/meal:opacity-100 transition-opacity"><X className="h-3.5 w-3.5" /></button>
+          </span>
+        )}
+        {hasD && (
+          <span className="inline-flex items-center gap-2 group/meal">
+            <span>,</span>
+            <NumBox value={d} onChange={(v) => { setD(v); push(b, l, v, hasL, true); }} ariaLabel="Dinners" />
+            <span>Dinners</span>
+            <button type="button" onClick={() => { setHasD(false); push(b, l, d, hasL, false); }}
+              className="text-crimson-red opacity-0 group-hover/meal:opacity-100 transition-opacity"><X className="h-3.5 w-3.5" /></button>
+          </span>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {!hasL && (
+          <button type="button" onClick={() => { setHasL(true); push(b, l, d, true, hasD); }}
+            className="rounded-full border border-dashed border-crimson-red bg-transparent px-3 py-1 font-body text-b4-mobile text-crimson-red hover:bg-crimson-red/5 transition-colors">+ Lunches</button>
+        )}
+        {!hasD && (
+          <button type="button" onClick={() => { setHasD(true); push(b, l, d, hasL, true); }}
+            className="rounded-full border border-dashed border-crimson-red bg-transparent px-3 py-1 font-body text-b4-mobile text-crimson-red hover:bg-crimson-red/5 transition-colors">+ Dinners</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AccommodationInclusion({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [nights, setNights] = useState(() => (value ?? "").match(/(\d+)/)?.[1] ?? "");
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2 font-body text-b4-mobile md:text-b4-desktop text-dark-gray">
+      <span>Hotel (</span>
+      <NumBox value={nights} onChange={(v) => { setNights(v); onChange(v ? `Hotel (${v} nights)` : ""); }} ariaLabel="Nights" />
+      <span>nights )</span>
+    </div>
+  );
+}
+
 /** "Edit me" wrapper — shows a dashed outline on hover to indicate editability */
 function EditZone({ children, label, className = "" }: { children: React.ReactNode; label?: string; className?: string }) {
   return (
@@ -649,6 +926,7 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
   const [galleryBlobs, setGalleryBlobs] = useState<File[]>([]);
   const [originalGallery, setOriginalGallery] = useState<string[]>([]);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [heroPanelOpen, setHeroPanelOpen] = useState(false);
   const [datesModalOpen, setDatesModalOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   // Itinerary days & FAQs default to open; we track only what the user collapses
@@ -693,9 +971,9 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
         hasCustomOriginal: false, hasCustomDiscounted: false, hasCustomDeposit: false }],
       details: {
         highlights: [{ text: "", image: undefined, subtitle: undefined }],
-        itinerary: [{ day: 1, title: "", description: "", image: undefined, accommodation: undefined, activities: undefined, meals: undefined, details: [] }],
+        itinerary: [{ day: 1, title: "", description: "", image: undefined, accommodation: undefined, activities: undefined, meals: undefined, details: cloneDayDetails() }],
         requirements: [""],
-        keyFacts: [], tags: [], inclusions: [], accommodations: [], faqs: [],
+        keyFacts: cloneKeyFacts(), tags: [], inclusions: cloneInclusions(), accommodations: [], faqs: [],
         thingsToKnow: cloneThingsToKnow(), tips: cloneTips(), reviews: [], map: { image: "", embedUrl: "" },
       },
     },
@@ -1003,6 +1281,16 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
   // ── Submit ──────────────────────────────────────────────────────────────────
   const handleSubmit = async (data: any) => {
     setIsSubmitting(true);
+    // On create, blank pre-filled What's Included rows fall back to their template
+    // default. Typed values win; rows the admin cleared/removed are respected. (Key Facts
+    // use structured editors that compose their own value, so they need no fallback.)
+    if (!tour) {
+      for (const inc of data?.details?.inclusions ?? []) {
+        const def = INCLUSION_DEFAULTS[inc.label];
+        const blank = Array.isArray(inc.value) ? !inc.value.length : !String(inc.value ?? "").trim();
+        if (def && blank) inc.value = def;
+      }
+    }
     try {
       if (tour) {
         await onSubmit(data);
@@ -1143,6 +1431,15 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
 
               <button
                 type="button"
+                onClick={() => setHeroPanelOpen(p => !p)}
+                className={`flex items-center gap-1.5 h-9 px-4 rounded-full border font-body text-sm transition-colors ${heroPanelOpen ? "border-crimson-red bg-crimson-red/5 text-crimson-red" : "border-border text-midnight hover:bg-light-grey"}`}
+              >
+                <ImageIcon className="h-4 w-4" />
+                Hero
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setPanelOpen(p => !p)}
                 className={`flex items-center gap-1.5 h-9 px-4 rounded-full border font-body text-sm transition-colors ${panelOpen ? "border-crimson-red bg-crimson-red/5 text-crimson-red" : "border-border text-midnight hover:bg-light-grey"}`}
               >
@@ -1241,6 +1538,14 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
               </button>
               <button
                 type="button"
+                onClick={() => setHeroPanelOpen(p => !p)}
+                aria-label="Hero"
+                className={`flex items-center justify-center h-8 w-8 rounded-full border font-body transition-colors ${heroPanelOpen ? "border-crimson-red bg-crimson-red/5 text-crimson-red" : "border-border text-midnight hover:bg-light-grey"}`}
+              >
+                <ImageIcon className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
                 onClick={() => setPanelOpen(p => !p)}
                 aria-label="Settings"
                 className={`flex items-center justify-center h-8 w-8 rounded-full border font-body transition-colors ${panelOpen ? "border-crimson-red bg-crimson-red/5 text-crimson-red" : "border-border text-midnight hover:bg-light-grey"}`}
@@ -1293,40 +1598,43 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
                 {/* Gallery — outside main card, same as www */}
                 {(() => {
                   const galleryImages = uploadedGallery.filter(Boolean) as string[];
-                  const activeImg = galleryImages[activeGalleryIndex] ?? uploadedCover;
+                  // Header carousel shows gallery images only — the hero/cover lives in its
+                  // own "Hero" panel (toolbar) so adding header images never hides it.
+                  const safeIdx = galleryImages.length ? Math.min(activeGalleryIndex, galleryImages.length - 1) : 0;
+                  const activeImg = galleryImages[safeIdx];
                   return (
                     <div id="section-gallery">
                       <div className="relative aspect-4/3 md:aspect-video w-full overflow-hidden rounded-3xl bg-light-grey group/hero">
                         {activeImg ? (
-                          <img src={resolveImg(activeImg)} alt="Hero" className="w-full h-full object-cover" />
+                          <img src={resolveImg(activeImg)} alt={`Header ${safeIdx + 1}`} className="w-full h-full object-cover" />
                         ) : (
-                          <button type="button" onClick={() => setPickerState({ field: "cover" })}
+                          <button type="button" onClick={() => setPickerState({ field: "gallery-add", multiple: true })}
                             className="flex flex-col items-center justify-center h-full w-full cursor-pointer hover:bg-light-grey/80 transition-colors">
                             <ImageIcon className="h-10 w-10 text-dark-gray/40 mb-2" />
-                            <span className="font-body text-b4-desktop text-dark-gray">Click to upload hero image</span>
+                            <span className="font-body text-b4-desktop text-dark-gray">Click to add header image</span>
                           </button>
                         )}
-                        {uploadedCover && (
+                        {activeImg && (
                           <div className="absolute inset-0 bg-black/0 group-hover/hero:bg-black/30 transition-colors flex items-center justify-center">
                             <div className="opacity-0 group-hover/hero:opacity-100 transition-opacity flex gap-2">
-                              <button type="button" onClick={() => setPickerState({ field: "cover", initialUrl: resolveImg(uploadedCover) || undefined })}
+                              <button type="button" onClick={() => setPickerState({ field: `gallery-edit-${safeIdx}`, initialUrl: resolveImg(activeImg) || undefined })}
                                 className="flex size-10 items-center justify-center bg-white text-midnight rounded-full shadow-small hover:shadow-medium hover:text-crimson-red transition-colors cursor-pointer">
                                 <Camera className="h-5 w-5" />
                               </button>
-                              <button type="button" onClick={() => { if (uploadedCover?.startsWith("blob:")) revokeBlobUrl(uploadedCover); setUploadedCover(null); setCoverBlob(null); setActiveGalleryIndex(0); }}
+                              <button type="button" onClick={() => { rmGallery(safeIdx); setActiveGalleryIndex(0); }}
                                 className="flex items-center gap-1 bg-crimson-red text-white rounded-full px-3 py-2 text-sm font-body cursor-pointer shadow-small">
                                 <X className="h-4 w-4" />
                               </button>
                             </div>
                           </div>
                         )}
-                        {galleryImages.length > 0 && (
+                        {galleryImages.length > 1 && (
                           <>
-                            <button type="button" onClick={() => setActiveGalleryIndex(idx => (idx - 1 + galleryImages.length) % galleryImages.length)}
+                            <button type="button" onClick={() => setActiveGalleryIndex(i => (i - 1 + galleryImages.length) % galleryImages.length)}
                               className="absolute left-3 top-1/2 -translate-y-1/2 size-10 rounded-full bg-white/90 shadow-small flex items-center justify-center hover:bg-white transition-colors">
                               <ChevronLeft className="h-5 w-5 text-midnight" />
                             </button>
-                            <button type="button" onClick={() => setActiveGalleryIndex(idx => (idx + 1) % galleryImages.length)}
+                            <button type="button" onClick={() => setActiveGalleryIndex(i => (i + 1) % galleryImages.length)}
                               className="absolute right-3 top-1/2 -translate-y-1/2 size-10 rounded-full bg-white/90 shadow-small flex items-center justify-center hover:bg-white transition-colors">
                               <ChevronRight className="h-5 w-5 text-midnight" />
                             </button>
@@ -1340,8 +1648,8 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
                             {({ setNodeRef, style, handle }) => (
                           <div ref={setNodeRef} style={style} className="relative group/thumb shrink-0 w-[calc((100%-2.5rem)/6)]">
                             <button type="button" onClick={() => setActiveGalleryIndex(idx)}
-                              className={`block aspect-4/3 w-full rounded-2xl overflow-hidden transition-opacity ${idx === activeGalleryIndex ? "opacity-100 ring-2 ring-crimson-red" : "opacity-60 hover:opacity-80"}`}>
-                              <img src={resolveImg(img)} alt={`Thumb ${idx + 1}`} className="w-full h-full object-cover" />
+                              className={`block aspect-4/3 w-full rounded-2xl overflow-hidden transition-opacity ${idx === safeIdx ? "opacity-100 ring-2 ring-crimson-red" : "opacity-60 hover:opacity-80"}`}>
+                              <img src={resolveImg(img)} alt={`Header ${idx + 1}`} className="w-full h-full object-cover" />
                             </button>
                             {/* Hover overlay: centered camera icon + corner delete */}
                             <div className="absolute inset-0 rounded-2xl opacity-0 group-hover/thumb:opacity-100 transition-opacity pointer-events-none bg-black/30" />
@@ -1350,7 +1658,7 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
                               className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity rounded-2xl">
                               <Camera className="h-4 w-4 text-white drop-shadow" />
                             </button>
-                            <button type="button" onClick={() => { rmGallery(idx); if (activeGalleryIndex >= galleryImages.length - 1) setActiveGalleryIndex(Math.max(0, galleryImages.length - 2)); }}
+                            <button type="button" onClick={() => { rmGallery(idx); setActiveGalleryIndex(0); }}
                               className="absolute top-0.5 right-0.5 opacity-0 group-hover/thumb:opacity-100 transition-opacity bg-crimson-red text-white rounded-full w-4 h-4 flex items-center justify-center">
                               <X className="h-2.5 w-2.5" />
                             </button>
@@ -1485,11 +1793,22 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
                             <div className="flex-1 min-w-0">
                               <InlineInput value={kf?.label ?? ""} onChange={(v) => sv(`details.keyFacts.${i}.label`, v)}
                                 placeholder="Label" className="font-hk-grotesk text-b2-mobile md:text-b2-desktop font-bold! text-midnight" />
-                              <InlineTextarea
-                                value={(kf?.values ?? []).join("\n")}
-                                onChange={(v) => sv(`details.keyFacts.${i}.values`, v.split("\n").filter(Boolean))}
-                                placeholder="Value (one per line)"
-                                className="mt-1 font-body text-b2-mobile md:text-b2-desktop text-dark-gray" />
+                              {(() => {
+                                // The three template facts use bespoke structured editors; any
+                                // custom fact falls back to the generic one-per-line textarea.
+                                const setVal = (v: string) => sv(`details.keyFacts.${i}.values`, v ? [v] : []);
+                                const joined = (kf?.values ?? []).join("\n");
+                                if (kf?.label === "Duration") return <DurationFact value={joined} onChange={setVal} />;
+                                if (kf?.label === "Destination") return <DestinationFact value={joined} onChange={setVal} />;
+                                if (kf?.label === "Group Size") return <GroupSizeFact value={joined} onChange={setVal} />;
+                                return (
+                                  <InlineTextarea
+                                    value={joined}
+                                    onChange={(v) => sv(`details.keyFacts.${i}.values`, v.split("\n").filter(Boolean))}
+                                    placeholder="Value (one per line)"
+                                    className="mt-1 font-body text-b2-mobile md:text-b2-desktop text-dark-gray" />
+                                );
+                              })()}
                             </div>
                             <DragHandle handle={handle} className="opacity-0 group-hover/kf:opacity-100 transition-opacity mt-3 shrink-0" />
                             <button type="button" onClick={() => rmKf(i)}
@@ -1532,7 +1851,12 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
                             </Select>
                             <div className="flex-1 min-w-0">
                               <InlineInput value={incl?.label ?? ""} onChange={(v) => sv(`details.inclusions.${i}.label`, v)} placeholder="Label" className="font-hk-grotesk text-b2-desktop font-bold text-midnight" />
-                              <InlineBulletTextarea value={rawValue} onChange={(v) => sv(`details.inclusions.${i}.value`, v)} placeholder="Detail (use - for bullets)" bulleted={/activities|others?|transport/i.test(incl?.label ?? "")} className="mt-1 font-body text-b4-mobile md:text-b4-desktop text-dark-gray" />
+                              {(() => {
+                                const setVal = (v: string) => sv(`details.inclusions.${i}.value`, v);
+                                if (incl?.label === "Meals") return <MealsInclusion value={rawValue} onChange={setVal} />;
+                                if (incl?.label === "Accommodation") return <AccommodationInclusion value={rawValue} onChange={setVal} />;
+                                return <InlineBulletTextarea value={rawValue} onChange={setVal} placeholder={INCLUSION_DEFAULTS[incl?.label ?? ""] || "Detail (use - for bullets)"} bulleted={/activities|others?|transport/i.test(incl?.label ?? "")} className="mt-1 font-body text-b4-mobile md:text-b4-desktop text-dark-gray" />;
+                              })()}
                             </div>
                             <DragHandle handle={handle} className="opacity-0 group-hover/incl:opacity-100 transition-opacity mt-1 shrink-0" />
                             <button type="button" onClick={() => rmIncl(i)} className="opacity-0 group-hover/incl:opacity-100 transition-opacity text-crimson-red mt-1 shrink-0"><X className="h-4 w-4" /></button>
@@ -1623,7 +1947,7 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
                     <section id="section-map" className="mt-10 md:mt-14 w-full">
                       <h2 className="font-hk-grotesk text-h3-mobile md:text-h3-desktop text-midnight">Map</h2>
                       <div className="mt-8 relative aspect-video w-full overflow-hidden rounded-3xl bg-light-grey">
-                        {mapData.embedUrl ? <iframe src={mapData.embedUrl} className="w-full h-full" /> : mapData.image ? <img src={resolveImg(mapData.image)} alt="Map" className="w-full h-full object-cover" /> : null}
+                        {mapData.embedUrl ? <iframe src={toEmbedUrl(mapData.embedUrl)} className="w-full h-full" /> : mapData.image ? <img src={resolveImg(mapData.image)} alt="Map" className="w-full h-full object-cover" /> : null}
                       </div>
                     </section>
                   )}
@@ -1706,16 +2030,27 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
                                               placeholder="Label"
                                               className="font-hk-grotesk text-b4-mobile font-bold! text-midnight w-full"
                                             />
-                                            <InlineBulletTextarea
-                                              value={det?.value ?? ""}
-                                              onChange={(v) => {
-                                                const arr = [...(gv(`details.itinerary.${i}.details`) ?? [])];
-                                                arr[di] = { ...arr[di], value: v };
-                                                sv(`details.itinerary.${i}.details`, arr);
-                                              }}
-                                              placeholder="Detail (use - for bullets)"
-                                              className="mt-0.5 font-body text-b4-mobile text-dark-gray"
-                                            />
+                                            {/^meals?$/i.test(det?.label ?? "") || det?.icon === "meals" ? (
+                                              <MealChips
+                                                value={det?.value ?? ""}
+                                                onChange={(v) => {
+                                                  const arr = [...(gv(`details.itinerary.${i}.details`) ?? [])];
+                                                  arr[di] = { ...arr[di], value: v };
+                                                  sv(`details.itinerary.${i}.details`, arr);
+                                                }}
+                                              />
+                                            ) : (
+                                              <InlineBulletTextarea
+                                                value={det?.value ?? ""}
+                                                onChange={(v) => {
+                                                  const arr = [...(gv(`details.itinerary.${i}.details`) ?? [])];
+                                                  arr[di] = { ...arr[di], value: v };
+                                                  sv(`details.itinerary.${i}.details`, arr);
+                                                }}
+                                                placeholder="Detail (use - for bullets)"
+                                                className="mt-0.5 font-body text-b4-mobile text-dark-gray"
+                                              />
+                                            )}
                                           </div>
                                           <button
                                             type="button"
@@ -1751,7 +2086,7 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
                       })}
                     </ol>
                     </SortableList>
-                    <button type="button" onClick={() => addIter({ day: iterFields.length + 1, title: "", description: "", image: undefined, accommodation: undefined, activities: undefined, meals: undefined, details: [] })}
+                    <button type="button" onClick={() => addIter({ day: iterFields.length + 1, title: "", description: "", image: undefined, accommodation: undefined, activities: undefined, meals: undefined, details: cloneDayDetails() })}
                       className="mt-6 flex items-center gap-1 font-body text-b4-desktop text-crimson-red hover:text-light-red">
                       <Plus className="h-4 w-4" /> Add Day {iterFields.length + 1}
                     </button>
@@ -2207,13 +2542,18 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
           onClose={() => setPanelOpen(false)}
           form={form}
           tour={tour ?? null}
+        />
+
+        <HeroSetupPanel
+          open={heroPanelOpen}
+          onClose={() => setHeroPanelOpen(false)}
+          form={form}
           coverImageUrl={resolveImg(uploadedCover) || undefined}
           onEditCover={() => setPickerState({ field: "cover", initialUrl: resolveImg(uploadedCover) || undefined })}
           onRemoveCover={() => {
             if (uploadedCover?.startsWith("blob:")) revokeBlobUrl(uploadedCover);
             setUploadedCover(null);
             setCoverBlob(null);
-            setActiveGalleryIndex(0);
           }}
         />
 

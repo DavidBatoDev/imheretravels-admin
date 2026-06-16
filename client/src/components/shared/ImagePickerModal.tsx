@@ -235,6 +235,29 @@ export default function ImagePickerModal({
     [cropItem, cropSrc, onConfirm, onClose, browsePath]
   );
 
+  // ── Use original (no crop) ───────────────────────────────────────────────────
+  // Skip cropping entirely. For an existing stored image this reuses its URL with
+  // no upload (avoids duplicating the file in storage). For a brand-new local file
+  // it uploads the original once, as-is.
+  const handleUseOriginal = useCallback(async () => {
+    if (cropSrc && !cropSrc.startsWith("blob:")) {
+      onConfirm([cropSrc]);
+      onClose();
+      return;
+    }
+    const original = pendingFileRef.current;
+    if (!original) return;
+    setUploading(true);
+    try {
+      const uploaded = await storageService.uploadImage(original, [], browsePath);
+      if (pendingUrlRef.current) { URL.revokeObjectURL(pendingUrlRef.current); pendingUrlRef.current = ""; }
+      pendingFileRef.current = null;
+      onConfirm([uploaded.url]);
+      onClose();
+    } catch { alert("Failed to use image. Please try again."); }
+    finally { setUploading(false); }
+  }, [cropSrc, onConfirm, onClose, browsePath]);
+
   // ── Bulk crop ──────────────────────────────────────────────────────────────
 
   async function handleBulkCropDone(blob: Blob | null, isFullCrop: boolean) {
@@ -551,15 +574,27 @@ export default function ImagePickerModal({
               </button>
             )}
             {state === "crop" && (
-              <button
-                type="button"
-                onClick={() => setApplyTrigger((n) => n + 1)}
-                disabled={!cropReady || uploading}
-                className="rounded-lg bg-crimson-red px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-40 transition-opacity flex items-center gap-2"
-              >
-                {uploading && <Loader2 className="size-4 animate-spin" />}
-                Apply Crop
-              </button>
+              <>
+                {/* Secondary: crop & upload a derived file */}
+                <button
+                  type="button"
+                  onClick={() => setApplyTrigger((n) => n + 1)}
+                  disabled={!cropReady || uploading}
+                  className="rounded-lg border border-midnight px-4 py-2 text-sm font-medium text-midnight hover:border-crimson-red hover:text-crimson-red disabled:opacity-40 transition-colors flex items-center gap-2"
+                >
+                  Apply Crop
+                </button>
+                {/* Primary: reuse the original — no duplicate upload for existing images */}
+                <button
+                  type="button"
+                  onClick={handleUseOriginal}
+                  disabled={uploading}
+                  className="rounded-lg bg-crimson-red px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-40 transition-opacity flex items-center gap-2"
+                >
+                  {uploading && <Loader2 className="size-4 animate-spin" />}
+                  Use original (no crop)
+                </button>
+              </>
             )}
             {state === "bulk-crop" && (
               <button

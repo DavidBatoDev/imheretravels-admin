@@ -71,15 +71,6 @@ export default function TourSettingsPanel({ open, onClose, form, tour }: TourSet
   const destinations: string[] = w("destinations") ?? [];
   const previousSlugs: { slug: string; redirect: boolean }[] = w("previousSlugs") ?? [];
 
-  // Recover legacy old slugs that predate auto-capture: the original URL pattern
-  // was the tour name slugified. If the current slug differs from that and it's
-  // not already recorded, offer it as a one-click suggestion.
-  const nameSlug = normalizeSlug((w("name") as string) ?? "");
-  const currentSlug = (w("slug") as string) ?? "";
-  const suggestedPrevSlug =
-    nameSlug && nameSlug !== currentSlug && !previousSlugs.some(p => p.slug === nameSlug)
-      ? nameSlug
-      : null;
   const sym = CURRENCY_SYM[(w("pricing.currency") as string) ?? "GBP"] ?? "£";
 
   const { fields: reqFields, append: addReq, remove: rmReq } =
@@ -462,19 +453,6 @@ export default function TourSettingsPanel({ open, onClose, form, tour }: TourSet
                         </div>
                       ))}
                     </div>
-                  )}
-                  {suggestedPrevSlug && (
-                    <button
-                      type="button"
-                      onClick={() => sv("previousSlugs", [...previousSlugs, { slug: suggestedPrevSlug, redirect: true }])}
-                      className="mb-2 flex w-full items-center gap-2 rounded-md border border-dashed border-crimson-red/40 bg-crimson-red/5 px-2.5 py-1.5 text-left transition-colors hover:bg-crimson-red/10"
-                      title="This tour's name suggests an earlier URL slug"
-                    >
-                      <Plus className="size-3.5 shrink-0 text-crimson-red" />
-                      <span className="min-w-0 flex-1 truncate text-xs text-midnight">
-                        Add likely old slug <span className="font-mono">{suggestedPrevSlug}</span>
-                      </span>
-                    </button>
                   )}
                   <input
                     type="text"

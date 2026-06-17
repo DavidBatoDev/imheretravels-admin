@@ -56,6 +56,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import TourSettingsPanel from "./TourSettingsPanel";
+import SlugChangeModal from "./SlugChangeModal";
 import HeroSetupPanel from "./HeroSetupPanel";
 import TravelDatesModal from "./TravelDatesModal";
 import ResetChangesModal from "@/components/shared/ResetChangesModal";
@@ -524,8 +525,8 @@ function AutoSizeInput({
 /** An input that looks like the rendered content. Local state gives instant display;
  *  debounced onChange batches RHF updates to at most once per 300 ms burst. */
 function InlineInput({
-  value, onChange, placeholder, className = "",
-}: { value: string; onChange: (v: string) => void; placeholder?: string; className?: string }) {
+  value, onChange, onCommit, placeholder, className = "",
+}: { value: string; onChange: (v: string) => void; onCommit?: (v: string) => void; placeholder?: string; className?: string }) {
   const [local, setLocal] = useState(value);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const ref = useRef<HTMLInputElement>(null);
@@ -544,7 +545,7 @@ function InlineInput({
         clearTimeout(timer.current);
         timer.current = setTimeout(() => onChange(v), 300);
       }}
-      onBlur={(e) => { clearTimeout(timer.current); onChange(e.target.value); }}
+      onBlur={(e) => { clearTimeout(timer.current); onChange(e.target.value); onCommit?.(e.target.value); }}
       placeholder={placeholder}
       className={`bg-transparent border-none outline-none w-full px-1 -mx-1 rounded-sm
         hover:ring-2 hover:ring-crimson-red/20 focus:ring-2 focus:ring-crimson-red/40 transition-shadow
@@ -929,6 +930,11 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
   const [heroPanelOpen, setHeroPanelOpen] = useState(false);
   const [datesModalOpen, setDatesModalOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
+  // Slug-rename confirmation: set when an existing tour's name changes to a value
+  // that yields a different slug. lastPromptedNameRef stops us re-prompting for the
+  // same name (e.g. on repeated blurs without further edits).
+  const [slugModal, setSlugModal] = useState<{ oldSlug: string; proposedSlug: string } | null>(null);
+  const lastPromptedNameRef = useRef<string | null>(null);
   // Itinerary days & FAQs default to open; we track only what the user collapses
   // (empty = all open), so loaded and newly-added entries are expanded by default.
   const [collapsedDays, setCollapsedDays] = useState<Set<number>>(new Set());
@@ -1083,6 +1089,30 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
 
   // Auto-slug
   useEffect(() => { if (name && !tour) sv("slug", generateSlug(name)); }, [name]);
+
+  // On rename of an existing tour, offer to update the (now-stale) URL slug and log
+  // the old one as a redirect. Fires when the name field commits (blur). The
+  // create flow uses the auto-slug effect above, so this is edit-only.
+  const handleNameCommit = (committed: string) => {
+    const newName = committed.trim();
+    if (!tour || !newName) return;
+    const currentSlug = (form.getValues("slug") as string) || "";
+    const proposed = generateSlug(newName);
+    if (proposed && proposed !== currentSlug && newName !== lastPromptedNameRef.current) {
+      lastPromptedNameRef.current = newName;
+      setSlugModal({ oldSlug: currentSlug, proposedSlug: proposed });
+    }
+  };
+
+  const confirmSlugChange = (finalSlug: string, redirectOld: boolean) => {
+    const oldSlug = slugModal?.oldSlug ?? "";
+    sv("slug", finalSlug);
+    if (oldSlug && oldSlug !== finalSlug) {
+      const prev = (form.getValues("previousSlugs") as { slug: string; redirect: boolean }[]) ?? [];
+      sv("previousSlugs", [...prev.filter((p) => p.slug !== oldSlug), { slug: oldSlug, redirect: redirectOld }]);
+    }
+    setSlugModal(null);
+  };
 
   // Populate from existing tour
   useEffect(() => {
@@ -1584,6 +1614,7 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
               <InlineInput
                 value={name}
                 onChange={(v) => sv("name", v)}
+                onCommit={handleNameCommit}
                 placeholder="Tour Name"
                 className="font-display text-h4-mobile md:text-h1-desktop font-bold text-midnight"
               />
@@ -2542,6 +2573,14 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
           onClose={() => setPanelOpen(false)}
           form={form}
           tour={tour ?? null}
+        />
+
+        <SlugChangeModal
+          open={!!slugModal}
+          oldSlug={slugModal?.oldSlug ?? ""}
+          proposedSlug={slugModal?.proposedSlug ?? ""}
+          onCancel={() => setSlugModal(null)}
+          onConfirm={confirmSlugChange}
         />
 
         <HeroSetupPanel

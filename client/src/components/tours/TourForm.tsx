@@ -349,8 +349,21 @@ const INCLUSION_DEFAULTS: Record<string, string> = {
     "- 24/7 customer experience assistance\n- Airport and domestic transfer assistance\n- Tour Guide",
 };
 
+// Questions every new tour starts with. Tour-specific answers (airports, start/
+// finish, local currency) stay blank for the admin to fill; the age policy is a
+// company-wide standard, so it's pre-filled.
+const DEFAULT_FAQS = [
+  { question: "Where does the trip start & finish?", answer: "" },
+  { question: "Which airport do I need to fly into?", answer: "" },
+  { question: "What should I wear?", answer: "" },
+  { question: "Do you have an age limit for tours?", answer: "Most activities suit adventurers 18-45 (typical guests 21-35)." },
+  { question: "What is the local currency?", answer: "" },
+  { question: "Which airport do I fly out from?", answer: "" },
+];
+
 const cloneKeyFacts = () => DEFAULT_KEY_FACTS.map((k) => ({ ...k, values: [] as string[] }));
 const cloneInclusions = () => DEFAULT_INCLUSIONS.map((i) => ({ ...i }));
+const cloneFaqs = () => DEFAULT_FAQS.map((f) => ({ ...f }));
 // Per-day itinerary rows every day starts with (all removable via the existing X button).
 const cloneDayDetails = () => [
   { icon: "accommodation", label: "Accommodation", value: "" },
@@ -979,7 +992,7 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
         highlights: [{ text: "", image: undefined, subtitle: undefined }],
         itinerary: [{ day: 1, title: "", description: "", image: undefined, accommodation: undefined, activities: undefined, meals: undefined, details: cloneDayDetails() }],
         requirements: [""],
-        keyFacts: cloneKeyFacts(), tags: [], inclusions: cloneInclusions(), accommodations: [], faqs: [],
+        keyFacts: cloneKeyFacts(), tags: [], inclusions: cloneInclusions(), accommodations: [], faqs: cloneFaqs(),
         thingsToKnow: cloneThingsToKnow(), tips: cloneTips(), reviews: [], map: { image: "", embedUrl: "" },
       },
     },

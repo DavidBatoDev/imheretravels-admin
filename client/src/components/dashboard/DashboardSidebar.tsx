@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import {
   LayoutDashboard,
@@ -35,8 +34,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { db } from "@/lib/firebase";
-import { collection, onSnapshot, query } from "firebase/firestore";
 
 interface DashboardSidebarProps {
   sidebarOpen: boolean;
@@ -136,7 +133,6 @@ export default function DashboardSidebar({
     pathname === href || pathname.startsWith(`${href}/`);
   const { userProfile, signOut, isLoading } = useAuthStore();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
-  const [pendingRevolutCount, setPendingRevolutCount] = useState(0);
   const mobileNavRef = useRef<HTMLElement>(null);
   const desktopNavRef = useRef<HTMLElement>(null);
 
@@ -162,22 +158,6 @@ export default function DashboardSidebar({
       ref.current.scrollTop = scrollTop;
     }
   };
-
-  useEffect(() => {
-    // Listen for pending Revolut payments
-    const revolutRef = collection(db, "revolutPayments");
-    const revolutQuery = query(revolutRef);
-
-    const unsubscribe = onSnapshot(revolutQuery, (snapshot) => {
-      const payments = snapshot.docs.map((doc) => doc.data());
-      const pendingCount = payments.filter(
-        (p: any) => (p.payment?.status || p.status) === "pending",
-      ).length;
-      setPendingRevolutCount(pendingCount);
-    });
-
-    return () => unsubscribe();
-  }, []);
 
   useEffect(() => {
     restoreSidebarScroll(mobileNavRef, MOBILE_SIDEBAR_SCROLL_KEY);
@@ -332,16 +312,6 @@ export default function DashboardSidebar({
                           {item.description}
                         </div>
                       </div>
-
-                      {item.name === "Transactions" &&
-                        pendingRevolutCount > 0 && (
-                          <Badge
-                            variant="destructive"
-                            className="h-5 min-w-[20px] px-1.5 flex items-center justify-center text-[10px] rounded-full"
-                          >
-                            {pendingRevolutCount}
-                          </Badge>
-                        )}
                     </div>
                     {isActive && (
                       <div className="absolute right-2 w-2 h-2 bg-white rounded-full" />
@@ -519,16 +489,6 @@ export default function DashboardSidebar({
                               {item.description}
                             </div>
                           </div>
-
-                          {item.name === "Transactions" &&
-                            pendingRevolutCount > 0 && (
-                              <Badge
-                                variant="destructive"
-                                className="h-5 min-w-[20px] px-1.5 flex items-center justify-center text-[10px] rounded-full"
-                              >
-                                {pendingRevolutCount}
-                              </Badge>
-                            )}
                         </div>
                         {isActive && (
                           <div className="absolute right-2 w-2 h-2 bg-white rounded-full" />
@@ -544,10 +504,6 @@ export default function DashboardSidebar({
                       <TooltipTrigger asChild>
                         <div className="relative">
                           {navItem}
-                          {item.name === "Transactions" &&
-                            pendingRevolutCount > 0 && (
-                              <div className="absolute top-1 right-2 w-2.5 h-2.5 bg-destructive rounded-full border-2 border-card-surface"></div>
-                            )}
                         </div>
                       </TooltipTrigger>
                       <TooltipContent
@@ -560,15 +516,6 @@ export default function DashboardSidebar({
                             {item.description}
                           </div>
                         </div>
-                        {item.name === "Transactions" &&
-                          pendingRevolutCount > 0 && (
-                            <Badge
-                              variant="destructive"
-                              className="h-5 min-w-[20px] px-1.5 flex items-center justify-center text-[10px] rounded-full"
-                            >
-                              {pendingRevolutCount}
-                            </Badge>
-                          )}
                       </TooltipContent>
                     </Tooltip>
                   );

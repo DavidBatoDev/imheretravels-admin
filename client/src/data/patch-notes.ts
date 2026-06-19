@@ -12,6 +12,80 @@ export type PatchNote = {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    slug: "stripe-only-payments",
+    title: "Revolut & Ulster Removed — Stripe-Only Payments",
+    description:
+      "Revolut and Ulster have been discontinued as payment methods. Stripe is now the only payment option. Bookers with outstanding balances on Revolut were migrated to Stripe; settled and cancelled records are preserved unchanged.",
+    date: "2026-06-19",
+    version: "1.2.0",
+    categories: ["breaking", "improvement"],
+    content: `# Revolut & Ulster Removed — Stripe-Only Payments
+
+## Summary
+
+Per the client's decision, the **Revolut** and **Ulster** bank-transfer payment methods have been **discontinued**. **Stripe is now the only payment method.** Bookers who had selected Revolut and still owe money were moved to Stripe; fully-paid and cancelled bookings on Revolut/Ulster are kept untouched as historical records.
+
+---
+
+## What Changed
+
+### 1. Affected bookings migrated to Stripe
+
+The **8 Revolut bookings with an outstanding balance** were switched to Stripe. Each change is recorded in the booking's **version history** (old → new payment method) for a full audit trail. No customer emails were triggered by the switch.
+
+### 2. Historical records preserved
+
+Bookings already **fully paid (confirmed)** or **cancelled** on Revolut (49 bookings) or Ulster (1 booking) were **not changed** — they remain as-is for the record.
+
+### 3. Payment pages & forms
+
+- The booking-status **Pay Now** modal is now **Stripe-only** (the Revolut bank-transfer tab and screenshot upload were removed).
+- The admin **Payment Method** dropdown now offers only Stripe.
+- New bookings (including group guests) now default to **Stripe**.
+
+### 4. Emails
+
+Revolut and Ulster payment instructions were removed from the **Reservation**, **Initial Payment Reminder**, and **Scheduled Reminder** email templates. Customers now only see the Stripe option.
+
+### 5. Transactions page
+
+The **Revolut filter** and the Revolut payment listing / approval section were removed. The page now shows Stripe transactions only.
+
+---
+
+## What's Kept
+
+- **"Revolut Pay" via Stripe** is retained — it is processed through Stripe (like Apple Pay / Google Pay), so it stays under the Stripe-only policy.
+- All historical Revolut / Ulster booking and payment records remain in the system.
+
+---
+
+## Scope
+
+| Group | Outcome |
+|---|---|
+| Revolut bookings with an outstanding balance (8) | Migrated to Stripe |
+| Fully-paid / cancelled Revolut (49) and Ulster (1) bookings | Left unchanged |
+| New bookings | Default to Stripe |
+
+---
+
+## Files Changed
+
+| File | Change |
+|---|---|
+| \`create-bookings-from-payment.ts\` | Guest default payment method → Stripe |
+| \`api/stripe-payments/select-plan/route.ts\` | Fallback payment method → Stripe |
+| \`PayNowModal.tsx\` | Stripe-only checkout |
+| \`booking-status/[bookingDocumentId]/page.tsx\` | Removed Revolut submission wiring |
+| \`transactions/page.tsx\` | Removed Revolut filter, listing & approval |
+| \`TransactionFilterDialog.tsx\` | Removed payment-method filter |
+| \`payment-setting/payment-method.ts\` | Dropdown options → Stripe only |
+| \`emailTemplates\` (+ source HTML, migrations 006 / 009) | Removed Revolut / Ulster instructions |
+| \`revolut-payment-service.ts\`, \`types/revolut-payment.ts\`, \`on-revolut-payment-status-email.ts\` | Removed (manual-Revolut feature retired) |
+`,
+  },
+  {
     slug: "2-month-final-payment-deadline",
     title: "2-Month Final Payment Deadline Policy",
     description:

@@ -40,22 +40,6 @@ const initialPaymentReminderTemplate = {
     <li><strong>Payment Method:</strong> <?= paymentMethod ?>
       <? if (paymentMethod === "Stripe") { ?>
         <br><a href="https://buy.stripe.com/7sY5kD5NF2uBfGj1NJco03g" target="_blank" style="background-color: #28a745; color: white; text-decoration: none; font-weight: bold; padding: 8px 16px; border-radius: 4px; display: inline-block; margin-top: 8px;">Pay securely online with Stripe</a>
-      <? } else if (paymentMethod === "Revolut") { ?>
-        <ul>
-          <li>Account Name: I'M HERE TRAVELS LTD</li>
-          <li>Account Number: 36834154</li>
-          <li>Sort Code: 23-01-20</li>
-          <li>IBAN: GB52REVO00996983499052</li>
-          <li>BIC: REVOGB21</li>
-        </ul>
-      <? } else if (paymentMethod === "Ulster") { ?>
-        <ul>
-          <li>Account Name: Shawn V Keeley</li>
-          <li>Account Number: 10561155</li>
-          <li>Sort Code: 98-05-83</li>
-          <li>IBAN: GB45ULSB98058310561155</li>
-          <li>BIC: ULSBGB2B</li>
-        </ul>
       <? } else { ?>
         <ul>
           <li>[Details will be provided separately]</li>

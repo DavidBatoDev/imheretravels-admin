@@ -9,6 +9,6 @@ export const paymentMethodColumn: BookingSheetColumn = {
     parentTab: "Payment Setting",
     includeInForms: true,
     width: 179.3333740234375,
-    options: ["", "Revolut", "Ulster", "Stripe"],
+    options: ["", "Stripe"],
   },
 };

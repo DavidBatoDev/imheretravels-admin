@@ -1,0 +1,641 @@
+<!-- scheduledReminderEmail.html - Nunjucks Version -->
+<html>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Upcoming Payment Reminder</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f5f5f5;
+    }
+  </style>
+</head>
+
+<body>
+  <div style="
+        font-family: Arial, sans-serif;
+        background-color: #f5f5f5;
+        margin: 0;
+        padding: 0;
+      ">
+    <!-- Header with Logo -->
+    <div style="text-align: center; padding: 20px; background-color: #ffffff">
+      <img
+          src="https://firebasestorage.googleapis.com/v0/b/imheretravels-a3f81.firebasestorage.app/o/images%2F1768292814673_%F0%9F%9A%A3%20Logo%20Center%20(Row%20For%20Content%20Columns).png?alt=media&token=476fb69b-4cd5-4c56-901a-9190c15685f0"
+          alt="ImHereTravels Logo"
+          style="
+            width: 90%;
+            max-width: 550px;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+          "
+        />
+    </div>
+
+    <!-- Hero Image -->
+    <div style="width: 100%; margin: 0 auto">
+      <img
+          src="{% if tourPackageCoverImage %}{{ tourPackageCoverImage }}{% else %}https://firebasestorage.googleapis.com/v0/b/imheretravels-a3f81.firebasestorage.app/o/images%2F1767334951959_b0f582526af6adb523ad1036d0b0a6ff3437ea61.jpg?alt=media&token=c56af73d-0bfa-492d-8680-e1588d72d1b6{% endif %}"
+          alt="ImHereTravels Banner"
+          style="
+            width: 100%;
+            max-width: 636px;
+            height: 300px;
+            object-fit: cover;
+            object-position: 50% 85%;
+            display: block;
+            margin: 0 auto;
+          "
+        />
+    </div>
+
+    <div style="
+          max-width: 600px;
+          margin: 0 auto;
+          background-color: #ffffff;
+          padding: 30px 20px;
+        ">
+      <!-- Payment Reminder Header -->
+      <div style="text-align: center; margin-bottom: 25px">
+        <h2 style="
+              color: #333333;
+              margin: 0;
+              font-size: 20px;
+              font-weight: bold;
+            ">
+          Upcoming payment reminder
+        </h2>
+      </div>
+
+      <!-- Greeting -->
+      <p style="font-size: 15px; color: #666666; margin: 0 0 20px 0">
+        Hi <strong>{{ fullName }}</strong>,
+      </p>
+
+      <!-- SUBJECT DYNAMICALLY SET IN CLOUD FUNCTION -->
+      <p style="font-size: 15px; color: #666666; margin: 0 0 15px 0">
+        {% if paymentTerm === "P1" %} We hope you're getting excited for your
+        upcoming adventure with
+        <strong style="color: #e74c3c">{{ tourPackage }}</strong>! This is a
+        friendly reminder that your <strong>first payment</strong> is due
+        soon. {% elif paymentTerm === "P2" %} We hope you're still as excited
+        as we are about your upcoming adventure with
+        <strong style="color: #e74c3c">{{ tourPackage }}</strong>! This is a
+        friendly reminder that your <strong>second payment</strong> is due
+        soon. {% elif paymentTerm === "P3" %} We hope you're still as excited
+        as we are about your upcoming adventure with
+        <strong style="color: #e74c3c">{{ tourPackage }}</strong>! This is a
+        friendly reminder that your <strong>third payment</strong> is due
+        soon. {% elif paymentTerm === "P4" %} We hope you're still as excited
+        as we are about your upcoming adventure with
+        <strong style="color: #e74c3c">{{ tourPackage }}</strong>! This is a
+        friendly reminder that your <strong>final payment</strong> is due
+        soon. {% endif %}
+      </p>
+
+      <p style="font-size: 15px; color: #666666; margin: 0 0 25px 0">
+        Please take a moment to review the details below and ensure everything
+        looks correct:
+      </p>
+
+      <!-- Payment Details -->
+      <div style="
+            background-color: #f5f5f5;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border-left: 5px solid #e74c3c;
+          ">
+        <h3 style="
+              color: #333333;
+              margin: 0 0 15px 0;
+              font-size: 16px;
+              font-weight: bold;
+            ">
+          Payment Details
+        </h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px">
+          <tr style="border-bottom: 1px solid #e0e0e0">
+            <td style="padding: 10px 0; color: #666666; font-weight: 500">
+              Amount Due
+            </td>
+            <td style="
+                  padding: 10px 0;
+                  color: #e74c3c;
+                  font-weight: bold;
+                  text-align: right;
+                ">
+              {{ amount }}
+            </td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e0e0e0">
+            <td style="padding: 10px 0; color: #666666; font-weight: 500">
+              Due Date
+            </td>
+            <td style="padding: 10px 0; color: #333333; text-align: right">
+              {{ dueDate }}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 0; color: #666666; font-weight: 500">
+              Payment Method
+            </td>
+            <td style="padding: 10px 0; color: #333333; text-align: right">
+              {{ paymentMethod }}
+            </td>
+          </tr>
+        </table>
+
+        <!-- Payment Method Details -->
+        <div style="margin-top: 20px">
+          {% if paymentMethod === "Stripe" %}
+          <a href="https://buy.stripe.com/7sY5kD5NF2uBfGj1NJco03g" target="_blank" style="
+                display: inline-block;
+                background-color: #4caf50;
+                color: white;
+                text-decoration: none;
+                font-weight: bold;
+                padding: 12px 30px;
+                border-radius: 25px;
+                font-size: 14px;
+                text-align: center;
+              ">
+            Pay securely online with Stripe
+          </a>
+          {% elif paymentMethod === "Revolut" %}
+          <div style="
+                background-color: #ffffff;
+                padding: 15px;
+                border-radius: 8px;
+                border: 1px solid #e0e0e0;
+                font-size: 13px;
+                line-height: 1.8;
+              ">
+            <p style="margin: 0 0 8px 0; color: #666666">
+              <strong>Account Name:</strong> I'M HERE TRAVELS LTD
+            </p>
+            <p style="margin: 0 0 8px 0; color: #666666">
+              <strong>Account Number:</strong> 36834154
+            </p>
+            <p style="margin: 0 0 8px 0; color: #666666">
+              <strong>Sort Code:</strong> 23-01-20
+            </p>
+            <p style="margin: 0 0 8px 0; color: #666666">
+              <strong>IBAN:</strong> GB52REVO00996983499052
+            </p>
+            <p style="margin: 0; color: #666666">
+              <strong>BIC:</strong> REVOGB21
+            </p>
+          </div>
+          {% elif paymentMethod === "Ulster" %}
+          <div style="
+                background-color: #ffffff;
+                padding: 15px;
+                border-radius: 8px;
+                border: 1px solid #e0e0e0;
+                font-size: 13px;
+                line-height: 1.8;
+              ">
+            <p style="margin: 0 0 8px 0; color: #666666">
+              <strong>Account Name:</strong> Shawn V Keeley
+            </p>
+            <p style="margin: 0 0 8px 0; color: #666666">
+              <strong>Account Number:</strong> 10561155
+            </p>
+            <p style="margin: 0 0 8px 0; color: #666666">
+              <strong>Sort Code:</strong> 98-05-83
+            </p>
+            <p style="margin: 0 0 8px 0; color: #666666">
+              <strong>IBAN:</strong> GB45ULSB98058310561155
+            </p>
+            <p style="margin: 0; color: #666666">
+              <strong>BIC:</strong> ULSBGB2B
+            </p>
+          </div>
+          {% else %}
+          <p style="font-size: 13px; color: #666666; margin: 0">
+            [Details will be provided separately]
+          </p>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if showTable %}
+      <!-- Payment Tracker -->
+      <div style="
+            background-color: #f5f5f5;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border-left: 5px solid #4caf50;
+          ">
+        <h3 style="
+              color: #333333;
+              margin: 0 0 15px 0;
+              font-size: 16px;
+              font-weight: bold;
+            ">
+          Payment Tracker
+        </h3>
+        <table style="
+              width: 100%;
+              border-collapse: collapse;
+              font-size: 13px;
+              background-color: #ffffff;
+              border-radius: 8px;
+              overflow: hidden;
+            ">
+          <thead>
+            <tr style="background-color: #f9f9f9">
+              <th style="
+                    border: 1px solid #e0e0e0;
+                    text-align: left;
+                    font-weight: bold;
+                    padding: 12px;
+                    color: #333333;
+                  ">
+                No. of Installment(s)
+              </th>
+              <th style="
+                    border: 1px solid #e0e0e0;
+                    text-align: left;
+                    font-weight: bold;
+                    padding: 12px;
+                    color: #333333;
+                  ">
+                Amount
+              </th>
+              <th style="
+                    border: 1px solid #e0e0e0;
+                    text-align: left;
+                    font-weight: bold;
+                    padding: 12px;
+                    color: #333333;
+                  ">
+                Due Date
+              </th>
+              <th style="
+                    border: 1px solid #e0e0e0;
+                    text-align: left;
+                    font-weight: bold;
+                    padding: 12px;
+                    color: #333333;
+                  ">
+                Status
+              </th>
+              {% if hasLateFeePenalties %}
+              <th style="
+                    border: 1px solid #e0e0e0;
+                    text-align: left;
+                    font-weight: bold;
+                    padding: 12px;
+                    color: #e74c3c;
+                  ">
+                Late Fees
+              </th>
+              {% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in termData %}
+            <tr>
+              <td style="
+                    border: 1px solid #e0e0e0;
+                    padding: 12px;
+                    color: #666666;
+                  ">
+                {{ item.term | replace("P", "") }}
+              </td>
+              <td style="
+                    border: 1px solid #e0e0e0;
+                    padding: 12px;
+                    color: #666666;
+                  ">
+                {{ item.amount }}
+              </td>
+              <td style="
+                    border: 1px solid #e0e0e0;
+                    padding: 12px;
+                    color: #666666;
+                  ">
+                {{ item.dueDate }}
+              </td>
+              <td style="border: 1px solid #e0e0e0; padding: 12px">
+                {% if item.datePaid %}
+                <span style="color: #4caf50; font-weight: bold"
+                    >Paid ({{ item.datePaid }})</span>
+                {% elif item.isLate %}
+                <span style="color: #e74c3c; font-weight: bold"
+                    >Unpaid, Late</span>
+                {% else %}
+                <span style="color: #ff9800; font-weight: bold"
+                    >Upcoming</span>
+                {% endif %}
+              </td>
+              {% if hasLateFeePenalties %}
+              <td style="
+                    border: 1px solid #e0e0e0;
+                    padding: 12px;
+                    color: #e74c3c;
+                    font-weight: bold;
+                  ">
+                {{ item.penaltyAmount or "-" }}
+              </td>
+              {% endif %}
+            </tr>
+            {% endfor %}
+            <tr style="background-color: #f9f9f9">
+              <td style="
+                    border: 1px solid #e0e0e0;
+                    padding: 12px;
+                    font-weight: bold;
+                    color: #333333;
+                  ">
+                Reservation Paid
+              </td>
+              <td style="
+                    border: 1px solid #e0e0e0;
+                    padding: 12px;
+                    font-weight: bold;
+                    color: #4caf50;
+                  " colspan="{% if hasLateFeePenalties %}4{% else %}3{% endif %}">
+                {{ reservationFee }}
+              </td>
+            </tr>
+            <tr style="background-color: #f9f9f9">
+              <td style="
+                    border: 1px solid #e0e0e0;
+                    padding: 12px;
+                    font-weight: bold;
+                    color: #333333;
+                  ">
+                Total Fees
+              </td>
+              <td style="
+                    border: 1px solid #e0e0e0;
+                    padding: 12px;
+                    font-weight: bold;
+                    color: #333333;
+                  " colspan="{% if hasLateFeePenalties %}4{% else %}3{% endif %}">
+                {% if hasLateFeePenalties %} {{ totalAmount }} + {{
+                totalLateFees }} (Late Fees) {% else %} {{ totalAmount }} {%
+                endif %}
+              </td>
+            </tr>
+            <tr style="background-color: #f9f9f9">
+              <td style="
+                    border: 1px solid #e0e0e0;
+                    padding: 12px;
+                    font-weight: bold;
+                    color: #333333;
+                  ">
+                Paid Installments
+              </td>
+              <td style="
+                    border: 1px solid #e0e0e0;
+                    padding: 12px;
+                    font-weight: bold;
+                    color: #4caf50;
+                  " colspan="{% if hasLateFeePenalties %}4{% else %}3{% endif %}">
+                {{ paidTerms }}
+              </td>
+            </tr>
+            <tr style="background-color: #f9f9f9">
+              <td style="
+                    border: 1px solid #e0e0e0;
+                    padding: 12px;
+                    font-weight: bold;
+                    color: #333333;
+                  ">
+                Total Paid
+              </td>
+              <td style="
+                    border: 1px solid #e0e0e0;
+                    padding: 12px;
+                    font-weight: bold;
+                    color: #4caf50;
+                  " colspan="{% if hasLateFeePenalties %}4{% else %}3{% endif %}">
+                {{ paid }}
+              </td>
+            </tr>
+            <tr style="background-color: #f9f9f9">
+              <td style="
+                    border: 1px solid #e0e0e0;
+                    padding: 12px;
+                    font-weight: bold;
+                    color: #333333;
+                  ">
+                Total Unpaid
+              </td>
+              <td style="
+                    border: 1px solid #e0e0e0;
+                    padding: 12px;
+                    font-weight: bold;
+                    color: #e74c3c;
+                  " colspan="{% if hasLateFeePenalties %}4{% else %}3{% endif %}">
+                {{ remainingBalance }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+
+      <!-- Action Needed -->
+      <div style="
+            background-color: #fff9e6;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border-left: 5px solid #ffc107;
+          ">
+        <h3 style="
+              color: #333333;
+              margin: 0 0 10px 0;
+              font-size: 16px;
+              font-weight: bold;
+            ">
+          Action Needed
+        </h3>
+        <p style="font-size: 14px; color: #666666; margin: 0; line-height: 1.6">
+          Please send us <strong>proof of payment</strong> once you've made
+          the transfer. You can reply directly to this email with the receipt
+          or confirmation.
+        </p>
+      </div>
+
+      <!-- Late Fees Policy Notice -->
+      <div style="
+            background-color: #fef6f6;
+            padding: 18px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border-left: 5px solid #e74c3c;
+          ">
+        <p style="
+                font-size: 14px;
+                color: #555555;
+                margin: 0 0 10px 0;
+                line-height: 1.6;
+              ">
+          Please note that unpaid installments past the due date may be
+          subject to late fees in accordance with our payment policy. To
+          avoid additional charges or booking issues, we highly recommend
+          settling your balance on or before the due date.
+        </p>
+        <p style="font-size: 14px; color: #555555; margin: 0; line-height: 1.6">
+          You can review the full policy here:
+          <a href="https://imheretravels.com/terms-and-conditions/" target="_blank" rel="noopener noreferrer"
+            style="color: #0b57d0; text-decoration: underline">Terms and Conditions</a>
+        </p>
+      </div>
+
+      <!-- Closing Message -->
+      <p style="font-size: 15px; color: #666666; margin: 25px 0 10px 0">
+        We can't wait to have you with us on this incredible journey! See you
+        soon!
+      </p>
+      <p style="font-size: 15px; color: #666666; margin: 10px 0">
+        Warm regards,
+      </p>
+      <p style="font-size: 15px; color: #333333; margin: 10px 0">
+        <strong>The I'm Here Travels Team</strong>
+      </p>
+
+      {% if accessToken %}
+      <!-- Booking Status Link -->
+      <div style="
+            background-color: #f0f8ff;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border-left: 5px solid #4caf50;
+            text-align: center;
+          ">
+        <h4 style="
+              color: #333333;
+              margin: 0 0 12px 0;
+              font-size: 14px;
+              font-weight: bold;
+            ">
+          View Booking Status & Pay Online
+        </h4>
+        <p style="font-size: 13px; color: #666666; margin: 0 0 15px 0">
+          You can view your complete booking details and make payments
+          securely online.
+        </p>
+        <a href="https://admin.imheretravels.com/booking-status/{{ accessToken }}" target="_blank" style="
+              display: inline-block;
+              background-color: #e74c3c;
+              color: white;
+              text-decoration: none;
+              font-weight: bold;
+              padding: 12px 30px;
+              border-radius: 25px;
+              font-size: 14px;
+              text-align: center;
+            ">
+          View Booking & Pay
+        </a>
+      </div>
+      {% endif %}
+
+      <!-- Need Help Section -->
+      <div style="
+            background-color: #f5f5f5;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border-left: 5px solid #e74c3c;
+            text-align: center;
+          ">
+        <h4 style="
+              color: #333333;
+              margin: 0 0 12px 0;
+              font-size: 14px;
+              font-weight: bold;
+            ">
+          Need help?
+        </h4>
+        <p style="font-size: 13px; color: #666666; margin: 5px 0">
+          Email us at
+          <a href="mailto:bella@imheretravels.com"
+            style="color: #e74c3c; text-decoration: none">bella@imheretravels.com</a>
+        </p>
+        <p style="font-size: 13px; color: #666666; margin: 5px 0 15px 0">
+          or call us at <strong>+63 998 247 6847</strong>
+        </p>
+
+        <!-- Social Media Icons -->
+        <div style="margin-top: 15px">
+          <p style="
+                color: #333333;
+                font-size: 13px;
+                font-weight: bold;
+                margin: 0 0 10px 0;
+              ">
+            Connect
+          </p>
+          <a href="https://instagram.com/imheretravels" style="display: inline-block; margin: 0 8px">
+            <img
+                src="https://firebasestorage.googleapis.com/v0/b/imheretravels-a3f81.firebasestorage.app/o/images%2F1769577611985_instagram-icon.png?alt=media&token=26e11a52-4b1b-4323-bca0-8ffb3b8889ab"
+                alt="Instagram"
+                style="width: 24px; height: 24px; display: inline-block"
+              />
+          </a>
+          <a href="https://www.facebook.com/profile.php?id=100089932897402"
+            style="display: inline-block; margin: 0 8px">
+            <img
+                src="https://firebasestorage.googleapis.com/v0/b/imheretravels-a3f81.firebasestorage.app/o/images%2F1769578187350_facebook-icon.png?alt=media&token=0d59a081-d764-463a-8949-533dab620dc0"
+                alt="Facebook"
+                style="width: 24px; height: 24px; display: inline-block"
+              />
+          </a>
+          <a href="https://www.tiktok.com/@imheretravels" style="display: inline-block; margin: 0 8px">
+            <img
+                src="https://firebasestorage.googleapis.com/v0/b/imheretravels-a3f81.firebasestorage.app/o/images%2F1769577615216_tiktok-icon.png?alt=media&token=2d2d9e95-52c5-4cf7-8906-7377ad7957d8"
+                alt="TikTok"
+                style="width: 24px; height: 24px; display: inline-block"
+              />
+          </a>
+          <a href="https://imheretravels.com" style="display: inline-block; margin: 0 8px">
+            <img
+                src="https://firebasestorage.googleapis.com/v0/b/imheretravels-a3f81.firebasestorage.app/o/images%2F1769577613602_link-icon.png?alt=media&token=2a058d58-eaf7-4f53-bdea-845b2409764d"
+                alt="Website"
+                style="width: 24px; height: 24px; display: inline-block"
+              />
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div style="
+          max-width: 600px;
+          margin: 0 auto;
+          background-color: #2c3e50;
+          padding: 30px 20px;
+          text-align: center;
+          color: #999;
+          font-size: 12px;
+        ">
+      <div style="margin-bottom: 15px">
+        <img
+            src="https://firebasestorage.googleapis.com/v0/b/imheretravels-a3f81.firebasestorage.app/o/images%2F1768292814673_%F0%9F%9A%A3%20Logo%20Center%20(Row%20For%20Content%20Columns).png?alt=media&token=476fb69b-4cd5-4c56-901a-9190c15685f0"
+            alt="ImHereTravels Logo"
+            style="width: 150px; height: auto; margin-bottom: 10px"
+          />
+      </div>
+      <p style="color: #666; margin: 0">
+        © 2026 I'm Here Travels. All rights reserved.
+      </p>
+    </div>
+  </div>
+</body>
+
+</html>

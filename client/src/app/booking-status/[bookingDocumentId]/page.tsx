@@ -612,16 +612,6 @@ export default function BookingStatusPage() {
     handlePayInstallment(payNowInstallment.id);
   };
 
-  // Handle successful Revolut payment submission
-  const handleRevolutSubmitted = () => {
-    setPaymentMessage({
-      type: "success",
-      text: "Your Revolut payment has been submitted and is pending verification by our admin team. You'll be notified once it's approved.",
-    });
-    setPayNowModalOpen(false);
-    setPayNowInstallment(null);
-  };
-
   const handleContactSupport = () => {
     const subject = `Booking Inquiry - ${booking?.bookingId}`;
     const body = `Hello ImHereTravels Team,\n\nI have a question regarding my booking:\n\nBooking ID: ${booking?.bookingId}\nName: ${booking?.fullName}\nTour: ${booking?.tourPackageName}\n\n[Your question here]\n\nThank you!`;
@@ -1885,16 +1875,11 @@ export default function BookingStatusPage() {
           open={payNowModalOpen}
           onOpenChange={setPayNowModalOpen}
           bookingId={booking.bookingId}
-          bookingDocumentId={booking.bookingDocumentId || bookingDocumentId}
           installmentTerm={payNowInstallment.id}
           amount={payNowInstallment.amount}
           currency="GBP"
-          customerEmail={booking.emailAddress || email || ""}
-          customerName={booking.fullName}
-          tourPackageName={booking.tourPackageName}
           onStripeCheckout={handleStripeCheckoutFromModal}
           stripeProcessing={paymentProcessing !== null}
-          onRevolutSubmitted={handleRevolutSubmitted}
         />
       )}
     </div>

@@ -19,8 +19,6 @@ import {
   Hourglass,
   ArrowUpRight,
   RefreshCcw,
-  Building2,
-  Eye,
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
@@ -35,9 +33,6 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
 import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
-import { RevolutPaymentDocument } from "@/types/revolut-payment";
-import revolutPaymentService from "@/services/revolut-payment-service";
-
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -123,16 +118,11 @@ interface Transaction {
 
 export default function TransactionsPage() {
   const [data, setData] = useState<Transaction[]>([]);
-  const [revolutPayments, setRevolutPayments] = useState<
-    RevolutPaymentDocument[]
-  >([]);
-  const [revolutLoading, setRevolutLoading] = useState(true);
   const [stats, setStats] = useState({
     all: 0,
     reservationFee: 0,
     installment: 0,
     pending: 0,
-    revolut: 0,
   });
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -158,19 +148,11 @@ export default function TransactionsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isRefunding, setIsRefunding] = useState<string | null>(null);
 
-  // Revolut State
-  const [screenshotDialogOpen, setScreenshotDialogOpen] = useState(false);
-  const [selectedRevolutPayment, setSelectedRevolutPayment] =
-    useState<RevolutPaymentDocument | null>(null);
-  const [approveDialogOpen, setApproveDialogOpen] = useState(false);
-  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
-  const [processingId, setProcessingId] = useState<string | null>(null);
-
   // Filter State
   const [filterDialogOpen, setFilterDialogOpen] = useState(false);
   const [activeFilters, setActiveFilters] = useState<FilterConfig[]>([]);
   const [activeMethodFilter, setActiveMethodFilter] = useState<
-    "all" | "stripe" | "revolut"
+    "all" | "stripe"
   >("all");
   const [hideCancelled, setHideCancelled] = useState(true);
 
@@ -206,7 +188,6 @@ export default function TransactionsPage() {
               "installment_pending",
             ].includes(p.payment?.status),
           ).length,
-          revolut: 0, // Will be updated by revolut listener
         };
 
         setStats((prev) => ({ ...prev, ...calculatedStats }));
@@ -224,44 +205,9 @@ export default function TransactionsPage() {
       },
     );
 
-    // Revolut payments listener
-    const revolutRef = collection(db, "revolutPayments");
-    const revolutQuery = query(revolutRef); // Removed orderBy to fetch both old and new schemas
-
-    const unsubRevolt = onSnapshot(
-      revolutQuery,
-      (snapshot) => {
-        const payments = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as RevolutPaymentDocument[];
-        setRevolutPayments(payments);
-        setStats((prev) => {
-          const revolutPendingCount = payments.filter(
-            (p) => (p.payment?.status || p.status) === "pending",
-          ).length;
-          return {
-            ...prev,
-            revolut: revolutPendingCount,
-            pending:
-              prev.pending -
-              ((prev as any)._lastRevolutPending || 0) +
-              revolutPendingCount,
-            _lastRevolutPending: revolutPendingCount,
-          };
-        });
-        setRevolutLoading(false);
-      },
-      (error) => {
-        console.error("Error listening to revolut payments:", error);
-        setRevolutLoading(false);
-      },
-    );
-
-    // Cleanup listeners on unmount
+    // Cleanup listener on unmount
     return () => {
       unsubscribe();
-      unsubRevolt();
     };
   }, [toast]);
 
@@ -507,89 +453,11 @@ export default function TransactionsPage() {
     return path.split(".").reduce((acc, part) => acc && acc[part], obj);
   };
 
-  const getCustomerName = (payment: RevolutPaymentDocument) => {
-    const fullName =
-      `${payment.customer?.firstName || ""} ${payment.customer?.lastName || ""}`.trim();
-    if (fullName) return fullName;
-    if (payment.customer?.email) return payment.customer.email;
-    if (payment.userId) return payment.userId;
-    return "—";
-  };
-
-  const getCustomerEmail = (payment: RevolutPaymentDocument) => {
-    return payment.customer?.email || payment.userId || "—";
-  };
-
-  const handleApprove = async () => {
-    if (!selectedRevolutPayment?.id) return;
-    setProcessingId(selectedRevolutPayment.id);
-    try {
-      await revolutPaymentService.approvePayment(
-        selectedRevolutPayment.id,
-        selectedRevolutPayment.booking?.documentId ||
-          selectedRevolutPayment.bookingDocumentId ||
-          "",
-        selectedRevolutPayment.payment?.installmentTerm ||
-          selectedRevolutPayment.installmentTerm ||
-          "",
-      );
-      toast({
-        title: "Payment Approved",
-        description: `Revolut payment has been approved.`,
-      });
-      setApproveDialogOpen(false);
-      setScreenshotDialogOpen(false);
-      setSelectedRevolutPayment(null);
-    } catch (error: any) {
-      toast({
-        title: "Approval Failed",
-        description: error.message || "Failed to approve payment.",
-        variant: "destructive",
-      });
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  const handleReject = async () => {
-    if (!selectedRevolutPayment?.id) return;
-    setProcessingId(selectedRevolutPayment.id);
-    try {
-      await revolutPaymentService.rejectPayment(
-        selectedRevolutPayment.id,
-        selectedRevolutPayment.booking?.documentId ||
-          selectedRevolutPayment.bookingDocumentId ||
-          "",
-        selectedRevolutPayment.payment?.installmentTerm ||
-          selectedRevolutPayment.installmentTerm ||
-          "",
-      );
-      toast({
-        title: "Payment Rejected",
-        description: `Revolut payment has been rejected.`,
-      });
-      setRejectDialogOpen(false);
-      setScreenshotDialogOpen(false);
-      setSelectedRevolutPayment(null);
-    } catch (error: any) {
-      toast({
-        title: "Rejection Failed",
-        description: error.message || "Failed to reject payment.",
-        variant: "destructive",
-      });
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  // Combine Stripe and Revolut data for the global table, and then filter them all together
-  const initialCombinedData = [
-    ...data.map((t) => ({ type: "stripe" as const, data: t })),
-    ...revolutPayments.map((rp) => ({
-      type: "revolut" as const,
-      data: rp as any,
-    })),
-  ];
+  // Combine Stripe transactions for the table.
+  const initialCombinedData = data.map((t) => ({
+    type: "stripe" as const,
+    data: t,
+  }));
 
   const hasExplicitCancelledStatusFilter = activeFilters.some((filter) => {
     if (filter.field !== "payment.status") return false;
@@ -601,12 +469,8 @@ export default function TransactionsPage() {
   const processedData = initialCombinedData.filter((item) => {
     // 1. Tab Filter
     let tabMatch = true;
-    const paymentStatus =
-      item.type === "stripe"
-        ? item.data.payment.status
-        : item.data.payment?.status || item.data.status;
-    const paymentType =
-      item.type === "stripe" ? item.data.payment.type : "installment";
+    const paymentStatus = item.data.payment.status;
+    const paymentType = item.data.payment.type;
 
     if (activeTab === "Reservation Fee") {
       tabMatch = paymentType === "reservationFee";
@@ -641,23 +505,14 @@ export default function TransactionsPage() {
       const q = searchQuery.toLowerCase();
       let match = false;
 
-      if (item.type === "stripe") {
-        const t = item.data;
-        match = Boolean(
-          t.customer?.email?.toLowerCase().includes(q) ||
-          t.payment.amount.toString().includes(q) ||
-          t.payment.currency.toLowerCase().includes(q) ||
-          t.tour?.packageName?.toLowerCase().includes(q) ||
-          t.payment.installmentTerm?.toLowerCase().includes(q),
-        );
-      } else {
-        const rp = item.data;
-        match = Boolean(
-          getCustomerEmail(rp).toLowerCase().includes(q) ||
-          getCustomerName(rp).toLowerCase().includes(q) ||
-          rp.tour?.packageName?.toLowerCase().includes(q),
-        );
-      }
+      const t = item.data;
+      match = Boolean(
+        t.customer?.email?.toLowerCase().includes(q) ||
+        t.payment.amount.toString().includes(q) ||
+        t.payment.currency.toLowerCase().includes(q) ||
+        t.tour?.packageName?.toLowerCase().includes(q) ||
+        t.payment.installmentTerm?.toLowerCase().includes(q),
+      );
 
       if (!match) return false;
     }
@@ -669,31 +524,8 @@ export default function TransactionsPage() {
 
         if (filter.field === "type") {
           value = item.type;
-        } else if (item.type === "stripe") {
-          value = getNestedValue(item.data, filter.field);
         } else {
-          // Mapping Stripe fields to Revolut fields for uniform filtering
-          if (filter.field === "customer.email")
-            value = getCustomerEmail(item.data);
-          else if (filter.field === "customer.name")
-            value = getCustomerName(item.data);
-          else if (filter.field === "booking.id")
-            value = item.data.booking?.id || item.data.bookingDocumentId;
-          else if (filter.field === "payment.status")
-            value = item.data.payment?.status || item.data.status;
-          else if (filter.field === "payment.amount")
-            value = item.data.payment?.amount || item.data.amount;
-          else if (filter.field === "payment.currency")
-            value = item.data.payment?.currency || "GBP";
-          else if (filter.field === "payment.type") value = "installment";
-          else if (filter.field === "payment.installmentTerm")
-            value =
-              item.data.payment?.installmentTerm || item.data.installmentTerm;
-          else if (filter.field === "tour.packageName")
-            value = item.data.tour?.packageName;
-          else if (filter.field === "timestamps.createdAt")
-            value = item.data.timestamps?.createdAt;
-          else value = getNestedValue(item.data, filter.field);
+          value = getNestedValue(item.data, filter.field);
         }
 
         // Handle Dates
@@ -787,28 +619,11 @@ export default function TransactionsPage() {
       return 0;
     };
 
-    const timeA =
-      a.type === "stripe"
-        ? getTimestampValue(getDate(a.data as Transaction))
-        : getTimestampValue(
-            (a.data as RevolutPaymentDocument).timestamps?.updatedAt ||
-              (a.data as RevolutPaymentDocument).timestamps?.createdAt,
-          );
-
-    const timeB =
-      b.type === "stripe"
-        ? getTimestampValue(getDate(b.data as Transaction))
-        : getTimestampValue(
-            (b.data as RevolutPaymentDocument).timestamps?.updatedAt ||
-              (b.data as RevolutPaymentDocument).timestamps?.createdAt,
-          );
+    const timeA = getTimestampValue(getDate(a.data as Transaction));
+    const timeB = getTimestampValue(getDate(b.data as Transaction));
 
     return timeB - timeA; // Sort descending (newest first)
   });
-
-  const pendingRevolutPayments = revolutPayments.filter(
-    (rp) => (rp.payment?.status || rp.status) === "pending",
-  );
 
   return (
     <DashboardLayout>
@@ -904,122 +719,6 @@ export default function TransactionsPage() {
               })}
         </div>
 
-        {/* Required Actions for Pending Revolut Payments */}
-        {!loading && !revolutLoading && pendingRevolutPayments.length > 0 && (
-          <Card className="border-amber-200 bg-amber-50/50 shadow-sm">
-            <CardHeader className="py-2 px-3 border-b border-amber-100 bg-amber-50/30 flex flex-row items-center justify-between space-y-0">
-              <div className="flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 text-amber-600" />
-                <CardTitle className="text-sm font-semibold text-amber-900">
-                  Required Actions
-                </CardTitle>
-              </div>
-              <CardDescription className="text-xs text-amber-700 m-0">
-                {pendingRevolutPayments.length} payment
-                {pendingRevolutPayments.length === 1 ? "" : "s"} waiting for
-                verification
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div
-                className="divide-y divide-amber-100/60 max-h-[300px] overflow-y-auto 
-                [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-amber-200/50 [&::-webkit-scrollbar-thumb]:rounded-full"
-              >
-                {pendingRevolutPayments.map((rp) => (
-                  <div
-                    key={rp.id}
-                    className="flex flex-col md:flex-row md:items-center justify-between py-2 px-3 gap-2 hover:bg-amber-100/30 transition-colors"
-                  >
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
-                      <div className="flex items-center gap-2 w-full sm:w-auto">
-                        <div className="bg-amber-100 text-amber-700 p-1.5 rounded-sm shrink-0">
-                          <Wallet className="h-3.5 w-3.5" />
-                        </div>
-                        <div className="min-w-[130px]">
-                          <p className="font-semibold text-amber-950 text-[13px] truncate leading-tight">
-                            {getCustomerName(rp)}
-                          </p>
-                          <p className="text-[11px] text-amber-700/80 truncate leading-tight">
-                            {getCustomerEmail(rp)}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="hidden sm:block w-px h-6 bg-amber-200/60"></div>
-
-                      <div className="flex items-center gap-4 sm:gap-6">
-                        <div className="flex flex-col">
-                          <span className="text-[9px] text-amber-600/80 uppercase tracking-widest font-bold leading-none mb-1">
-                            Amount
-                          </span>
-                          <span className="font-semibold text-amber-950 text-xs leading-none">
-                            {getCurrencySymbol(rp.payment.currency || "GBP")}
-                            {rp.payment.amount?.toFixed(2)}
-                          </span>
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[9px] text-amber-600/80 uppercase tracking-widest font-bold leading-none mb-1">
-                            Booking
-                          </span>
-                          <span className="font-semibold text-amber-950 text-xs leading-none">
-                            {rp.booking?.id}
-                          </span>
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[9px] text-amber-600/80 uppercase tracking-widest font-bold leading-none mb-1">
-                            Term
-                          </span>
-                          <span className="font-medium text-amber-900 text-xs leading-none">
-                            {rp.payment?.installmentTerm === "full_payment"
-                              ? "Full"
-                              : rp.payment?.installmentTerm?.toUpperCase() ||
-                                rp.installmentTerm?.toUpperCase()}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 mt-2 md:mt-0 shrink-0">
-                      <Button
-                        variant="outline"
-                        className="bg-background hover:bg-amber-50 dark:hover:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 h-7 px-2.5 text-[11px] flex-1 md:flex-none w-full md:w-auto shadow-none"
-                        onClick={() => {
-                          setSelectedRevolutPayment(rp);
-                          setScreenshotDialogOpen(true);
-                        }}
-                      >
-                        <Eye className="h-3 w-3 mr-1" />
-                        View
-                      </Button>
-                      <Button
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white h-7 px-2.5 text-[11px] flex-1 md:flex-none shadow-none w-full md:w-auto"
-                        onClick={() => {
-                          setSelectedRevolutPayment(rp);
-                          setApproveDialogOpen(true);
-                        }}
-                      >
-                        <CheckCircle2 className="h-3 w-3 mr-1" />
-                        Approve
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        className="h-7 px-2.5 text-[11px] flex-1 md:flex-none shadow-none w-full md:w-auto hover:bg-red-600"
-                        onClick={() => {
-                          setSelectedRevolutPayment(rp);
-                          setRejectDialogOpen(true);
-                        }}
-                      >
-                        <XCircle className="h-3 w-3 mr-1" />
-                        Reject
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Filters Toolbar */}
         <div className="flex items-center gap-2">
           <div className="relative flex-1 max-w-sm">
@@ -1057,18 +756,6 @@ export default function TransactionsPage() {
                 }`}
               >
                 Stripe
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setActiveMethodFilter("revolut")}
-                className={`h-7 px-3 text-xs rounded-md font-medium transition-all ${
-                  activeMethodFilter === "revolut"
-                    ? "bg-background text-emerald-700 dark:text-emerald-300 shadow-sm border border-border"
-                    : "text-muted-foreground hover:text-emerald-700 dark:hover:text-emerald-300 hover:bg-background/80"
-                }`}
-              >
-                Revolut
               </Button>
             </div>
 
@@ -1166,8 +853,7 @@ export default function TransactionsPage() {
                   </TableRow>
                 ) : (
                   combinedData.map((item) => {
-                    if (item.type === "stripe") {
-                      const t = item.data as Transaction;
+                    const t = item.data as Transaction;
                       return (
                         <TableRow
                           key={t.id}
@@ -1284,135 +970,6 @@ export default function TransactionsPage() {
                           </TableCell>
                         </TableRow>
                       );
-                    } else {
-                      const rp = item.data as RevolutPaymentDocument;
-                      return (
-                        <TableRow
-                          key={`revolut-${rp.id}`}
-                          className="hover:bg-muted/50 transition-colors"
-                        >
-                          <TableCell className="pl-6">
-                            <div className="flex items-center gap-1 font-medium font-hk-grotesk text-foreground">
-                              <span className="text-muted-foreground">
-                                {getCurrencySymbol(
-                                  rp.payment.currency || "GBP",
-                                )}
-                              </span>
-                              <span>
-                                {rp.payment.amount !== undefined
-                                  ? rp.payment.amount.toFixed(2)
-                                  : "—"}
-                              </span>
-                              <span className="text-xs text-muted-foreground uppercase ml-1">
-                                {rp.payment.currency || "GBP"}
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {getStatusBadge(rp.payment?.status || rp.status)}
-                          </TableCell>
-                          <TableCell>
-                            <span className="text-sm font-medium text-foreground whitespace-nowrap">
-                              {rp.payment.installmentTerm === "full_payment"
-                                ? "Full Payment"
-                                : `${rp.payment.installmentTerm?.toUpperCase()} - Installment`}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className="text-xs font-medium border-indigo-200 text-indigo-700 bg-indigo-50 whitespace-nowrap"
-                            >
-                              <Building2 className="h-3 w-3 mr-1" />
-                              Revolut
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <span className="text-sm text-foreground whitespace-nowrap">
-                              {rp.tour?.packageName || "—"}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <span className="text-sm text-muted-foreground whitespace-nowrap">
-                              {rp.customer?.email || "—"}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                            {formatDate(
-                              rp.timestamps?.updatedAt ||
-                                rp.timestamps?.createdAt,
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded whitespace-nowrap">
-                                {rp.booking?.id || "—"}
-                              </span>
-                              {rp.booking?.documentId && (
-                                <Link
-                                  href={`/bookings?tab=bookings&bookingId=${rp.booking.documentId}`}
-                                  className="text-muted-foreground hover:text-primary transition-colors"
-                                  title="View Booking"
-                                >
-                                  <ExternalLink className="h-4 w-4" />
-                                </Link>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8"
-                                >
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSelectedRevolutPayment(rp);
-                                    setScreenshotDialogOpen(true);
-                                  }}
-                                >
-                                  <Eye className="h-4 w-4 mr-2" />
-                                  View Screenshot
-                                </DropdownMenuItem>
-                                {(rp.payment?.status || rp.status) ===
-                                  "pending" && (
-                                  <>
-                                    <DropdownMenuItem
-                                      className="text-emerald-600 focus:text-emerald-600 focus:bg-emerald-50"
-                                      onClick={() => {
-                                        setSelectedRevolutPayment(rp);
-                                        setApproveDialogOpen(true);
-                                      }}
-                                      disabled={processingId === rp.id}
-                                    >
-                                      <CheckCircle2 className="h-4 w-4 mr-2" />
-                                      Approve
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      className="text-red-600 focus:text-red-600 focus:bg-red-50"
-                                      onClick={() => {
-                                        setSelectedRevolutPayment(rp);
-                                        setRejectDialogOpen(true);
-                                      }}
-                                      disabled={processingId === rp.id}
-                                    >
-                                      <XCircle className="h-4 w-4 mr-2" />
-                                      Reject
-                                    </DropdownMenuItem>
-                                  </>
-                                )}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    }
                   })
                 )}
               </TableBody>
@@ -1422,7 +979,7 @@ export default function TransactionsPage() {
           <div className="border-t border-border px-4 py-3 bg-muted/50 flex items-center justify-between text-sm text-muted-foreground">
             <div>
               Viewing {combinedData.length > 0 ? 1 : 0}-{combinedData.length} of{" "}
-              {data.length + revolutPayments.length} items
+              {data.length} items
             </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" disabled>
@@ -1505,256 +1062,6 @@ export default function TransactionsPage() {
         onClose={handleCloseRefundSuccess}
         paymentIntentId={paymentIntentId}
       />
-
-      {/* Revolut Screenshot Dialog */}
-      <Dialog
-        open={screenshotDialogOpen}
-        onOpenChange={setScreenshotDialogOpen}
-      >
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-          <DialogHeader>
-            <DialogTitle>Payment Verification</DialogTitle>
-            <DialogDescription>
-              Review the payment details and screenshot below to verify the
-              transaction.
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedRevolutPayment && (
-            <div className="grid grid-cols-1 md:grid-cols-[7fr_3fr] gap-6 mt-4">
-              {/* Left Column: Screenshot Image */}
-              <div className="flex flex-col">
-                {selectedRevolutPayment.paymentScreenshot?.url ? (
-                  <div className="border border-border rounded-lg overflow-hidden flex-1 bg-muted flex flex-col">
-                    <img
-                      src={selectedRevolutPayment.paymentScreenshot.url}
-                      alt="Payment screenshot"
-                      className="w-full object-contain max-h-[600px] flex-1"
-                    />
-                    <div className="px-3 py-2 bg-muted/70 border-t border-border text-xs text-muted-foreground flex justify-between mt-auto">
-                      <span
-                        className="truncate mr-2"
-                        title={
-                          selectedRevolutPayment.paymentScreenshot.fileName
-                        }
-                      >
-                        {selectedRevolutPayment.paymentScreenshot.fileName}
-                      </span>
-                      <span className="whitespace-nowrap">
-                        {(
-                          selectedRevolutPayment.paymentScreenshot.fileSize /
-                          1024 /
-                          1024
-                        ).toFixed(2)}{" "}
-                        MB
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="border border-border rounded-lg overflow-hidden flex-1 bg-muted/50 flex items-center justify-center p-8 min-h-[300px]">
-                    <span className="text-muted-foreground">
-                      No screenshot provided
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Right Column: Payment Details & Actions */}
-              <div className="flex flex-col space-y-6">
-                <div className="bg-muted/50 rounded-lg p-5 space-y-4 text-sm border border-border">
-                  <h3 className="font-semibold text-foreground border-b border-border pb-2">
-                    Transaction Details
-                  </h3>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-muted-foreground">Amount</span>
-                      <span className="font-semibold text-base text-foreground">
-                        {getCurrencySymbol(
-                          selectedRevolutPayment.payment?.currency || "GBP",
-                        )}
-                        {selectedRevolutPayment.payment?.amount?.toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-muted-foreground">Installment</span>
-                      <span className="font-medium text-foreground">
-                        {selectedRevolutPayment.payment?.installmentTerm ===
-                        "full_payment"
-                          ? "Full Payment"
-                          : selectedRevolutPayment.payment?.installmentTerm?.toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-muted-foreground">Customer</span>
-                      <span className="font-medium text-foreground">
-                        {getCustomerName(selectedRevolutPayment)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-muted-foreground">Email</span>
-                      <span className="text-foreground/80">
-                        {getCustomerEmail(selectedRevolutPayment)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center border-t border-border pt-3">
-                      <span className="text-muted-foreground">
-                        Submitted On
-                      </span>
-                      <span className="text-foreground/80">
-                        {formatDate(
-                          selectedRevolutPayment.timestamps?.createdAt,
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                {(selectedRevolutPayment?.payment?.status ||
-                  selectedRevolutPayment?.status) === "pending" && (
-                  <div className="flex flex-col sm:flex-row gap-3 mt-auto pt-4 md:pt-0">
-                    <Button
-                      onClick={() => setApproveDialogOpen(true)}
-                      disabled={processingId !== null}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 flex-1 h-11"
-                    >
-                      <CheckCircle2 className="h-5 w-5" />
-                      Approve Payment
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      onClick={() => setRejectDialogOpen(true)}
-                      disabled={processingId !== null}
-                      className="gap-2 flex-1 h-11"
-                    >
-                      <XCircle className="h-5 w-5" />
-                      Reject Payment
-                    </Button>
-                  </div>
-                )}
-
-                {(selectedRevolutPayment?.payment?.status ||
-                  selectedRevolutPayment?.status) !== "pending" && (
-                  <div className="mt-auto p-4 bg-muted/50 rounded-lg text-center text-sm text-muted-foreground border border-dashed">
-                    This transaction has already been{" "}
-                    {selectedRevolutPayment?.payment?.status ||
-                      selectedRevolutPayment?.status}
-                    .
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Revolut Approve Confirmation Dialog */}
-      <AlertDialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Approve Payment?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will mark the Revolut payment as approved and update the
-              booking installment as paid. This action cannot be easily undone.
-            </AlertDialogDescription>
-            {selectedRevolutPayment && (
-              <div className="mt-2 text-sm bg-emerald-50 border border-emerald-200 p-3 rounded">
-                <p>
-                  <strong>Amount:</strong>{" "}
-                  {getCurrencySymbol(
-                    selectedRevolutPayment.payment.currency || "GBP",
-                  )}
-                  {selectedRevolutPayment.payment.amount?.toFixed(2)}
-                </p>
-                <p>
-                  <strong>Booking:</strong> {selectedRevolutPayment.booking?.id}
-                </p>
-                <p>
-                  <strong>Installment:</strong>{" "}
-                  {selectedRevolutPayment.payment?.installmentTerm ===
-                  "full_payment"
-                    ? "Full Payment"
-                    : selectedRevolutPayment.payment?.installmentTerm?.toUpperCase() ||
-                      selectedRevolutPayment.installmentTerm?.toUpperCase()}
-                </p>
-                <p>
-                  <strong>Customer:</strong>{" "}
-                  {getCustomerName(selectedRevolutPayment)}
-                </p>
-                <p>
-                  <strong>Email:</strong>{" "}
-                  {getCustomerEmail(selectedRevolutPayment)}
-                </p>
-              </div>
-            )}
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={processingId !== null}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault();
-                handleApprove();
-              }}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              disabled={processingId !== null}
-            >
-              {processingId ? "Approving..." : "Approve Payment"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Revolut Reject Confirmation Dialog */}
-      <AlertDialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Reject Payment?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will mark the Revolut payment as rejected. The customer will
-              need to submit a new payment.
-            </AlertDialogDescription>
-            {selectedRevolutPayment && (
-              <div className="mt-2 text-sm bg-red-50 border border-red-200 p-3 rounded">
-                <p>
-                  <strong>Amount:</strong>{" "}
-                  {getCurrencySymbol(
-                    selectedRevolutPayment.payment.currency || "GBP",
-                  )}
-                  {selectedRevolutPayment.payment.amount?.toFixed(2)}
-                </p>
-                <p>
-                  <strong>Booking:</strong> {selectedRevolutPayment.booking?.id}
-                </p>
-                <p>
-                  <strong>Installment:</strong>{" "}
-                  {selectedRevolutPayment.payment?.installmentTerm ===
-                  "full_payment"
-                    ? "Full Payment"
-                    : selectedRevolutPayment.payment?.installmentTerm?.toUpperCase() ||
-                      selectedRevolutPayment.installmentTerm?.toUpperCase()}
-                </p>
-              </div>
-            )}
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={processingId !== null}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault();
-                handleReject();
-              }}
-              className="bg-red-600 hover:bg-red-700 text-white"
-              disabled={processingId !== null}
-            >
-              {processingId ? "Rejecting..." : "Reject Payment"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </DashboardLayout>
   );
 }

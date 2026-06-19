@@ -431,7 +431,7 @@ export async function createBookingsForReservationPayment(opts: {
       paidAmount: feePerPerson,
       originalTourCost,
       discountedTourCost,
-      paymentMethod: "Revolut",
+      paymentMethod: "Stripe",
       groupId,
       isMainBooking: false,
       existingBookingsCount: existingCountForTourPackage + i + 1,

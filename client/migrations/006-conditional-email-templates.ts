@@ -367,20 +367,6 @@ const conditionalEmailTemplate = {
             <h3 style="font-size: 20px; color: red;">Choose Your Payment Method</h3>
             <div style="background-color: #fff9c4; padding: 20px; border-radius: 5px; margin-bottom: 20px;">
                 <ul style="font-size: 16px; color: #333333; margin-bottom: 20px; list-style-type: disc; padding-left: 20px;">
-                    <li><strong>PM1 – Revolut Business</strong>:<br>
-                        Account Name: I'M HERE TRAVELS LTD<br>
-                        Account Number: 36834154<br>
-                        Sort Code: 23-01-20<br>
-                        IBAN: GB52REVO00996983499052<br>
-                        BIC: REVOGB21
-                    </li><br>
-                    <li><strong>PM2 – Ulster Bank Transfer</strong>:<br>
-                        Account Name: Shawn V Keeley<br>
-                        Account Number: 10561155<br>
-                        Sort Code: 98-05-83<br>
-                        IBAN: GB45ULSB98058310561155<br>
-                        BIC: ULSBGB2B
-                    </li><br>
                     <li><strong>PM3 – Stripe Payment (Credit/Debit Cards)</strong>:<br>
                         <a href="https://buy.stripe.com/7sY5kD5NF2uBfGj1NJco03g" target="_blank" style="background-color: #28a745; color: white; text-decoration: none; font-weight: bold; padding: 8px 16px; border-radius: 4px; display: inline-block; margin-top: 5px;">Pay securely online with Stripe</a>
                     </li>

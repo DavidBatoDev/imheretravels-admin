@@ -104,6 +104,24 @@
                         display: inline-block;
                         margin-top: 8px;
                         ">Pay securely online with Stripe</a>
+              {% elif paymentMethod == "Revolut" %}
+              <br /><br />
+              <span style="font-size: 13px; color: #666666;">
+                            <strong>Account Name:</strong> I'M HERE TRAVELS LTD<br />
+                            <strong>Account Number:</strong> 36834154<br />
+                            <strong>Sort Code:</strong> 23-01-20<br />
+                            <strong>IBAN:</strong> GB52REVO00996983499052<br />
+                            <strong>BIC:</strong> REVOGB21
+                        </span>
+              {% elif paymentMethod == "Ulster" %}
+              <br /><br />
+              <span style="font-size: 13px; color: #666666;">
+                            <strong>Account Name:</strong> Shawn V Keeley<br />
+                            <strong>Account Number:</strong> 10561155<br />
+                            <strong>Sort Code:</strong> 98-05-83<br />
+                            <strong>IBAN:</strong> GB45ULSB98058310561155<br />
+                            <strong>BIC:</strong> ULSBGB2B
+                        </span>
               {% else %}
               <br /><br />
               <span style="font-size: 13px; color: #666666;">[Details will be provided separately]</span>
@@ -206,7 +224,8 @@
           <a href="https://instagram.com/imheretravels" style="display: inline-block; margin: 0 8px;">
             <img src="https://firebasestorage.googleapis.com/v0/b/imheretravels-a3f81.firebasestorage.app/o/images%2F1769577611985_instagram-icon.png?alt=media&token=26e11a52-4b1b-4323-bca0-8ffb3b8889ab" alt="Instagram" style="width: 24px; height: 24px; display: inline-block;">
           </a>
-          <a href="https://www.facebook.com/profile.php?id=100089932897402" style="display: inline-block; margin: 0 8px;">
+          <a href="https://www.facebook.com/profile.php?id=100089932897402"
+            style="display: inline-block; margin: 0 8px;">
             <img src="https://firebasestorage.googleapis.com/v0/b/imheretravels-a3f81.firebasestorage.app/o/images%2F1769578187350_facebook-icon.png?alt=media&token=0d59a081-d764-463a-8949-533dab620dc0" alt="Facebook" style="width: 24px; height: 24px; display: inline-block;">
           </a>
           <a href="https://www.tiktok.com/@imheretravels" style="display: inline-block; margin: 0 8px;">

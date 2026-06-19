@@ -1,0 +1,26 @@
+{
+  "generatedAt": "2026-06-19T11:20:49.793Z",
+  "project": "imheretravels-a3f81",
+  "totalBookings": 190,
+  "paymentMethodCounts": {
+    "Stripe": 111,
+    "(blank)": 21,
+    "Revolut": 57,
+    "Ulster": 1
+  },
+  "revolut": {
+    "total": 57,
+    "mainBookers": 0,
+    "guests": 57,
+    "affected": {
+      "total": 8,
+      "futureDue": 2,
+      "overdue": 4,
+      "undated": 2
+    },
+    "confirmed": 40,
+    "confirmedButStillOwing": 0,
+    "cancelled": 9,
+    "other": 0
+  }
+}

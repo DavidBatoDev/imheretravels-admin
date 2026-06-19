@@ -1,8 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Pin the workspace root to this app dir so Next doesn't infer it from a
+  // sibling lockfile (admin/package-lock.json).
+  turbopack: {
+    root: __dirname,
+  },
   images: {
-    domains: ["firebasestorage.googleapis.com"],
     remotePatterns: [
       {
         protocol: "https",

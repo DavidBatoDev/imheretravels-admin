@@ -98,13 +98,6 @@ const AVAILABLE_FIELDS = [
     icon: Hash,
   },
   {
-    id: "type",
-    label: "Method",
-    type: "select",
-    options: ["stripe", "revolut"],
-    icon: CreditCard,
-  },
-  {
     id: "tour.packageName",
     label: "Tour Package",
     type: "string",

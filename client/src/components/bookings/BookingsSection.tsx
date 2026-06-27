@@ -6,6 +6,7 @@ import Fuse from "fuse.js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -78,10 +79,17 @@ import { IoWallet } from "react-icons/io5";
 import { HiTrendingUp } from "react-icons/hi";
 import type { Booking } from "@/types/bookings";
 import { SheetColumn } from "@/types/sheet-management";
+import {
+  toCsv,
+  downloadCsv,
+  formatCsvDate,
+  csvDateStamp,
+  type CsvColumn,
+} from "@/lib/csv-export";
 import { allBookingSheetColumns } from "@/app/functions/columns";
 import { functionMap } from "@/app/functions/columns/functions-index";
 import { db } from "@/lib/firebase";
-import { collection, onSnapshot, query } from "firebase/firestore";
+import { collection, onSnapshot, query, getDocs } from "firebase/firestore";
 import { Timestamp } from "firebase/firestore";
 import { bookingService } from "@/services/booking-service";
 import { financialReportsService } from "@/services/financial-reports-service";
@@ -599,6 +607,149 @@ export default function BookingsSection() {
     if (statusLower.includes("completed")) return "Completed";
 
     return "Pending"; // Default fallback
+  };
+
+  // CSV export of bookings filtered by selected status category
+  const [isExportingCancelled, setIsExportingCancelled] = useState(false);
+
+  const BOOKING_STATUS_CATEGORIES = [
+    "Confirmed",
+    "Pending",
+    "Cancelled",
+    "Completed",
+  ];
+
+  // Status categories selected in the export settings popover.
+  const [exportStatuses, setExportStatuses] = useState<string[]>([
+    "Cancelled",
+  ]);
+
+  const toggleExportStatus = (status: string) => {
+    setExportStatuses((prev) =>
+      prev.includes(status)
+        ? prev.filter((s) => s !== status)
+        : [...prev, status],
+    );
+  };
+
+  const handleExportCancelled = async () => {
+    setIsExportingCancelled(true);
+    try {
+      const selected = bookings.filter((b) =>
+        exportStatuses.includes(getBookingStatusCategory(b.bookingStatus)),
+      );
+
+      if (selected.length === 0) {
+        toast({
+          title: "Nothing to export",
+          description: "No bookings match the selected status.",
+        });
+        return;
+      }
+
+      // The contact (WhatsApp) number lives on the reservation payment doc,
+      // not on the booking. Build an email -> whatsAppNumber map from the
+      // stripePayments collection (main booker + each guest).
+      const whatsAppByEmail = new Map<string, string>();
+      try {
+        const paymentsSnap = await getDocs(collection(db, "stripePayments"));
+        paymentsSnap.forEach((docSnap) => {
+          const p = docSnap.data() as any;
+          const customerEmail = p?.customer?.email;
+          const customerNumber = p?.customer?.whatsAppNumber;
+          if (customerEmail && customerNumber && !whatsAppByEmail.has(customerEmail)) {
+            whatsAppByEmail.set(String(customerEmail), String(customerNumber));
+          }
+          const guests: any[] = p?.booking?.guestDetails || [];
+          guests.forEach((g) => {
+            if (g?.email && g?.whatsAppNumber && !whatsAppByEmail.has(g.email)) {
+              whatsAppByEmail.set(String(g.email), String(g.whatsAppNumber));
+            }
+          });
+        });
+      } catch (err) {
+        console.error("Failed to load payments for contact numbers:", err);
+        toast({
+          title: "Contact numbers unavailable",
+          description:
+            "Could not load payments, so contact numbers will be blank.",
+          variant: "destructive",
+        });
+      }
+
+      const columns: CsvColumn<Booking>[] = [
+        { header: "Email Address", value: (b) => b.emailAddress || "" },
+        {
+          header: "Contact Number",
+          value: (b) => whatsAppByEmail.get(b.emailAddress) || "",
+        },
+        { header: "Full Name", value: (b) => b.fullName || "" },
+        { header: "Booking Code", value: (b) => b.bookingCode || "" },
+        { header: "Booking ID", value: (b) => b.bookingId || "" },
+        { header: "Status", value: (b) => b.bookingStatus || "" },
+        { header: "Tour Package", value: (b) => b.tourPackageName || "" },
+        { header: "Tour Date", value: (b) => formatCsvDate(b.tourDate) },
+        {
+          header: "Reservation Date",
+          value: (b) => formatCsvDate(b.reservationDate),
+        },
+        {
+          header: "Reason for Cancellation",
+          value: (b) => b.reasonForCancellation || "",
+        },
+        {
+          header: "Cancellation Request Date",
+          value: (b) => formatCsvDate(b.cancellationRequestDate),
+        },
+        {
+          header: "Cancellation Scenario",
+          value: (b) => b.cancellationScenario || "",
+        },
+        {
+          header: "Original Tour Cost",
+          value: (b) =>
+            b.originalTourCost !== undefined ? b.originalTourCost : "",
+        },
+        {
+          header: "Paid",
+          value: (b) => (b.paid !== undefined ? b.paid : ""),
+        },
+        {
+          header: "Remaining Balance",
+          value: (b) =>
+            b.remainingBalance !== undefined ? b.remainingBalance : "",
+        },
+        {
+          header: "Refundable Amount",
+          value: (b) =>
+            b.refundableAmount !== undefined ? b.refundableAmount : "",
+        },
+        {
+          header: "Travel Credit Issued",
+          value: (b) =>
+            b.travelCreditIssued !== undefined ? b.travelCreditIssued : "",
+        },
+      ];
+
+      const csv = toCsv(selected, columns);
+      downloadCsv(`bookings-${csvDateStamp()}.csv`, csv);
+
+      toast({
+        title: "Export complete",
+        description: `Exported ${selected.length} booking${
+          selected.length === 1 ? "" : "s"
+        }.`,
+      });
+    } catch (error) {
+      console.error("Export failed:", error);
+      toast({
+        title: "Export failed",
+        description: "Could not export bookings. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExportingCancelled(false);
+    }
   };
 
   // Check if a booking is invalid (missing essential data)
@@ -1744,6 +1895,73 @@ export default function BookingsSection() {
                 </svg>
                 <span className="hidden sm:inline">Version History</span>
               </Button>
+
+              {/* Export Bookings Button with status settings */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="flex items-center gap-2 border-border hover:bg-crimson-red/10 hover:border-crimson-red hover:text-crimson-red px-3 sm:px-4"
+                    title="Export bookings to CSV"
+                  >
+                    <Download className="h-4 w-4" />
+                    <span className="hidden sm:inline">Export CSV</span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-64 p-4">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-foreground">
+                        Export settings
+                      </p>
+                      <button
+                        type="button"
+                        className="text-xs text-primary hover:underline"
+                        onClick={() =>
+                          setExportStatuses(
+                            exportStatuses.length ===
+                              BOOKING_STATUS_CATEGORIES.length
+                              ? []
+                              : [...BOOKING_STATUS_CATEGORIES],
+                          )
+                        }
+                      >
+                        {exportStatuses.length ===
+                        BOOKING_STATUS_CATEGORIES.length
+                          ? "Clear all"
+                          : "Select all"}
+                      </button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Filter by status
+                    </p>
+                    <div className="space-y-2">
+                      {BOOKING_STATUS_CATEGORIES.map((status) => (
+                        <label
+                          key={status}
+                          className="flex items-center gap-2 text-sm cursor-pointer"
+                        >
+                          <Checkbox
+                            checked={exportStatuses.includes(status)}
+                            onCheckedChange={() => toggleExportStatus(status)}
+                          />
+                          <span>{status}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <Button
+                      className="w-full gap-2"
+                      onClick={handleExportCancelled}
+                      disabled={
+                        isExportingCancelled || exportStatuses.length === 0
+                      }
+                    >
+                      <Download className="h-4 w-4" />
+                      {isExportingCancelled ? "Exporting..." : "Export CSV"}
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
               <DialogContent className="max-w-6xl max-h-[85vh] overflow-y-auto">
                 <DialogHeader>
                   <div className="flex items-center justify-between">

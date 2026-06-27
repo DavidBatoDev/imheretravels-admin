@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { format } from "date-fns";
 import {
   CheckCircle2,
@@ -33,6 +33,13 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
 import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
+import {
+  toCsv,
+  downloadCsv,
+  formatCsvDate,
+  csvDateStamp,
+  type CsvColumn,
+} from "@/lib/csv-export";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,6 +54,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Table,
   TableBody,
@@ -100,6 +113,7 @@ interface Transaction {
     email: string;
     firstName: string;
     lastName: string;
+    whatsAppNumber?: string;
   };
   booking?: {
     id: string; // Booking ID (e.g. SB-TXP...)
@@ -155,6 +169,124 @@ export default function TransactionsPage() {
     "all" | "stripe"
   >("all");
   const [hideCancelled, setHideCancelled] = useState(true);
+
+  // CSV export filtered by selected payment status
+  const [isExporting, setIsExporting] = useState(false);
+
+  const PENDING_STATUSES = [
+    "pending",
+    "reserve_pending",
+    "reservation_pending",
+    "installment_pending",
+  ];
+
+  // Distinct payment statuses present in the loaded transactions.
+  const availableStatuses = useMemo(() => {
+    const set = new Set<string>();
+    data.forEach((t) => {
+      if (t.payment?.status) set.add(t.payment.status);
+    });
+    return Array.from(set).sort();
+  }, [data]);
+
+  // Statuses selected in the export settings popover (defaults to pending).
+  const [exportStatuses, setExportStatuses] = useState<string[]>([
+    ...PENDING_STATUSES,
+  ]);
+
+  const formatStatusLabel = (status: string) =>
+    status
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+
+  const toggleExportStatus = (status: string) => {
+    setExportStatuses((prev) =>
+      prev.includes(status)
+        ? prev.filter((s) => s !== status)
+        : [...prev, status],
+    );
+  };
+
+  const handleExportFiltered = async () => {
+    setIsExporting(true);
+    try {
+      const selected = data.filter((t) =>
+        exportStatuses.includes(t.payment?.status),
+      );
+
+      if (selected.length === 0) {
+        toast({
+          title: "Nothing to export",
+          description: "No transactions match the selected status.",
+        });
+        return;
+      }
+
+      // WhatsApp number is stored on the payment document's customer object.
+      // Installment payments may not carry it, so build a fallback map keyed
+      // by booking id from any transaction that does have it.
+      const whatsAppByBookingId = new Map<string, string>();
+      data.forEach((t) => {
+        const num = t.customer?.whatsAppNumber;
+        const bookingId = t.booking?.id;
+        if (num && bookingId && !whatsAppByBookingId.has(bookingId)) {
+          whatsAppByBookingId.set(bookingId, num);
+        }
+      });
+
+      const columns: CsvColumn<Transaction>[] = [
+        { header: "Email Address", value: (t) => t.customer?.email || "" },
+        {
+          header: "Contact Number",
+          value: (t) =>
+            t.customer?.whatsAppNumber ||
+            (t.booking?.id && whatsAppByBookingId.get(t.booking.id)) ||
+            "",
+        },
+        {
+          header: "Customer Name",
+          value: (t) =>
+            [t.customer?.firstName, t.customer?.lastName]
+              .filter(Boolean)
+              .join(" "),
+        },
+        { header: "Status", value: (t) => t.payment?.status || "" },
+        { header: "Type", value: (t) => getTypeLabel(t) },
+        {
+          header: "Amount",
+          value: (t) =>
+            t.payment?.amount !== undefined ? t.payment.amount.toFixed(2) : "",
+        },
+        {
+          header: "Currency",
+          value: (t) => (t.payment?.currency || "").toUpperCase(),
+        },
+        { header: "Tour Package", value: (t) => t.tour?.packageName || "" },
+        { header: "Booking ID", value: (t) => t.booking?.id || "" },
+        { header: "Date", value: (t) => formatCsvDate(getDate(t)) },
+        { header: "Transaction Doc ID", value: (t) => t.id },
+      ];
+
+      const csv = toCsv(selected, columns);
+      downloadCsv(`transactions-${csvDateStamp()}.csv`, csv);
+
+      toast({
+        title: "Export complete",
+        description: `Exported ${selected.length} transaction${
+          selected.length === 1 ? "" : "s"
+        }.`,
+      });
+    } catch (error) {
+      console.error("Export failed:", error);
+      toast({
+        title: "Export failed",
+        description: "Could not export transactions. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   useEffect(() => {
     // Set up realtime listener for transactions
@@ -792,6 +924,77 @@ export default function TransactionsPage() {
                 </Badge>
               )}
             </Button>
+
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="bg-background gap-2 text-sm font-normal text-muted-foreground hover:bg-amber-500/10 hover:border-amber-500 hover:text-amber-600"
+                  disabled={loading}
+                  title="Export transactions to CSV"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Export CSV
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-64 p-4">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-foreground">
+                      Export settings
+                    </p>
+                    <button
+                      type="button"
+                      className="text-xs text-primary hover:underline"
+                      onClick={() =>
+                        setExportStatuses(
+                          exportStatuses.length === availableStatuses.length
+                            ? []
+                            : [...availableStatuses],
+                        )
+                      }
+                    >
+                      {exportStatuses.length === availableStatuses.length
+                        ? "Clear all"
+                        : "Select all"}
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Filter by status
+                  </p>
+                  <div className="space-y-2 max-h-56 overflow-y-auto">
+                    {availableStatuses.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        No transactions loaded.
+                      </p>
+                    ) : (
+                      availableStatuses.map((status) => (
+                        <label
+                          key={status}
+                          className="flex items-center gap-2 text-sm cursor-pointer"
+                        >
+                          <Checkbox
+                            checked={exportStatuses.includes(status)}
+                            onCheckedChange={() => toggleExportStatus(status)}
+                          />
+                          <span>{formatStatusLabel(status)}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                  <Button
+                    className="w-full gap-2"
+                    onClick={handleExportFiltered}
+                    disabled={
+                      isExporting || loading || exportStatuses.length === 0
+                    }
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    {isExporting ? "Exporting..." : "Export CSV"}
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
 

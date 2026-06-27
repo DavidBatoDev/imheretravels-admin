@@ -99,6 +99,33 @@ const toIso = (v: unknown) => { const d = toDateValue(v); return d ? d.toISOStri
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
+/**
+ * Convert a stored value (Firestore Timestamp, Date, ISO string, or
+ * {seconds}) into a `datetime-local` input string ("YYYY-MM-DDTHH:mm") in the
+ * browser's local time. Returns "" when there's no valid date.
+ */
+function toDateTimeLocalValue(value: any): string {
+  if (!value) return "";
+  let date: Date | null = null;
+  if (value instanceof Date) date = value;
+  else if (typeof value === "string") {
+    const d = new Date(value);
+    date = isNaN(d.getTime()) ? null : d;
+  } else if (typeof value === "object") {
+    if (typeof value.toDate === "function") date = value.toDate();
+    else if (typeof value.seconds === "number")
+      date = new Date(value.seconds * 1000);
+    else if (typeof value._seconds === "number")
+      date = new Date(value._seconds * 1000);
+  }
+  if (!date || isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}`
+  );
+}
+
 const schema = z.object({
   name: z.string().min(1),
   slug: z.string().min(1),
@@ -109,6 +136,7 @@ const schema = z.object({
   cardHeaderTitle: z.string(),
   cardSubHeader: z.string(),
   status: z.enum(["active", "draft", "archived"]),
+  scheduledPublishAt: z.string().nullish(),
   comingSoon: z.boolean().default(false),
   isHosted: z.boolean().default(false),
   bookingSlug: z.string().optional().or(z.literal("")),
@@ -980,6 +1008,7 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
     defaultValues: {
       name: "", slug: "", url: "", tourCode: "", description: "",
       duration: "1 days", cardHeaderTitle: "11 Day Tour", cardSubHeader: "Destination", status: "draft",
+      scheduledPublishAt: "",
       comingSoon: false, isHosted: false, bookingSlug: "", previousSlugs: [], seo: { title: "", description: "" },
       destinations: [],
       stripePaymentLink: "", depositNote: "", footnote: "",
@@ -1161,6 +1190,7 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
         cardHeaderTitle: (tour as any).cardHeaderTitle ?? (tour.duration ? tour.duration.replace(/\b(\d+)\s+days?\b/gi, "$1 Day Tour") : ""),
         cardSubHeader: (tour as any).cardSubHeader ?? (tour as any).destinations?.[0] ?? "",
         status: tour.status || "draft",
+        scheduledPublishAt: toDateTimeLocalValue((tour as any).scheduledPublishAt),
         comingSoon: (tour as any).comingSoon ?? false, isHosted: (tour as any).isHosted ?? false, bookingSlug: (tour as any).bookingSlug ?? "",
         previousSlugs: (tour as any).previousSlugs ?? [],
         seo: (tour as any).seo ?? { title: "", description: "" },
@@ -1428,6 +1458,60 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
                 </SelectContent>
               </Select>
 
+              {/* Schedule publish */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    title="Schedule publish"
+                    className={`flex items-center gap-1.5 h-8 px-2.5 rounded-md border text-xs transition-colors ${
+                      w("scheduledPublishAt")
+                        ? "border-vivid-orange text-vivid-orange bg-vivid-orange/10"
+                        : "border-border text-dark-gray hover:bg-light-grey"
+                    }`}
+                  >
+                    <Clock className="h-3.5 w-3.5" />
+                    <span className="hidden lg:inline">
+                      {w("scheduledPublishAt") ? "Scheduled" : "Schedule"}
+                    </span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-72 p-3 space-y-2" align="end">
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-midnight">
+                      Schedule publish
+                    </p>
+                    <p className="text-[11px] text-dark-gray leading-snug">
+                      The tour automatically switches to{" "}
+                      <span className="font-medium">Active</span> at this date
+                      &amp; time. Leave it as Draft or Archived until then.
+                    </p>
+                  </div>
+                  <input
+                    type="datetime-local"
+                    value={w("scheduledPublishAt") ?? ""}
+                    onChange={(e) => sv("scheduledPublishAt", e.target.value)}
+                    className="w-full h-9 rounded-md border border-border bg-white px-2 text-xs text-midnight focus:outline-none focus:ring-2 focus:ring-crimson-red/30"
+                  />
+                  {w("scheduledPublishAt") && (
+                    <div className="flex items-center justify-between pt-0.5">
+                      {w("status") === "active" && (
+                        <span className="text-[11px] text-amber-600">
+                          Already Active — schedule has no effect.
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => sv("scheduledPublishAt", "")}
+                        className="ml-auto text-[11px] text-crimson-red hover:underline"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  )}
+                </PopoverContent>
+              </Popover>
+
               {/* Coming soon toggle */}
               <div className="flex items-center gap-1.5 text-xs text-dark-gray">
                 <Switch
@@ -1540,13 +1624,62 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
 
           {/* Secondary row — mobile only: Coming Soon + Undo/Redo/Reset + Settings */}
           <div className="flex md:hidden items-center justify-between gap-2 pb-2 border-t border-border/30 pt-1.5">
-            <div className="flex items-center gap-1.5 text-xs text-dark-gray">
-              <Switch
-                checked={w("comingSoon") ?? false}
-                onCheckedChange={(v) => sv("comingSoon", v)}
-                className="scale-75 data-[state=checked]:bg-vivid-orange"
-              />
-              <span>Coming Soon</span>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 text-xs text-dark-gray">
+                <Switch
+                  checked={w("comingSoon") ?? false}
+                  onCheckedChange={(v) => sv("comingSoon", v)}
+                  className="scale-75 data-[state=checked]:bg-vivid-orange"
+                />
+                <span>Coming Soon</span>
+              </div>
+
+              {/* Schedule publish (mobile) */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    title="Schedule publish"
+                    className={`flex items-center gap-1 h-7 px-2 rounded-md border text-xs transition-colors ${
+                      w("scheduledPublishAt")
+                        ? "border-vivid-orange text-vivid-orange bg-vivid-orange/10"
+                        : "border-border text-dark-gray"
+                    }`}
+                  >
+                    <Clock className="h-3.5 w-3.5" />
+                    <span>
+                      {w("scheduledPublishAt") ? "Scheduled" : "Schedule"}
+                    </span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-72 p-3 space-y-2" align="start">
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-midnight">
+                      Schedule publish
+                    </p>
+                    <p className="text-[11px] text-dark-gray leading-snug">
+                      The tour automatically switches to{" "}
+                      <span className="font-medium">Active</span> at this date
+                      &amp; time.
+                    </p>
+                  </div>
+                  <input
+                    type="datetime-local"
+                    value={w("scheduledPublishAt") ?? ""}
+                    onChange={(e) => sv("scheduledPublishAt", e.target.value)}
+                    className="w-full h-9 rounded-md border border-border bg-white px-2 text-xs text-midnight focus:outline-none focus:ring-2 focus:ring-crimson-red/30"
+                  />
+                  {w("scheduledPublishAt") && (
+                    <button
+                      type="button"
+                      onClick={() => sv("scheduledPublishAt", "")}
+                      className="block ml-auto text-[11px] text-crimson-red hover:underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="flex items-center gap-1">
               <button

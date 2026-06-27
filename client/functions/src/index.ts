@@ -36,6 +36,8 @@ export { cleanupAbandonedPayments } from "./scheduled-cleanup-abandoned-payments
 // Export price history tracking function
 export { onTourPackagePriceUpdate } from "./on-tour-package-price-update";
 export { applyLateFeesDaily } from "./scheduled-late-fees";
+// Publishes tours whose scheduledPublishAt time has passed (runs every 15 min)
+export { publishScheduledTours } from "./scheduled-publish-tours";
 export { exportProdFirestoreCollections } from "./scheduled-prod-firestore-export";
 
 // export { telegramBot } from "./telegram-bot";

@@ -38,6 +38,7 @@ export interface TourPackage {
   // WWW PRESENTATION FIELDS
   seo?: { title?: string; description?: string }; // SEO overrides; falls back to name/description
   comingSoon?: boolean; // Gate full content on www
+  scheduledPublishAt?: Timestamp | null; // When set & in the future, a cron flips status→"active" at this time
   isHosted?: boolean; // Marks this tour as a hosted tour (independent of resident-host attachment)
   bookingSlug?: string; // Override slug used in booking/reservation URLs
   previousSlugs?: PreviousSlug[]; // Old slugs that redirect to the current slug on www
@@ -267,6 +268,7 @@ export interface TourFormDataWithStringDates {
     gallery?: string[];
   };
   status: "active" | "draft" | "archived";
+  scheduledPublishAt?: string | null; // ISO datetime string; cron flips status→"active" at this time
   isHosted?: boolean;
   destinations?: string[];
   brochureLink?: string;

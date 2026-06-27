@@ -117,8 +117,19 @@ export async function POST(request: NextRequest) {
       initialHistoryEntry.travelDates = initialHistoryTravelDates;
     }
 
+    // Normalize scheduled publish time: store a Timestamp or drop it entirely
+    // (never persist an empty string). The publishScheduledTours cron relies on
+    // this field being a Timestamp.
+    let scheduledPublishAt: Timestamp | undefined;
+    if (tourData.scheduledPublishAt) {
+      const parsed = new Date(tourData.scheduledPublishAt);
+      if (!isNaN(parsed.getTime())) scheduledPublishAt = Timestamp.fromDate(parsed);
+    }
+    delete tourData.scheduledPublishAt;
+
     const tourPackage = {
       ...tourData,
+      ...(scheduledPublishAt ? { scheduledPublishAt } : {}),
       travelDates: convertedTravelDates,
       media: {
         coverImage: tourData.media?.coverImage || "",

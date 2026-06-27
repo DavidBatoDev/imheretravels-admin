@@ -208,6 +208,20 @@ export async function PATCH(
     }
     updateData.previousSlugs = Array.from(bySlug.values());
 
+    // Scheduled publish: persist as a Timestamp (or clear it). The
+    // publishScheduledTours cron flips status→"active" once this time passes.
+    if ("scheduledPublishAt" in updates) {
+      const raw = updates.scheduledPublishAt;
+      if (raw) {
+        const parsed = new Date(raw);
+        updateData.scheduledPublishAt = isNaN(parsed.getTime())
+          ? null
+          : Timestamp.fromDate(parsed);
+      } else {
+        updateData.scheduledPublishAt = null;
+      }
+    }
+
     // Handle media updates properly
     if (updates.media) {
       updateData.media = {

@@ -1328,6 +1328,12 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
   // ── Submit ──────────────────────────────────────────────────────────────────
   const handleSubmit = async (data: any) => {
     setIsSubmitting(true);
+    // Force the scheduled-publish value into the payload. It's an unregistered
+    // `.nullish()` field, so RHF + the zod resolver can drop it from `data`
+    // (undefined → stripped by JSON.stringify), which would leave the Firestore
+    // field unwritten. Read it straight from form state so it's always sent
+    // (empty string clears it server-side).
+    data.scheduledPublishAt = form.getValues("scheduledPublishAt") ?? "";
     // On create, blank pre-filled What's Included rows fall back to their template
     // default. Typed values win; rows the admin cleared/removed are respected. (Key Facts
     // use structured editors that compose their own value, so they need no fallback.)

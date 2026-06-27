@@ -9,6 +9,7 @@ import {
 } from "firebase/firestore";
 import { verifyRequestUserId } from "@/lib/firebase-admin-auth";
 import { revalidateWww } from "@/lib/revalidate-www";
+import { manilaLocalToDate } from "@/lib/manila-time";
 
 const TOURS_COLLECTION = "tourPackages";
 
@@ -208,18 +209,12 @@ export async function PATCH(
     }
     updateData.previousSlugs = Array.from(bySlug.values());
 
-    // Scheduled publish: persist as a Timestamp (or clear it). The
+    // Scheduled publish: the form's wall-clock value is interpreted as Asia/
+    // Manila time, then persisted as a Timestamp (or cleared). The
     // publishScheduledTours cron flips status→"active" once this time passes.
     if ("scheduledPublishAt" in updates) {
-      const raw = updates.scheduledPublishAt;
-      if (raw) {
-        const parsed = new Date(raw);
-        updateData.scheduledPublishAt = isNaN(parsed.getTime())
-          ? null
-          : Timestamp.fromDate(parsed);
-      } else {
-        updateData.scheduledPublishAt = null;
-      }
+      const parsed = manilaLocalToDate(updates.scheduledPublishAt);
+      updateData.scheduledPublishAt = parsed ? Timestamp.fromDate(parsed) : null;
     }
 
     // Handle media updates properly

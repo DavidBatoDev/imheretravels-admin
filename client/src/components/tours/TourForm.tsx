@@ -36,6 +36,7 @@ import {
   uploadAllBlobsToStorage, validateImageFile,
 } from "@/utils/blob-image";
 import { generateSlug } from "@/utils";
+import { dateToManilaLocalInput } from "@/lib/manila-time";
 import { updateTourMedia, cleanupRemovedGalleryImages } from "@/services/tours-service";
 import {
   SortableList,
@@ -98,33 +99,6 @@ const toDateValue = (v: unknown): Date | null => {
 const toIso = (v: unknown) => { const d = toDateValue(v); return d ? d.toISOString().split("T")[0] : ""; };
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
-
-/**
- * Convert a stored value (Firestore Timestamp, Date, ISO string, or
- * {seconds}) into a `datetime-local` input string ("YYYY-MM-DDTHH:mm") in the
- * browser's local time. Returns "" when there's no valid date.
- */
-function toDateTimeLocalValue(value: any): string {
-  if (!value) return "";
-  let date: Date | null = null;
-  if (value instanceof Date) date = value;
-  else if (typeof value === "string") {
-    const d = new Date(value);
-    date = isNaN(d.getTime()) ? null : d;
-  } else if (typeof value === "object") {
-    if (typeof value.toDate === "function") date = value.toDate();
-    else if (typeof value.seconds === "number")
-      date = new Date(value.seconds * 1000);
-    else if (typeof value._seconds === "number")
-      date = new Date(value._seconds * 1000);
-  }
-  if (!date || isNaN(date.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return (
-    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
-    `T${pad(date.getHours())}:${pad(date.getMinutes())}`
-  );
-}
 
 const schema = z.object({
   name: z.string().min(1),
@@ -1190,7 +1164,7 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
         cardHeaderTitle: (tour as any).cardHeaderTitle ?? (tour.duration ? tour.duration.replace(/\b(\d+)\s+days?\b/gi, "$1 Day Tour") : ""),
         cardSubHeader: (tour as any).cardSubHeader ?? (tour as any).destinations?.[0] ?? "",
         status: tour.status || "draft",
-        scheduledPublishAt: toDateTimeLocalValue((tour as any).scheduledPublishAt),
+        scheduledPublishAt: dateToManilaLocalInput((tour as any).scheduledPublishAt),
         comingSoon: (tour as any).comingSoon ?? false, isHosted: (tour as any).isHosted ?? false, bookingSlug: (tour as any).bookingSlug ?? "",
         previousSlugs: (tour as any).previousSlugs ?? [],
         seo: (tour as any).seo ?? { title: "", description: "" },
@@ -1484,7 +1458,8 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
                     <p className="text-[11px] text-dark-gray leading-snug">
                       The tour automatically switches to{" "}
                       <span className="font-medium">Active</span> at this date
-                      &amp; time. Leave it as Draft or Archived until then.
+                      &amp; time (<span className="font-medium">Manila / PHT</span>
+                      ). Leave it as Draft or Archived until then.
                     </p>
                   </div>
                   <input
@@ -1660,7 +1635,8 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
                     <p className="text-[11px] text-dark-gray leading-snug">
                       The tour automatically switches to{" "}
                       <span className="font-medium">Active</span> at this date
-                      &amp; time.
+                      &amp; time (<span className="font-medium">Manila / PHT</span>
+                      ).
                     </p>
                   </div>
                   <input

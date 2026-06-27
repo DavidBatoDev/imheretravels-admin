@@ -14,6 +14,7 @@ import {
 } from "firebase/firestore";
 import { verifyRequestUserId } from "@/lib/firebase-admin-auth";
 import { revalidateWww } from "@/lib/revalidate-www";
+import { manilaLocalToDate } from "@/lib/manila-time";
 
 const TOURS_COLLECTION = "tourPackages";
 
@@ -117,14 +118,13 @@ export async function POST(request: NextRequest) {
       initialHistoryEntry.travelDates = initialHistoryTravelDates;
     }
 
-    // Normalize scheduled publish time: store a Timestamp or drop it entirely
-    // (never persist an empty string). The publishScheduledTours cron relies on
-    // this field being a Timestamp.
-    let scheduledPublishAt: Timestamp | undefined;
-    if (tourData.scheduledPublishAt) {
-      const parsed = new Date(tourData.scheduledPublishAt);
-      if (!isNaN(parsed.getTime())) scheduledPublishAt = Timestamp.fromDate(parsed);
-    }
+    // Normalize scheduled publish time: the form's wall-clock value is Asia/
+    // Manila time. Store a Timestamp or drop it entirely (never persist an empty
+    // string). The publishScheduledTours cron relies on this being a Timestamp.
+    const parsedScheduledPublish = manilaLocalToDate(tourData.scheduledPublishAt);
+    const scheduledPublishAt = parsedScheduledPublish
+      ? Timestamp.fromDate(parsedScheduledPublish)
+      : undefined;
     delete tourData.scheduledPublishAt;
 
     const tourPackage = {

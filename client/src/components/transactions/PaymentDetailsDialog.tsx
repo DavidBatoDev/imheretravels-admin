@@ -17,7 +17,9 @@ import {
   DollarSign,
   Users,
   RefreshCcw,
-  ExternalLink
+  ExternalLink,
+  Bell,
+  ListChecks
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -27,8 +29,13 @@ import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { RefundDialogs } from "@/components/transactions/RefundDialogs";
 
+type FirestoreDate = { seconds: number; nanoseconds: number } | string;
+
 interface Transaction {
   id: string;
+  bookingId?: string;
+  bookingDocumentId?: string;
+  cancellationReason?: string;
   payment: {
     amount: number;
     currency: string;
@@ -36,6 +43,9 @@ interface Transaction {
     checkoutSessionId: string;
     type?: string;
     installmentTerm?: string;
+    baseAmount?: number;
+    lateFeeAmount?: number;
+    originalPrice?: number;
     clientSecret?: string;
     paymentIntentId?: string;
     stripePaymentIntentId?: string;
@@ -47,12 +57,16 @@ interface Transaction {
     email: string;
     firstName: string;
     lastName: string;
+    whatsAppNumber?: string;
+    nationality?: string;
+    birthdate?: string;
   };
   booking?: {
     id: string;
     documentId: string;
     type?: string;
     groupSize?: number;
+    groupId?: string;
     guestDetails?: Array<{
       email: string;
       firstName: string;
@@ -65,12 +79,41 @@ interface Transaction {
   };
   tour?: {
     packageName: string;
+    packageId?: string;
+    date?: string;
+    returnDate?: string;
+    duration?: number;
+  };
+  paymentPlan?: {
+    // Installment checkout shape
+    plan?: string;
+    condition?: string;
+    totalCost?: number;
+    paid?: number;
+    remainingBalance?: number;
+    // Reservation / select-plan shape
+    selected?: string;
+    details?: {
+      name?: string;
+      schedule?: Array<{
+        month: number;
+        dueDate: string;
+        amount: number;
+        percentage?: number;
+        status?: string;
+      }>;
+    } | null;
+  };
+  notification?: {
+    id?: string;
+    sent?: boolean;
+    sentAt?: FirestoreDate;
   };
   timestamps: {
-    createdAt: { seconds: number; nanoseconds: number } | string;
-    paidAt?: { seconds: number; nanoseconds: number } | string;
-    updatedAt?: { seconds: number; nanoseconds: number } | string;
-    confirmedAt?: { seconds: number; nanoseconds: number } | string;
+    createdAt: FirestoreDate;
+    paidAt?: FirestoreDate;
+    updatedAt?: FirestoreDate;
+    confirmedAt?: FirestoreDate;
   };
 }
 
@@ -105,6 +148,27 @@ export function PaymentDetailsDialog({
     }
     return "—";
   };
+
+  const currencyCode = (transaction.payment.currency || "GBP").toUpperCase();
+
+  const formatMoney = (value?: number | null) =>
+    value === undefined || value === null
+      ? "—"
+      : `${value.toFixed(2)} ${currencyCode}`;
+
+  const formatDateOnly = (value?: string) => {
+    if (!value) return "—";
+    const parsed = new Date(value);
+    return isNaN(parsed.getTime()) ? value : format(parsed, "PPP");
+  };
+
+  const paymentIntentDisplayId =
+    transaction.payment?.paymentIntentId ||
+    transaction.stripePaymentIntentId ||
+    transaction.stripeIntentId ||
+    transaction.payment?.stripePaymentIntentId ||
+    transaction.payment?.stripeIntentId ||
+    null;
 
   const getStatusColor = (status: string) => {
      if (["succeeded", "installment_paid", "reserve_paid", "reservation_paid", "terms_selected"].includes(status)) {
@@ -255,11 +319,38 @@ export function PaymentDetailsDialog({
                      <div className="grid grid-cols-2 text-sm">
                         <span className="text-muted-foreground">Term:</span>
                         <span className="font-medium">
-                           {transaction.payment.installmentTerm 
-                              ? transaction.payment.installmentTerm.replace('_', ' ').toUpperCase() 
+                           {transaction.payment.installmentTerm
+                              ? transaction.payment.installmentTerm.replace('_', ' ').toUpperCase()
                               : '—'
                            }
                         </span>
+                     </div>
+                     <div className="grid grid-cols-2 text-sm">
+                        <span className="text-muted-foreground">Amount:</span>
+                        <span className="font-medium">{formatMoney(transaction.payment.amount)}</span>
+                     </div>
+                     {transaction.payment.baseAmount !== undefined && (
+                        <div className="grid grid-cols-2 text-sm">
+                           <span className="text-muted-foreground">Base Amount:</span>
+                           <span className="font-medium">{formatMoney(transaction.payment.baseAmount)}</span>
+                        </div>
+                     )}
+                     {transaction.payment.lateFeeAmount !== undefined &&
+                        transaction.payment.lateFeeAmount > 0 && (
+                        <div className="grid grid-cols-2 text-sm">
+                           <span className="text-muted-foreground">Late Fee:</span>
+                           <span className="font-medium text-amber-600">{formatMoney(transaction.payment.lateFeeAmount)}</span>
+                        </div>
+                     )}
+                     {transaction.payment.originalPrice !== undefined && (
+                        <div className="grid grid-cols-2 text-sm">
+                           <span className="text-muted-foreground">Original Price:</span>
+                           <span className="font-medium line-through text-muted-foreground">{formatMoney(transaction.payment.originalPrice)}</span>
+                        </div>
+                     )}
+                     <div className="grid grid-cols-2 text-sm">
+                        <span className="text-muted-foreground">Currency:</span>
+                        <span className="font-medium">{currencyCode}</span>
                      </div>
                      <div className="grid grid-cols-2 text-sm">
                         <span className="text-muted-foreground">Session ID:</span>
@@ -267,6 +358,14 @@ export function PaymentDetailsDialog({
                             {transaction.payment.checkoutSessionId ? `${transaction.payment.checkoutSessionId.substring(0, 12)}...` : '—'}
                         </span>
                      </div>
+                     {paymentIntentDisplayId && (
+                        <div className="grid grid-cols-2 text-sm">
+                           <span className="text-muted-foreground">Payment Intent:</span>
+                           <span className="font-mono text-xs text-muted-foreground truncate" title={paymentIntentDisplayId}>
+                              {paymentIntentDisplayId}
+                           </span>
+                        </div>
+                     )}
                   </div>
                </div>
 
@@ -286,6 +385,29 @@ export function PaymentDetailsDialog({
                         <span className="text-muted-foreground">Email:</span>
                         <span className="font-medium break-all">{transaction.customer?.email}</span>
                      </div>
+                     <div className="grid grid-cols-[80px_1fr] text-sm">
+                        <span className="text-muted-foreground">WhatsApp:</span>
+                        {transaction.customer?.whatsAppNumber ? (
+                           <a
+                              href={`https://wa.me/${transaction.customer.whatsAppNumber.replace(/[^0-9]/g, "")}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-medium break-all text-primary hover:underline"
+                           >
+                              {transaction.customer.whatsAppNumber}
+                           </a>
+                        ) : (
+                           <span className="font-medium">—</span>
+                        )}
+                     </div>
+                     <div className="grid grid-cols-[80px_1fr] text-sm">
+                        <span className="text-muted-foreground">Nationality:</span>
+                        <span className="font-medium">{transaction.customer?.nationality || "—"}</span>
+                     </div>
+                     <div className="grid grid-cols-[80px_1fr] text-sm">
+                        <span className="text-muted-foreground">Birthdate:</span>
+                        <span className="font-medium">{formatDateOnly(transaction.customer?.birthdate)}</span>
+                     </div>
                   </div>
                </div>
             </div>
@@ -299,10 +421,32 @@ export function PaymentDetailsDialog({
                       <MapPin className="h-4 w-4" /> Tour Details
                    </h4>
                    <div className="space-y-3">
-                     <div className="grid grid-cols-[80px_1fr] text-sm">
+                     <div className="grid grid-cols-[100px_1fr] text-sm">
                          <span className="text-muted-foreground">Package:</span>
                          <span className="font-medium">{transaction.tour?.packageName || '—'}</span>
                      </div>
+                     {transaction.tour?.packageId && (
+                        <div className="grid grid-cols-[100px_1fr] text-sm">
+                           <span className="text-muted-foreground">Package ID:</span>
+                           <span className="font-mono text-xs text-muted-foreground break-all">{transaction.tour.packageId}</span>
+                        </div>
+                     )}
+                     <div className="grid grid-cols-[100px_1fr] text-sm">
+                        <span className="text-muted-foreground">Tour Date:</span>
+                        <span className="font-medium">{formatDateOnly(transaction.tour?.date)}</span>
+                     </div>
+                     {transaction.tour?.returnDate && (
+                        <div className="grid grid-cols-[100px_1fr] text-sm">
+                           <span className="text-muted-foreground">Return Date:</span>
+                           <span className="font-medium">{formatDateOnly(transaction.tour.returnDate)}</span>
+                        </div>
+                     )}
+                     {transaction.tour?.duration !== undefined && (
+                        <div className="grid grid-cols-[100px_1fr] text-sm">
+                           <span className="text-muted-foreground">Duration:</span>
+                           <span className="font-medium">{transaction.tour.duration} days</span>
+                        </div>
+                     )}
                    </div>
                 </div>
 
@@ -311,18 +455,34 @@ export function PaymentDetailsDialog({
                       <Hash className="h-4 w-4" /> Booking Connection
                    </h4>
                    <div className="space-y-3">
-                     <div className="grid grid-cols-[80px_1fr] text-sm">
+                     <div className="grid grid-cols-[100px_1fr] text-sm">
                         <span className="text-muted-foreground">Booking ID:</span>
                         <span className="font-mono bg-muted px-1.5 rounded w-fit">
                            {transaction.booking?.id || '—'}
                         </span>
                      </div>
-                     <div className="grid grid-cols-[80px_1fr] text-sm">
+                     <div className="grid grid-cols-[100px_1fr] text-sm">
                         <span className="text-muted-foreground">Doc ID:</span>
-                        <span className="font-mono text-xs text-muted-foreground">
+                        <span className="font-mono text-xs text-muted-foreground break-all">
                            {transaction.booking?.documentId || '—'}
                         </span>
                      </div>
+                     <div className="grid grid-cols-[100px_1fr] text-sm">
+                        <span className="text-muted-foreground">Type:</span>
+                        <span className="font-medium">{transaction.booking?.type || '—'}</span>
+                     </div>
+                     {transaction.booking?.groupSize !== undefined && (
+                        <div className="grid grid-cols-[100px_1fr] text-sm">
+                           <span className="text-muted-foreground">Group Size:</span>
+                           <span className="font-medium">{transaction.booking.groupSize}</span>
+                        </div>
+                     )}
+                     {transaction.booking?.groupId && (
+                        <div className="grid grid-cols-[100px_1fr] text-sm">
+                           <span className="text-muted-foreground">Group ID:</span>
+                           <span className="font-mono text-xs text-muted-foreground break-all">{transaction.booking.groupId}</span>
+                        </div>
+                     )}
                    </div>
                 </div>
             </div>
@@ -376,6 +536,143 @@ export function PaymentDetailsDialog({
               </>
             )}
 
+            {/* Payment Plan */}
+            {transaction.paymentPlan &&
+              (transaction.paymentPlan.plan ||
+                transaction.paymentPlan.selected ||
+                transaction.paymentPlan.condition ||
+                transaction.paymentPlan.totalCost !== undefined ||
+                transaction.paymentPlan.details) && (
+              <>
+                <Separator />
+                <div className="space-y-4">
+                  <h4 className="flex items-center gap-2 font-medium text-foreground pb-2 border-b">
+                    <DollarSign className="h-4 w-4" /> Payment Plan
+                  </h4>
+                  <div className="grid md:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                    {(transaction.paymentPlan.plan ||
+                      transaction.paymentPlan.selected ||
+                      transaction.paymentPlan.details?.name) && (
+                      <div className="grid grid-cols-[120px_1fr]">
+                        <span className="text-muted-foreground">Plan:</span>
+                        <span className="font-medium">
+                          {transaction.paymentPlan.details?.name ||
+                            transaction.paymentPlan.plan ||
+                            transaction.paymentPlan.selected}
+                        </span>
+                      </div>
+                    )}
+                    {transaction.paymentPlan.condition && (
+                      <div className="grid grid-cols-[120px_1fr]">
+                        <span className="text-muted-foreground">Condition:</span>
+                        <span className="font-medium">{transaction.paymentPlan.condition}</span>
+                      </div>
+                    )}
+                    {transaction.paymentPlan.totalCost !== undefined && (
+                      <div className="grid grid-cols-[120px_1fr]">
+                        <span className="text-muted-foreground">Total Cost:</span>
+                        <span className="font-medium">{formatMoney(transaction.paymentPlan.totalCost)}</span>
+                      </div>
+                    )}
+                    {transaction.paymentPlan.paid !== undefined && (
+                      <div className="grid grid-cols-[120px_1fr]">
+                        <span className="text-muted-foreground">Paid:</span>
+                        <span className="font-medium text-emerald-600">{formatMoney(transaction.paymentPlan.paid)}</span>
+                      </div>
+                    )}
+                    {transaction.paymentPlan.remainingBalance !== undefined && (
+                      <div className="grid grid-cols-[120px_1fr]">
+                        <span className="text-muted-foreground">Remaining:</span>
+                        <span className="font-medium">{formatMoney(transaction.paymentPlan.remainingBalance)}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Installment schedule */}
+                  {transaction.paymentPlan.details?.schedule &&
+                    transaction.paymentPlan.details.schedule.length > 0 && (
+                    <div className="space-y-2 pt-2">
+                      <h5 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                        <ListChecks className="h-4 w-4" /> Schedule
+                      </h5>
+                      <div className="rounded-lg border border-border/50 overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead className="bg-muted/50 text-xs text-muted-foreground">
+                            <tr>
+                              <th className="text-left font-medium px-3 py-2">Month</th>
+                              <th className="text-left font-medium px-3 py-2">Due Date</th>
+                              <th className="text-right font-medium px-3 py-2">Amount</th>
+                              <th className="text-right font-medium px-3 py-2">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {transaction.paymentPlan.details.schedule.map((item, i) => (
+                              <tr key={i} className="border-t border-border/50">
+                                <td className="px-3 py-2">{item.month}</td>
+                                <td className="px-3 py-2">{formatDateOnly(item.dueDate)}</td>
+                                <td className="px-3 py-2 text-right font-medium">{formatMoney(item.amount)}</td>
+                                <td className="px-3 py-2 text-right">
+                                  <Badge className={`${getStatusColor(item.status || "pending")} border-0 text-xs`}>
+                                    {item.status || "pending"}
+                                  </Badge>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* Notification */}
+            {transaction.notification &&
+              (transaction.notification.id ||
+                transaction.notification.sent !== undefined ||
+                transaction.notification.sentAt) && (
+              <>
+                <Separator />
+                <div className="space-y-4">
+                  <h4 className="flex items-center gap-2 font-medium text-foreground pb-2 border-b">
+                    <Bell className="h-4 w-4" /> Notification
+                  </h4>
+                  <div className="grid md:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                    <div className="grid grid-cols-[120px_1fr]">
+                      <span className="text-muted-foreground">Sent:</span>
+                      <span className="font-medium">
+                        {transaction.notification.sent ? "Yes" : "No"}
+                      </span>
+                    </div>
+                    {transaction.notification.sentAt && (
+                      <div className="grid grid-cols-[120px_1fr]">
+                        <span className="text-muted-foreground">Sent At:</span>
+                        <span className="font-medium">{formatDate(transaction.notification.sentAt)}</span>
+                      </div>
+                    )}
+                    {transaction.notification.id && (
+                      <div className="grid grid-cols-[120px_1fr] md:col-span-2">
+                        <span className="text-muted-foreground">Notification ID:</span>
+                        <span className="font-mono text-xs text-muted-foreground break-all">{transaction.notification.id}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Cancellation reason */}
+            {transaction.cancellationReason && (
+              <>
+                <Separator />
+                <div className="grid grid-cols-[140px_1fr] text-sm">
+                  <span className="text-muted-foreground">Cancellation Reason:</span>
+                  <span className="font-medium">{transaction.cancellationReason}</span>
+                </div>
+              </>
+            )}
+
             <Separator />
 
              {/* Timestamps */}
@@ -392,6 +689,12 @@ export function PaymentDetailsDialog({
                      <span className="text-muted-foreground block mb-1">Updated At</span>
                      <span className="font-medium">{formatDate(transaction.timestamps.updatedAt)}</span>
                   </div>
+                  {transaction.timestamps.paidAt && (
+                      <div>
+                        <span className="text-muted-foreground block mb-1">Paid At</span>
+                        <span className="font-medium">{formatDate(transaction.timestamps.paidAt)}</span>
+                      </div>
+                  )}
                   {transaction.timestamps.confirmedAt && (
                       <div>
                         <span className="text-muted-foreground block mb-1">Confirmed At</span>

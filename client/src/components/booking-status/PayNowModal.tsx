@@ -35,7 +35,7 @@ export default function PayNowModal({
     currency?.toLowerCase() === "gbp"
       ? "£"
       : currency?.toLowerCase() === "eur"
-        ? "€"
+        ? "£"
         : currency?.toLowerCase() === "usd"
           ? "$"
           : currency?.toUpperCase() + " ";

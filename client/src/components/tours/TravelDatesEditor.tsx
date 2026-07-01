@@ -6,7 +6,7 @@ import { Plus, Minus, Copy, Plane, ArrowRight, CalendarDays, X } from "lucide-re
 import { Switch } from "@/components/ui/switch";
 import TourDatePicker from "./TourDatePicker";
 
-const CURRENCY_SYM: Record<string, string> = { USD: "$", EUR: "€", GBP: "£" };
+const CURRENCY_SYM: Record<string, string> = { USD: "$", EUR: "£", GBP: "£" };
 
 const isValidIntegerInput = (value: string) => /^\d*$/.test(value);
 const isValidDecimalInput = (value: string) => /^\d*\.?\d*$/.test(value);

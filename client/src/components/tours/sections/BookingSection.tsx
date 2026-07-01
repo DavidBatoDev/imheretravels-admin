@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/form";
 import SectionWrapper from "../shared/SectionWrapper";
 
-const CURRENCY_SYMBOLS: Record<string, string> = { USD: "$", EUR: "€", GBP: "£" };
+const CURRENCY_SYMBOLS: Record<string, string> = { USD: "$", EUR: "£", GBP: "£" };
 
 interface BookingSectionProps {
    
@@ -78,7 +78,7 @@ export default function BookingSection({ form }: BookingSectionProps) {
                 {currencySymbol}
               </span>
               <span className="font-display text-h3-mobile text-midnight leading-none">
-                {displayPrice ? displayPrice.replace(/^[£$€]/, "") : "—"}
+                {displayPrice ? displayPrice.replace(/^[£$£]/, "") : "—"}
               </span>
             </div>
           </div>
@@ -148,7 +148,7 @@ export default function BookingSection({ form }: BookingSectionProps) {
                     <SelectContent>
                       <SelectItem value="GBP">GBP (£)</SelectItem>
                       <SelectItem value="USD">USD ($)</SelectItem>
-                      <SelectItem value="EUR">EUR (€)</SelectItem>
+                      <SelectItem value="EUR">EUR (£)</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />

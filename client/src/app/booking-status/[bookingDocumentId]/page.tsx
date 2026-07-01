@@ -716,7 +716,7 @@ export default function BookingStatusPage() {
   const toNumber = (value: unknown, fallback = 0) => {
     if (typeof value === "number" && !Number.isNaN(value)) return value;
     if (typeof value === "string") {
-      const cleaned = value.replace(/[£€,\s]/g, "");
+      const cleaned = value.replace(/[£,\s]/g, "");
       const parsed = Number(cleaned);
       return Number.isNaN(parsed) ? fallback : parsed;
     }

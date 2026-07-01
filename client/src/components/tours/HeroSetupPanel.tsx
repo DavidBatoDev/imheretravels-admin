@@ -3,7 +3,7 @@
 import type { UseFormReturn } from "react-hook-form";
 import { X, Image as ImageIcon, Camera, SendHorizontal } from "lucide-react";
 
-const CURRENCY_SYM: Record<string, string> = { USD: "$", EUR: "€", GBP: "£" };
+const CURRENCY_SYM: Record<string, string> = { USD: "$", EUR: "£", GBP: "£" };
 
 interface HeroSetupPanelProps {
   open: boolean;

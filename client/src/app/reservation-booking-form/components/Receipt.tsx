@@ -28,7 +28,7 @@ export default function Receipt({
   numberOfTravelers = 1,
 }: ReceiptProps) {
   const currencySymbol =
-    currency === "GBP" ? "£" : currency === "EUR" ? "€" : "$";
+    currency === "GBP" ? "£" : currency === "EUR" ? "£" : "$";
 
   return (
     <div className="receipt-container">

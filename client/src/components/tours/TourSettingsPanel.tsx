@@ -13,7 +13,7 @@ import {
 import { TourPackage } from "@/types/tours";
 import TravelDatesEditor from "./TravelDatesEditor";
 
-const CURRENCY_SYM: Record<string, string> = { USD: "$", EUR: "€", GBP: "£" };
+const CURRENCY_SYM: Record<string, string> = { USD: "$", EUR: "£", GBP: "£" };
 
 interface TourSettingsPanelProps {
   open: boolean;
@@ -239,7 +239,7 @@ export default function TourSettingsPanel({ open, onClose, form, tour }: TourSet
                       <SelectContent>
                         <SelectItem value="GBP">GBP £</SelectItem>
                         <SelectItem value="USD">USD $</SelectItem>
-                        <SelectItem value="EUR">EUR €</SelectItem>
+                        <SelectItem value="EUR">EUR £</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

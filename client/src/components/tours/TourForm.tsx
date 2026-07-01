@@ -256,7 +256,7 @@ const TAG_PALETTE = [
   "bg-light-purple text-midnight",
 ];
 
-const CURRENCY_SYM: Record<string, string> = { USD: "$", EUR: "€", GBP: "£" };
+const CURRENCY_SYM: Record<string, string> = { USD: "$", EUR: "£", GBP: "£" };
 const ALL_ICONS = Object.keys(ICON_COMPONENTS);
 
 // ─── Reviews ─────────────────────────────────────────────────────────────────

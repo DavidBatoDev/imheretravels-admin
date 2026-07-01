@@ -42,23 +42,23 @@ client/migrations/
 
 1. **Siargao Island Adventure (SIA)**
 
-   - 6 days, €430, Philippines
+   - 6 days, £430, Philippines
    - Wakeboarding, surfing, island hopping, yoga
 
 2. **Philippine Sunrise (PHS)**
 
-   - 11 days, €1100, Philippines
+   - 11 days, £1100, Philippines
    - Sardine run, canyoneering, surfing
    - 4 travel dates (Aug-Sep 2025)
 
 3. **Philippines Sunset (PSS)**
 
-   - 11 days, €1100, Philippines
+   - 11 days, £1100, Philippines
    - Manila + Port Barton + El Nido
    - 6 travel dates (May-Nov 2025)
 
 4. **Maldives Bucketlist (MLB)**
-   - 8 days, €1300, Maldives
+   - 8 days, £1300, Maldives
    - Male City, Rasdhoo reefs, dolphin cruise
    - 3 travel dates (May-Jul 2025)
 

@@ -43,17 +43,23 @@ export default function ImageCropper({
   const [blobSrc, setBlobSrc] = useState<string>("");
   const [loadError, setLoadError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  // False when we had to fall back to the raw cross-origin URL: the canvas would
+  // be tainted, so it can't be exported with toBlob(). Cropping is disabled and the
+  // user is told to keep the original instead.
+  const [exportable, setExportable] = useState(true);
 
-  // Notify parent when apply-readiness changes
+  // Notify parent when apply-readiness changes. A tainted (non-exportable) image
+  // can't be cropped, so it's never "ready" for the Apply Crop action.
   useEffect(() => {
-    onReadyChange?.(!!completedCrop && imageLoaded);
-  }, [completedCrop, imageLoaded, onReadyChange]);
+    onReadyChange?.(!!completedCrop && imageLoaded && exportable);
+  }, [completedCrop, imageLoaded, exportable, onReadyChange]);
 
   // Convert remote URL → local blob URL to avoid canvas CORS taint
   useEffect(() => {
     if (!src) return;
     setImageLoaded(false);
     setBlobSrc("");
+    setExportable(true);
     let objectUrl = "";
 
     if (src.startsWith("blob:")) {
@@ -63,8 +69,10 @@ export default function ImageCropper({
 
     fetch(src)
       .then((r) => { if (!r.ok) throw new Error(); return r.blob(); })
-      .then((blob) => { objectUrl = URL.createObjectURL(blob); setBlobSrc(objectUrl); setLoadError(false); })
-      .catch(() => { setBlobSrc(src); setLoadError(false); });
+      .then((blob) => { objectUrl = URL.createObjectURL(blob); setBlobSrc(objectUrl); setLoadError(false); setExportable(true); })
+      // Fetch blocked (CORS/403, e.g. hotlink-protected CDN images). Show the image
+      // for preview, but mark it non-exportable so cropping doesn't taint-crash.
+      .catch(() => { setBlobSrc(src); setLoadError(false); setExportable(false); });
 
     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [src]);
@@ -86,6 +94,12 @@ export default function ImageCropper({
 
     const img = imgRef.current;
     if (!img || !completedCrop) return;
+
+    // The image was loaded cross-origin (fetch fell back to the raw URL), so the
+    // canvas is tainted and toBlob() would throw. Don't attempt the export — the
+    // inline hint already tells the user to keep the original. (Apply Crop is also
+    // disabled in this state, so this is just belt-and-braces.)
+    if (!exportable) return;
 
     // If the crop region covers the whole image (within a small tolerance) there's
     // no actual cropping — tell the parent so it can reuse the original instead of
@@ -110,14 +124,21 @@ export default function ImageCropper({
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.drawImage(
-      img,
-      completedCrop.x * scaleX, completedCrop.y * scaleY,
-      completedCrop.width * scaleX, completedCrop.height * scaleY,
-      0, 0, canvas.width, canvas.height
-    );
-    canvas.toBlob((blob) => { if (blob) onCrop(blob, false); }, "image/jpeg", 0.92);
-  }, [triggerApply, completedCrop, onCrop]);
+    // Safety net: any taint/security failure here must not bubble up and crash the
+    // whole app (React would unmount into the client-error screen). Surface it inline.
+    try {
+      ctx.drawImage(
+        img,
+        completedCrop.x * scaleX, completedCrop.y * scaleY,
+        completedCrop.width * scaleX, completedCrop.height * scaleY,
+        0, 0, canvas.width, canvas.height
+      );
+      canvas.toBlob((blob) => { if (blob) onCrop(blob, false); }, "image/jpeg", 0.92);
+    } catch {
+      setExportable(false);
+      setLoadError(true);
+    }
+  }, [triggerApply, completedCrop, exportable, onCrop]);
 
   const ratioLabel =
     aspectRatio === 16 / 9 ? "16:9"
@@ -162,6 +183,12 @@ export default function ImageCropper({
         )}
         {loadError && (
           <p className="mt-2 text-center text-xs text-red-500">Could not load image for cropping.</p>
+        )}
+        {!exportable && !loadError && (
+          <p className="mt-2 text-center text-xs text-amber-600">
+            This image is hosted externally and can&apos;t be cropped here. Use{" "}
+            <strong>“Use original (no crop)”</strong> to keep it as-is.
+          </p>
         )}
       </div>
       <p className="text-center text-xs text-gray-400">

@@ -72,7 +72,7 @@ export async function generateBookingConfirmationPDF(
   bookingType?: string,
 ) {
   const currencySymbol =
-    currency === "GBP" ? "£" : currency === "EUR" ? "€" : "$";
+    currency === "GBP" ? "£" : currency === "EUR" ? "£" : "$";
   const pdf = new jsPDF({
     orientation: "portrait",
     unit: "mm",

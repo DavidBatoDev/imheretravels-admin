@@ -4,11 +4,8 @@ import { useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import {
   Plus, X, Camera, ChevronUp, ChevronDown, Image as ImageIcon,
-  Film, Square, Columns3, LayoutGrid,
+  Film, Columns3, LayoutGrid,
 } from "lucide-react";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
 import ImagePickerModal from "@/components/shared/ImagePickerModal";
 import type { GalleryMediaItem } from "@/types/resident-hosts";
 
@@ -52,8 +49,17 @@ export default function GallerySlidesEditor({ form, storageFolder }: GallerySlid
 
   const slides: Slides = w("gallerySlides") ?? [];
 
-  // Image picker targets a specific item by its [slide, column, item] path.
-  const [picker, setPicker] = useState<{ si: number; ci: number; ii: number; size: "tall" | "short"; initialUrl?: string } | null>(null);
+  // Media picker targets a specific item by its [slide, column, item] path.
+  const [picker, setPicker] = useState<{ si: number; ci: number; ii: number; size: "tall" | "short"; initialUrl?: string; initialTab: "images" | "videos" } | null>(null);
+
+  // Open the media picker for an item, defaulting to the tab matching its current type.
+  const openMediaPicker = (si: number, ci: number, ii: number, item: GalleryMediaItem) => {
+    if (item.type === "video") {
+      setPicker({ si, ci, ii, size: item.size, initialTab: "videos" });
+    } else {
+      setPicker({ si, ci, ii, size: item.size, initialUrl: item.src ? resolveImg(item.src) : undefined, initialTab: "images" });
+    }
+  };
 
   const commit = (next: Slides) => sv("gallerySlides", next);
 
@@ -105,9 +111,12 @@ export default function GallerySlidesEditor({ form, storageFolder }: GallerySlid
     commit(next);
   };
 
-  const handlePickerConfirm = (urls: string[]) => {
+  const handlePickerConfirm = (urls: string[], kind?: "image" | "video") => {
     if (picker && urls[0]) {
-      patchItem(picker.si, picker.ci, picker.ii, { src: urls[0] });
+      patchItem(picker.si, picker.ci, picker.ii, {
+        src: urls[0],
+        type: kind === "video" ? "video" : "photo",
+      });
     }
     setPicker(null);
   };
@@ -169,7 +178,18 @@ export default function GallerySlidesEditor({ form, storageFolder }: GallerySlid
                         item.size === "tall" ? "aspect-[308/397]" : "aspect-[308/199]"
                       }`}
                     >
-                      {item.type === "photo" && item.src ? (
+                      {item.type === "video" && item.src ? (
+                        <>
+                          <video src={resolveImg(item.src)} autoPlay loop muted playsInline className="absolute inset-0 h-full w-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => openMediaPicker(si, ci, ii, item)}
+                            className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all hover:bg-black/30 hover:opacity-100"
+                          >
+                            <Camera className="h-5 w-5 text-white drop-shadow" />
+                          </button>
+                        </>
+                      ) : item.type !== "video" && item.src ? (
                         <>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
@@ -180,33 +200,20 @@ export default function GallerySlidesEditor({ form, storageFolder }: GallerySlid
                           />
                           <button
                             type="button"
-                            onClick={() => setPicker({ si, ci, ii, size: item.size, initialUrl: resolveImg(item.src) || undefined })}
+                            onClick={() => openMediaPicker(si, ci, ii, item)}
                             className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all hover:bg-black/30 hover:opacity-100"
                           >
                             <Camera className="h-5 w-5 text-white drop-shadow" />
                           </button>
                         </>
-                      ) : item.type === "video" ? (
-                        item.src ? (
-                          <video src={resolveImg(item.src)} muted playsInline className="absolute inset-0 h-full w-full object-cover" />
-                        ) : (
-                          <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-dark-gray/40">
-                            <Film className="h-5 w-5" />
-                            <span className="text-[10px]">Video URL below</span>
-                          </div>
-                        )
-                      ) : item.type === "placeholder" ? (
-                        <div className="flex h-full w-full items-center justify-center bg-grey/15 text-dark-gray/40">
-                          <Square className="h-5 w-5" />
-                        </div>
                       ) : (
                         <button
                           type="button"
-                          onClick={() => setPicker({ si, ci, ii, size: item.size })}
+                          onClick={() => openMediaPicker(si, ci, ii, item)}
                           className="flex h-full w-full flex-col items-center justify-center gap-1 text-dark-gray/40 transition-colors hover:bg-light-grey/70"
                         >
                           <ImageIcon className="h-5 w-5" />
-                          <span className="text-[10px]">Add image</span>
+                          <span className="text-[10px]">Choose from storage</span>
                         </button>
                       )}
                     </div>
@@ -214,19 +221,14 @@ export default function GallerySlidesEditor({ form, storageFolder }: GallerySlid
                     {/* Controls */}
                     <div className="mt-2 space-y-1.5">
                       <div className="flex items-center gap-1">
-                        <Select
-                          value={item.type}
-                          onValueChange={(v) => patchItem(si, ci, ii, { type: v as GalleryMediaItem["type"] })}
+                        <button
+                          type="button"
+                          onClick={() => openMediaPicker(si, ci, ii, item)}
+                          className="flex h-7 flex-1 items-center justify-center gap-1 rounded-md border border-border px-2 text-[11px] font-medium text-midnight transition-colors hover:border-crimson-red/40 hover:text-crimson-red"
                         >
-                          <SelectTrigger className="h-7 flex-1 text-[11px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="photo">Photo</SelectItem>
-                            <SelectItem value="video">Video</SelectItem>
-                            <SelectItem value="placeholder">Placeholder</SelectItem>
-                          </SelectContent>
-                        </Select>
+                          {item.type === "video" ? <Film className="h-3 w-3" /> : <ImageIcon className="h-3 w-3" />}
+                          {item.src ? "Change media" : "Choose from storage"}
+                        </button>
                         <button
                           type="button"
                           onClick={() => patchItem(si, ci, ii, { size: item.size === "tall" ? "short" : "tall" })}
@@ -236,16 +238,6 @@ export default function GallerySlidesEditor({ form, storageFolder }: GallerySlid
                           {item.size === "tall" ? "Tall" : "Short"}
                         </button>
                       </div>
-
-                      {item.type === "video" && (
-                        <input
-                          type="text"
-                          value={item.src ?? ""}
-                          onChange={(e) => patchItem(si, ci, ii, { src: e.target.value })}
-                          placeholder="Video URL"
-                          className="w-full rounded-md border border-border px-2 py-1 text-[11px] outline-none focus:ring-2 focus:ring-crimson-red/40"
-                        />
-                      )}
 
                       {item.type !== "placeholder" && (
                         <input
@@ -337,12 +329,14 @@ export default function GallerySlidesEditor({ form, storageFolder }: GallerySlid
       {picker && (
         <ImagePickerModal
           open
+          enableVideos
+          initialTab={picker.initialTab}
           onClose={() => setPicker(null)}
           onConfirm={handlePickerConfirm}
           storageFolder={storageFolder ?? "images/resident-hosts"}
           aspectRatio={picker.size === "tall" ? 308 / 397 : 308 / 199}
           initialImageUrl={picker.initialUrl}
-          title="Select Gallery Image"
+          title="Select Gallery Media"
         />
       )}
     </div>

@@ -775,7 +775,7 @@ export default function ResidentHostForm({ onClose, onSubmit, host, isLoading = 
                               style={item.objectPosition ? { objectPosition: item.objectPosition } : undefined} />
                           )}
                           {item.type === "video" && item.src && (
-                            <video src={resolveImg(item.src)} muted playsInline className="absolute inset-0 h-full w-full object-cover" />
+                            <video src={resolveImg(item.src)} autoPlay loop muted playsInline className="absolute inset-0 h-full w-full object-cover" />
                           )}
                           {item.type === "placeholder" && <div className="absolute inset-0 bg-grey/15" />}
                         </div>

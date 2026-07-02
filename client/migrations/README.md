@@ -109,24 +109,24 @@ tsx migrations/migrate.ts help
 
 ### Migration 001 - Initial Tour Packages
 
-- **SIA**: Siargao Island Adventure (6 days, €430)
-- **PHS**: Philippine Sunrise (11 days, €1100)
-- **PSS**: Philippines Sunset (11 days, €1100)
-- **MLB**: Maldives Bucketlist (8 days, €1300)
+- **SIA**: Siargao Island Adventure (6 days, £430)
+- **PHS**: Philippine Sunrise (11 days, £1100)
+- **PSS**: Philippines Sunset (11 days, £1100)
+- **MLB**: Maldives Bucketlist (8 days, £1300)
 
 ### Migration 002 - Additional Tour Packages
 
-- **SLW**: Sri Lanka Wander Tour (12 days, €1100)
-- **ARW**: Argentina's Wonders (11 days, €2399)
-- **BZT**: Brazil's Treasures (12 days, €1700)
-- **VNE**: Vietnam Expedition (11 days, €1100)
+- **SLW**: Sri Lanka Wander Tour (12 days, £1100)
+- **ARW**: Argentina's Wonders (11 days, £2399)
+- **BZT**: Brazil's Treasures (12 days, £1700)
+- **VNE**: Vietnam Expedition (11 days, £1100)
 
 ### Migration 003 - Final Tour Packages
 
-- **IDD**: India Discovery Tour (13 days, €999/€899)
-- **IHF**: India Holi Festival Tour (13 days, €999)
-- **TXP**: Tanzania Exploration (10 days, €1899)
-- **NZE**: New Zealand Expedition (15 days, €1799)
+- **IDD**: India Discovery Tour (13 days, £999/£899)
+- **IHF**: India Holi Festival Tour (13 days, £999)
+- **TXP**: Tanzania Exploration (10 days, £1899)
+- **NZE**: New Zealand Expedition (15 days, £1799)
 
 ## Command Reference
 

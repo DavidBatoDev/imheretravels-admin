@@ -405,7 +405,7 @@ export default function ToursList() {
       case "USD":
         return "$";
       case "EUR":
-        return "€";
+        return "£";
       case "GBP":
         return "£";
       default:

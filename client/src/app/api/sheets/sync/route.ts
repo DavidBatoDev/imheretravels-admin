@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
             // For function columns, check if it looks like a currency value
             if (cellValue && cellValue.toString().trim() !== "") {
               const stringValue = cellValue.toString().trim();
-              const hasCurrencySymbol = /[$€£¥₹₽¢₱₦₩₪₨₡₵₫﷼]/.test(stringValue);
+              const hasCurrencySymbol = /[$£¥₹₽¢₱₦₩₪₨₡₵₫﷼]/.test(stringValue);
 
               if (hasCurrencySymbol) {
                 convertedValue = parseCurrencyValue(stringValue);
@@ -385,7 +385,6 @@ function parseCurrencyValue(value: string): number | null {
   // Currency symbols to strip
   const currencySymbols = [
     "$",
-    "€",
     "£",
     "¥",
     "₹",

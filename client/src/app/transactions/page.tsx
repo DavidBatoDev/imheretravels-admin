@@ -546,7 +546,7 @@ export default function TransactionsPage() {
     const map: Record<string, string> = {
       gbp: "£",
       usd: "$",
-      eur: "€",
+      eur: "£",
       php: "₱",
     };
     return map[currency.toLowerCase()] || currency.toUpperCase();

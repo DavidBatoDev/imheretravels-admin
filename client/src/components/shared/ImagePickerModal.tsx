@@ -3,15 +3,17 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   X, Search, Upload, Check, ChevronLeft, ChevronRight,
-  ImageIcon, Loader2, Folder, Home,
+  ImageIcon, Loader2, Folder, Home, Film, Play,
 } from "lucide-react";
 import storageService from "@/services/storage-service";
 import type { ImageItem, StorageFolder } from "@/types/storage";
 import ImageCropper from "./ImageCropper";
 
 type ModalState = "browse" | "crop" | "bulk-crop";
+type MediaTab = "images" | "videos";
 
 const ROOT = "images";
+const MAX_VIDEO_BYTES = 25 * 1024 * 1024; // 25 MB
 
 function pathToCrumbs(path: string): { label: string; path: string }[] {
   const segments = path.split("/");
@@ -24,13 +26,18 @@ function pathToCrumbs(path: string): { label: string; path: string }[] {
 interface ImagePickerModalProps {
   open: boolean;
   onClose: () => void;
-  onConfirm: (urls: string[]) => void;
+  /** `kind` tells the caller whether an image or video was chosen (only "video" when `enableVideos`). */
+  onConfirm: (urls: string[], kind?: "image" | "video") => void;
   aspectRatio: number;
   multiple?: boolean;
   initialImageUrl?: string;
   title?: string;
   /** Starting folder for browse + target folder for uploads */
   storageFolder?: string;
+  /** Adds a "Videos" tab that lets the user pick/upload a video from the shared video library. */
+  enableVideos?: boolean;
+  /** Which tab to open on first render (only relevant when `enableVideos`). */
+  initialTab?: MediaTab;
 }
 
 export default function ImagePickerModal({
@@ -42,14 +49,23 @@ export default function ImagePickerModal({
   initialImageUrl,
   title = "Select Image",
   storageFolder,
+  enableVideos = false,
+  initialTab = "images",
 }: ImagePickerModalProps) {
   const [state, setState] = useState<ModalState>("browse");
+  const [mediaTab, setMediaTab] = useState<MediaTab>("images");
 
   // ── Folder browse state ────────────────────────────────────────────────────
   const [browsePath, setBrowsePath] = useState<string>(ROOT);
   const [browseFolders, setBrowseFolders] = useState<StorageFolder[]>([]);
   const [browseFiles, setBrowseFiles] = useState<ImageItem[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // ── Video tab state ──────────────────────────────────────────────────────────
+  const [videos, setVideos] = useState<ImageItem[]>([]);
+  const [videosLoading, setVideosLoading] = useState(false);
+  const [videoUploading, setVideoUploading] = useState(false);
+  const videoUploadInputRef = useRef<HTMLInputElement>(null);
 
   // ── Upload / crop state ────────────────────────────────────────────────────
   const [uploading, setUploading] = useState(false);
@@ -98,6 +114,38 @@ export default function ImagePickerModal({
     loadContents(path);
   }
 
+  async function loadVideos() {
+    setVideosLoading(true);
+    try {
+      setVideos(await storageService.getVideos());
+    } finally {
+      setVideosLoading(false);
+    }
+  }
+
+  function switchToVideos() {
+    setMediaTab("videos");
+    if (videos.length === 0) loadVideos();
+  }
+
+  async function handleVideoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("video/")) { alert("Please select a video file."); return; }
+    if (file.size > MAX_VIDEO_BYTES) {
+      alert(`${file.name} is ${(file.size / 1024 / 1024).toFixed(1)} MB — the limit is 25 MB.`);
+      return;
+    }
+    setVideoUploading(true);
+    try {
+      const uploaded = await storageService.uploadVideo(file);
+      onConfirm([uploaded.url], "video");
+      onClose();
+    } catch { alert("Failed to upload video. Please try again."); }
+    finally { setVideoUploading(false); }
+  }
+
   // ── Reset on open ──────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -107,9 +155,13 @@ export default function ImagePickerModal({
       return;
     }
     const startPath = storageFolder ?? ROOT;
+    const startTab: MediaTab = enableVideos ? initialTab : "images";
     setBrowsePath(startPath);
     setBrowseFolders([]);
     setBrowseFiles([]);
+    setMediaTab(startTab);
+    setVideos([]);
+    if (startTab === "videos") loadVideos();
     setState(initialImageUrl ? "crop" : "browse");
     setCropSrc(initialImageUrl ?? "");
     setCropItem(null);
@@ -126,7 +178,7 @@ export default function ImagePickerModal({
     setBrokenIds(new Set());
     if (!initialImageUrl) loadContents(startPath);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initialImageUrl, storageFolder]);
+  }, [open, initialImageUrl, storageFolder, enableVideos, initialTab]);
 
   // ── Filtered lists ─────────────────────────────────────────────────────────
 
@@ -135,6 +187,9 @@ export default function ImagePickerModal({
   );
   const filteredFiles = browseFiles.filter((f) =>
     f.name.toLowerCase().includes(search.toLowerCase())
+  );
+  const filteredVideos = videos.filter((v) =>
+    v.name.toLowerCase().includes(search.toLowerCase())
   );
 
   // ── Selection ──────────────────────────────────────────────────────────────
@@ -406,6 +461,27 @@ export default function ImagePickerModal({
           {state === "browse" && (
             <div className="flex flex-col gap-4">
 
+              {enableVideos && (
+                <div className="flex self-start gap-1 rounded-lg border border-light-grey p-1 text-sm font-medium">
+                  <button
+                    type="button"
+                    onClick={() => setMediaTab("images")}
+                    className={`rounded-md px-3 py-1 transition-colors ${mediaTab === "images" ? "bg-crimson-red text-white" : "text-midnight hover:text-crimson-red"}`}
+                  >
+                    Gallery
+                  </button>
+                  <button
+                    type="button"
+                    onClick={switchToVideos}
+                    className={`rounded-md px-3 py-1 transition-colors ${mediaTab === "videos" ? "bg-crimson-red text-white" : "text-midnight hover:text-crimson-red"}`}
+                  >
+                    Videos
+                  </button>
+                </div>
+              )}
+
+              {!enableVideos || mediaTab === "images" ? (
+              <>
               {/* Breadcrumbs */}
               <nav className="flex flex-wrap items-center gap-1">
                 {crumbs.map((crumb, i) => {
@@ -554,6 +630,70 @@ export default function ImagePickerModal({
 
                 </div>
               )}
+              </>
+              ) : (
+              <>
+                {/* Video search + upload */}
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search videos…"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      className="w-full rounded-lg border border-light-grey py-2 pl-9 pr-4 text-sm outline-none focus:border-crimson-red"
+                    />
+                  </div>
+                  <input ref={videoUploadInputRef} type="file" accept="video/*" className="hidden" onChange={handleVideoUpload} />
+                  <button
+                    type="button"
+                    onClick={() => videoUploadInputRef.current?.click()}
+                    disabled={videoUploading}
+                    className="flex items-center gap-2 rounded-lg border border-midnight px-4 py-2 text-sm font-medium text-midnight transition-colors hover:border-crimson-red hover:text-crimson-red disabled:opacity-50"
+                  >
+                    {videoUploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+                    Upload New
+                  </button>
+                </div>
+
+                {/* Video content */}
+                {videosLoading ? (
+                  <div className="flex h-48 items-center justify-center">
+                    <Loader2 className="size-6 animate-spin text-gray-400" />
+                  </div>
+                ) : filteredVideos.length === 0 ? (
+                  <div className="flex h-48 flex-col items-center justify-center gap-2 text-gray-400">
+                    <Film className="size-10" />
+                    <p className="text-sm">
+                      {search ? "No videos match your search." : "No videos yet. Upload a clip above (max 25 MB)."}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5">
+                    {filteredVideos.map((video) => (
+                      <button
+                        key={video.id}
+                        type="button"
+                        onClick={() => { onConfirm([video.url], "video"); onClose(); }}
+                        title={video.name}
+                        className="group relative aspect-square overflow-hidden rounded-xl border-2 border-transparent bg-black transition-all hover:border-crimson-red"
+                      >
+                        <video src={video.url} autoPlay loop muted playsInline preload="metadata" className="h-full w-full object-cover" />
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="rounded-full bg-black/50 p-2 opacity-90 transition-opacity group-hover:opacity-100">
+                            <Play className="size-4 fill-white text-white" />
+                          </div>
+                        </div>
+                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
+                          <p className="truncate text-xs text-white">{video.name}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+              )}
             </div>
           )}
 
@@ -589,7 +729,7 @@ export default function ImagePickerModal({
 
           {/* Left: contextual action */}
           <div>
-            {state === "browse" && multiple && (
+            {state === "browse" && multiple && mediaTab === "images" && (
               <span className="text-sm text-gray-400">
                 {selected.length > 0
                   ? `${selected.length} image${selected.length === 1 ? "" : "s"} selected`
@@ -642,7 +782,7 @@ export default function ImagePickerModal({
             >
               Cancel
             </button>
-            {state === "browse" && multiple && (
+            {state === "browse" && multiple && mediaTab === "images" && (
               <button
                 type="button"
                 onClick={confirmSelection}

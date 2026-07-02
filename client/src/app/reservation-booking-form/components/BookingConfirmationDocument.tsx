@@ -31,7 +31,7 @@ export default function BookingConfirmationDocument({
   paymentDate,
   currency = "GBP",
 }: BookingConfirmationDocumentProps) {
-  const currencySymbol = currency === "GBP" ? "£" : currency === "EUR" ? "€" : "$";
+  const currencySymbol = currency === "GBP" ? "£" : currency === "EUR" ? "£" : "$";
 
   return (
     <div

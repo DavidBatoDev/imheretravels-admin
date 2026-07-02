@@ -42,6 +42,7 @@ export default function ImageCropper({
   const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
   const [blobSrc, setBlobSrc] = useState<string>("");
   const [loadError, setLoadError] = useState(false);
+  const [errorDetail, setErrorDetail] = useState<string>("");
   const [imageLoaded, setImageLoaded] = useState(false);
 
   // Notify parent when apply-readiness changes
@@ -49,24 +50,28 @@ export default function ImageCropper({
     onReadyChange?.(!!completedCrop && imageLoaded);
   }, [completedCrop, imageLoaded, onReadyChange]);
 
-  // Convert remote URL → local blob URL to avoid canvas CORS taint
+  // Decide what the <img> actually points at. Local uploads (blob:/data:) load
+  // directly. Remote URLs are served through a same-origin proxy (/api/image-proxy)
+  // which sidesteps the Storage bucket's missing CORS config AND, being same-origin,
+  // keeps the crop canvas untainted — so no fetch → blob → object-URL dance (which
+  // is race-prone with revoke) is needed.
   useEffect(() => {
     if (!src) return;
     setImageLoaded(false);
-    setBlobSrc("");
-    let objectUrl = "";
+    setLoadError(false);
+    setErrorDetail("");
+    setCompletedCrop(undefined);
+    setCrop(undefined);
 
-    if (src.startsWith("blob:")) {
+    if (src.startsWith("blob:") || src.startsWith("data:")) {
+      console.log("[ImageCropper] loading local src:", src.slice(0, 40));
       setBlobSrc(src);
       return;
     }
 
-    fetch(src)
-      .then((r) => { if (!r.ok) throw new Error(); return r.blob(); })
-      .then((blob) => { objectUrl = URL.createObjectURL(blob); setBlobSrc(objectUrl); setLoadError(false); })
-      .catch(() => { setBlobSrc(src); setLoadError(false); });
-
-    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+    const proxied = `/api/image-proxy?url=${encodeURIComponent(src)}`;
+    console.log("[ImageCropper] loading remote src via proxy:", src);
+    setBlobSrc(proxied);
   }, [src]);
 
   const onImageLoad = useCallback(
@@ -102,21 +107,29 @@ export default function ImageCropper({
       return;
     }
 
-    const canvas = document.createElement("canvas");
-    const scaleX = img.naturalWidth / img.width;
-    const scaleY = img.naturalHeight / img.height;
-    canvas.width = Math.round(completedCrop.width * scaleX);
-    canvas.height = Math.round(completedCrop.height * scaleY);
+    try {
+      const canvas = document.createElement("canvas");
+      const scaleX = img.naturalWidth / img.width;
+      const scaleY = img.naturalHeight / img.height;
+      canvas.width = Math.round(completedCrop.width * scaleX);
+      canvas.height = Math.round(completedCrop.height * scaleY);
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.drawImage(
-      img,
-      completedCrop.x * scaleX, completedCrop.y * scaleY,
-      completedCrop.width * scaleX, completedCrop.height * scaleY,
-      0, 0, canvas.width, canvas.height
-    );
-    canvas.toBlob((blob) => { if (blob) onCrop(blob, false); }, "image/jpeg", 0.92);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(
+        img,
+        completedCrop.x * scaleX, completedCrop.y * scaleY,
+        completedCrop.width * scaleX, completedCrop.height * scaleY,
+        0, 0, canvas.width, canvas.height
+      );
+      // toBlob throws a SecurityError if the canvas is tainted (cross-origin image
+      // drawn without CORS). The proxy fetch above normally prevents this, but guard
+      // the fallback path so a taint can't crash the crop silently.
+      canvas.toBlob((blob) => { if (blob) onCrop(blob, false); }, "image/jpeg", 0.92);
+    } catch (err) {
+      console.error("ImageCropper: failed to render crop", err);
+      setLoadError(true);
+    }
   }, [triggerApply, completedCrop, onCrop]);
 
   const ratioLabel =
@@ -128,7 +141,7 @@ export default function ImageCropper({
   return (
     <div className="flex flex-col gap-3">
       <div className="overflow-hidden rounded-xl bg-gray-100 p-2">
-        {!imageLoaded && (
+        {!imageLoaded && !loadError && (
           <div
             className="relative w-full animate-pulse rounded-xl bg-gray-200"
             style={{ aspectRatio: String(aspectRatio), minHeight: "240px" }}
@@ -153,15 +166,35 @@ export default function ImageCropper({
                 ref={imgRef}
                 src={blobSrc}
                 alt="Crop preview"
-                onLoad={onImageLoad}
-                onError={() => setLoadError(true)}
+                onLoad={(e) => {
+                  console.log(
+                    `[ImageCropper] <img> loaded OK (${e.currentTarget.naturalWidth}x${e.currentTarget.naturalHeight}) from: ${blobSrc.slice(0, 80)}`
+                  );
+                  onImageLoad(e);
+                }}
+                onError={() => {
+                  console.error(`[ImageCropper] <img> failed to load. src=${src} | img.src=${blobSrc}`);
+                  setErrorDetail(`The browser could not load the image. img src = ${blobSrc}`);
+                  setLoadError(true);
+                }}
                 className="max-h-[55vh] max-w-full object-contain"
               />
             </ReactCrop>
           </div>
         )}
         {loadError && (
-          <p className="mt-2 text-center text-xs text-red-500">Could not load image for cropping.</p>
+          <div
+            className="flex w-full flex-col items-center justify-center gap-1 rounded-xl bg-gray-200 p-6 text-center"
+            style={{ aspectRatio: String(aspectRatio), minHeight: "240px" }}
+          >
+            <p className="text-sm font-medium text-red-500">Could not load image for cropping.</p>
+            <p className="text-xs text-gray-500">Try a different image, or replace it with a new upload.</p>
+            {errorDetail && (
+              <p className="mt-2 max-w-md break-words text-[11px] leading-snug text-gray-400">
+                {errorDetail}
+              </p>
+            )}
+          </div>
         )}
       </div>
       <p className="text-center text-xs text-gray-400">

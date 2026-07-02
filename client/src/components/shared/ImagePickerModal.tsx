@@ -55,6 +55,8 @@ export default function ImagePickerModal({
   const [uploading, setUploading] = useState(false);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<ImageItem[]>([]);
+  // Thumbnails that failed to decode (e.g. HEIC / corrupt) → show a placeholder.
+  const [brokenIds, setBrokenIds] = useState<Set<string>>(new Set());
 
   const [cropSrc, setCropSrc] = useState<string>("");
   const [cropItem, setCropItem] = useState<ImageItem | null>(null);
@@ -121,6 +123,7 @@ export default function ImagePickerModal({
     setBulkApplyTrigger(0);
     setSearch("");
     setIsReplaceMode(false);
+    setBrokenIds(new Set());
     if (!initialImageUrl) loadContents(startPath);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialImageUrl, storageFolder]);
@@ -172,15 +175,70 @@ export default function ImagePickerModal({
 
   // ── Upload new ─────────────────────────────────────────────────────────────
 
-  function handleNewUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleNewUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
-    if (!file.type.startsWith("image/")) { alert("Please select an image file."); return; }
+    console.log("[ImagePicker] upload selected:", { name: file.name, type: file.type, size: file.size });
+
+    const looksImage =
+      file.type.startsWith("image/") ||
+      /\.(jpe?g|png|gif|webp|avif|bmp|heic|heif)$/i.test(file.name);
+    if (!looksImage) { alert("Please select an image file."); return; }
+
+    const isHeic =
+      /image\/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
+
+    // Probe: can the browser actually decode this file? Also catches HEIC that
+    // reports a generic/empty MIME type (so isHeic missed it).
+    const decodable = isHeic
+      ? false
+      : await new Promise<boolean>((resolve) => {
+          const probe = new Image();
+          const probeUrl = URL.createObjectURL(file);
+          probe.onload = () => { URL.revokeObjectURL(probeUrl); resolve(probe.naturalWidth > 0); };
+          probe.onerror = () => { URL.revokeObjectURL(probeUrl); resolve(false); };
+          probe.src = probeUrl;
+        });
+
+    // Browsers can't display HEIC/HEIF (and some other formats). Convert to JPEG
+    // via a server route (modern libheif) so iPhone photos can be uploaded directly.
+    let workingFile = file;
+    if (!decodable) {
+      setUploading(true);
+      try {
+        const res = await fetch("/api/heic-convert", {
+          method: "POST",
+          headers: { "Content-Type": "application/octet-stream" },
+          body: file,
+        });
+        if (!res.ok) {
+          let serverMsg = `HTTP ${res.status}`;
+          try { serverMsg = (await res.json())?.error ?? serverMsg; } catch { /* keep default */ }
+          throw new Error(serverMsg);
+        }
+        const jpegBlob = await res.blob();
+        if (!jpegBlob || jpegBlob.size === 0) throw new Error("conversion produced an empty image");
+        const base = file.name.replace(/\.[^.]+$/, "") || "image";
+        workingFile = new File([jpegBlob], `${base}.jpg`, { type: "image/jpeg" });
+        console.log("[ImagePicker] converted to JPEG:", { name: workingFile.name, size: workingFile.size });
+      } catch (err: unknown) {
+        const detail = err instanceof Error ? err.message : String(err);
+        console.error("[ImagePicker] conversion failed:", detail);
+        alert(
+          `Couldn't convert this image (${detail || "unknown error"}). ` +
+          "If it isn't an iPhone HEIC photo, please export it as JPEG or PNG and try again."
+        );
+        setUploading(false);
+        return;
+      }
+      setUploading(false);
+    }
+
     // Use a local blob URL — avoids Firebase CORS entirely so canvas toBlob() works
     if (pendingUrlRef.current) URL.revokeObjectURL(pendingUrlRef.current);
-    const localUrl = URL.createObjectURL(file);
-    pendingFileRef.current = file;
+    const localUrl = URL.createObjectURL(workingFile);
+    pendingFileRef.current = workingFile;
     pendingUrlRef.current = localUrl;
     setCropItem(null);
     setCropSrc(localUrl);
@@ -456,8 +514,27 @@ export default function ImagePickerModal({
                                 isSelected ? "border-crimson-red" : "border-transparent hover:border-gray-300"
                               }`}
                             >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={img.url} alt={img.name} className="h-full w-full object-cover" />
+                              {brokenIds.has(img.id) ? (
+                                <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-gray-100 text-gray-400">
+                                  <ImageIcon className="size-6" />
+                                  <span className="px-1 text-[9px] leading-tight">Preview unavailable</span>
+                                </div>
+                              ) : (
+                                /* eslint-disable-next-line @next/next/no-img-element */
+                                <img
+                                  src={img.url}
+                                  alt={img.name}
+                                  className="h-full w-full object-cover"
+                                  onError={() =>
+                                    setBrokenIds((prev) => {
+                                      if (prev.has(img.id)) return prev;
+                                      const next = new Set(prev);
+                                      next.add(img.id);
+                                      return next;
+                                    })
+                                  }
+                                />
+                              )}
                               {isSelected && (
                                 <div className="absolute inset-0 flex items-center justify-center bg-crimson-red/30">
                                   <div className="flex size-6 items-center justify-center rounded-full bg-crimson-red">
@@ -483,6 +560,7 @@ export default function ImagePickerModal({
           {/* CROP (single) */}
           {state === "crop" && cropSrc && (
             <ImageCropper
+              key={cropSrc}
               src={cropSrc}
               aspectRatio={aspectRatio}
               onCrop={handleCropDone}
@@ -495,6 +573,7 @@ export default function ImagePickerModal({
           {/* BULK CROP */}
           {state === "bulk-crop" && currentBulkItem && (
             <ImageCropper
+              key={currentBulkItem.url}
               src={currentBulkItem.url}
               aspectRatio={aspectRatio}
               onCrop={handleBulkCropDone}

@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { useToast } from "@/hooks/use-toast";
 import { validateReservationStep1 } from "../../utils/bookingValidation";
 
 type GuestDetail = {
@@ -48,6 +49,8 @@ export const useReservationValidation = ({
   safeGetCountryCallingCodeFn,
   isValidPhoneNumberFn,
 }: UseReservationValidationOptions) => {
+  const { toast } = useToast();
+
   const isFieldValid = useCallback((field: string, value: string) => {
     if (field === "email") {
       return !!value && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -96,6 +99,28 @@ export const useReservationValidation = ({
     }
 
     setErrors(result.errors);
+
+    if (!result.isValid) {
+      const errorKeys = Object.keys(result.errors);
+      const firstError = errorKeys[0];
+      const description =
+        firstError === "tourPackage"
+          ? "Select a tour before continuing to payment."
+          : firstError === "tourDate"
+            ? "Choose your preferred tour date before continuing to payment."
+            : firstError?.startsWith("guest-") || firstError === "guests"
+              ? "Check the highlighted guest details before continuing."
+              : "Check the highlighted fields before continuing.";
+
+      toast({
+        title: "Missing reservation details",
+        description,
+        variant: "destructive",
+        className:
+          "mx-auto w-[calc(100vw-2rem)] max-w-sm p-4 pr-8 sm:max-w-[420px] sm:p-6 sm:pr-8",
+      });
+    }
+
     return result.isValid;
   }, [
     email,
@@ -114,6 +139,7 @@ export const useReservationValidation = ({
     safeGetCountryCallingCodeFn,
     setActiveGuestTab,
     setErrors,
+    toast,
   ]);
   return {
     validate,

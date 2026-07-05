@@ -56,7 +56,6 @@ export type StepFooterActionsSectionProps = {
   ANIM_DURATION: number;
   checkExistingPaymentsAndMaybeProceed: () => void | Promise<void>;
   isCreatingPayment: boolean;
-  isStep1ContinueDisabled: boolean;
   email: string;
   birthdate: string;
   firstName: string;
@@ -110,7 +109,6 @@ export default function StepFooterActionsSection({
   ANIM_DURATION,
   checkExistingPaymentsAndMaybeProceed,
   isCreatingPayment,
-  isStep1ContinueDisabled,
   email,
   birthdate,
   firstName,
@@ -233,10 +231,9 @@ export default function StepFooterActionsSection({
             });
             checkExistingPaymentsAndMaybeProceed();
           }}
-          disabled={
-            isStep1ContinueDisabled
-          }
-          className="group inline-flex items-center gap-2 px-8 py-3.5 bg-gradient-to-r from-primary to-crimson-red text-primary-foreground rounded-lg shadow-lg hover:shadow-xl hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all duration-200 font-semibold disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-lg"
+          disabled={isCreatingPayment}
+          aria-busy={isCreatingPayment}
+          className="group inline-flex items-center gap-2 px-8 py-3.5 bg-gradient-to-r from-primary to-crimson-red text-primary-foreground rounded-lg shadow-lg hover:shadow-xl hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all duration-200 font-semibold disabled:cursor-wait disabled:hover:scale-100 disabled:hover:shadow-lg"
         >
           Continue to Payment
           <svg

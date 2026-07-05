@@ -1,4 +1,4 @@
-﻿import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import { validateReservationStep1 } from "../../utils/bookingValidation";
 
 type GuestDetail = {
@@ -24,7 +24,6 @@ type UseReservationValidationOptions = {
   tourPackage: string;
   tourDate: string;
   guestDetails: GuestDetail[];
-  isCreatingPayment: boolean;
   setErrors: (errors: { [k: string]: string }) => void;
   setActiveGuestTab: (tab: number) => void;
   safeGetCountryCallingCodeFn: (countryCode: string) => string;
@@ -44,7 +43,6 @@ export const useReservationValidation = ({
   tourPackage,
   tourDate,
   guestDetails,
-  isCreatingPayment,
   setErrors,
   setActiveGuestTab,
   safeGetCountryCallingCodeFn,
@@ -117,64 +115,9 @@ export const useReservationValidation = ({
     setActiveGuestTab,
     setErrors,
   ]);
-
-  const isStep1ContinueDisabled = useMemo(() => {
-    return (
-      isCreatingPayment ||
-      !email ||
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
-      !birthdate ||
-      !firstName ||
-      !lastName ||
-      !whatsAppNumber ||
-      (whatsAppNumber &&
-        !isValidPhoneNumberFn(
-          `+${safeGetCountryCallingCodeFn(whatsAppCountry)}${whatsAppNumber}`,
-        )) ||
-      !nationality ||
-      !bookingType ||
-      !tourPackage ||
-      !tourDate ||
-      ((bookingType === "Duo Booking" || bookingType === "Group Booking") &&
-        (guestDetails.length === 0 ||
-          guestDetails.length !==
-            (bookingType === "Duo Booking" ? 1 : groupSize - 1) ||
-          guestDetails.some(
-            (guest) =>
-              !guest.email ||
-              !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guest.email) ||
-              !guest.birthdate ||
-              !guest.firstName ||
-              !guest.lastName ||
-              !guest.nationality ||
-              !guest.whatsAppNumber ||
-              !isValidPhoneNumberFn(
-                `+${safeGetCountryCallingCodeFn(guest.whatsAppCountry)}${guest.whatsAppNumber}`,
-              ),
-          )))
-    );
-  }, [
-    isCreatingPayment,
-    email,
-    birthdate,
-    firstName,
-    lastName,
-    whatsAppNumber,
-    whatsAppCountry,
-    nationality,
-    bookingType,
-    tourPackage,
-    tourDate,
-    guestDetails,
-    groupSize,
-    isValidPhoneNumberFn,
-    safeGetCountryCallingCodeFn,
-  ]);
-
   return {
     validate,
     isFieldValid,
-    isStep1ContinueDisabled,
   };
 };
 

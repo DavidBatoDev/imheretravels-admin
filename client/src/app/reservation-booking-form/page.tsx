@@ -434,26 +434,24 @@ const Page = () => {
     canSelectStep3Plans,
   });
 
-  const { validate, isFieldValid, isStep1ContinueDisabled } =
-    useReservationValidation({
-      email,
-      firstName,
-      lastName,
-      birthdate,
-      nationality,
-      whatsAppNumber,
-      whatsAppCountry,
-      bookingType,
-      groupSize,
-      tourPackage,
-      tourDate,
-      guestDetails,
-      isCreatingPayment,
-      setErrors,
-      setActiveGuestTab,
-      safeGetCountryCallingCodeFn: safeGetCountryCallingCode,
-      isValidPhoneNumberFn: isValidPhoneNumber,
-    });
+  const { validate, isFieldValid } = useReservationValidation({
+    email,
+    firstName,
+    lastName,
+    birthdate,
+    nationality,
+    whatsAppNumber,
+    whatsAppCountry,
+    bookingType,
+    groupSize,
+    tourPackage,
+    tourDate,
+    guestDetails,
+    setErrors,
+    setActiveGuestTab,
+    safeGetCountryCallingCodeFn: safeGetCountryCallingCode,
+    isValidPhoneNumberFn: isValidPhoneNumber,
+  });
 
   // shared field classes with enhanced styling
   const fieldBase =
@@ -726,7 +724,6 @@ const Page = () => {
     ANIM_DURATION,
     checkExistingPaymentsAndMaybeProceed,
     isCreatingPayment,
-    isStep1ContinueDisabled,
     email,
     birthdate,
     firstName,

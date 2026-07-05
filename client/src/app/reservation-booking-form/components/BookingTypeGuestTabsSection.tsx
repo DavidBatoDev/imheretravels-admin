@@ -14,6 +14,7 @@ type BookingTypeGuestTabsSectionProps = {
   bookingTypeOptions: BookingTypeOption[];
   paymentConfirmed: boolean;
   errors: { [k: string]: string };
+  showValidationFeedback: boolean;
   groupSize: number;
   onGroupSizeChange: (value: number) => void;
   activeGuestTab: number;
@@ -28,6 +29,7 @@ export default function BookingTypeGuestTabsSection({
   bookingTypeOptions,
   paymentConfirmed,
   errors,
+  showValidationFeedback,
   groupSize,
   onGroupSizeChange,
   activeGuestTab,
@@ -75,7 +77,9 @@ export default function BookingTypeGuestTabsSection({
             ariaLabel="Booking Type"
             className="mt-1"
             disabled={paymentConfirmed}
-            isValid={!!bookingType && !errors.bookingType}
+            isValid={
+              showValidationFeedback && !!bookingType && !errors.bookingType
+            }
           />
           {errors.bookingType && (
             <p className="mt-2 text-xs text-destructive flex items-center gap-1 animate-in fade-in slide-in-from-top-2 duration-300">

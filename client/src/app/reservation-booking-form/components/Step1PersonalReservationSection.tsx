@@ -14,6 +14,7 @@ export type Step1PersonalReservationSectionProps = {
   selectedPackage?: ReservationTourPackage;
   tourDate: string;
   errors: { [k: string]: string };
+  showValidationFeedback: boolean;
   bookingType: string;
   groupSize: number;
   activeGuestTab: number;
@@ -64,6 +65,7 @@ export default function Step1PersonalReservationSection({
   selectedPackage,
   tourDate,
   errors,
+  showValidationFeedback,
   bookingType,
   groupSize,
   activeGuestTab,
@@ -99,6 +101,7 @@ export default function Step1PersonalReservationSection({
 }: Step1PersonalReservationSectionProps) {
   const showMainBookerForm =
     bookingType === "Single Booking" || activeGuestTab === 1;
+  const visibleErrors = showValidationFeedback ? errors : {};
 
   return (
     <>
@@ -138,7 +141,8 @@ export default function Step1PersonalReservationSection({
               onBookingTypeChange={handleBookingTypeChange}
               bookingTypeOptions={bookingTypeOptions}
               paymentConfirmed={paymentConfirmed}
-              errors={errors}
+              errors={visibleErrors}
+              showValidationFeedback={showValidationFeedback}
               groupSize={groupSize}
               onGroupSizeChange={handleGroupSizeChange}
               activeGuestTab={activeGuestTab}
@@ -159,7 +163,8 @@ export default function Step1PersonalReservationSection({
                   >
                     <MainBookerFormSection
                       paymentConfirmed={paymentConfirmed}
-                      errors={errors}
+                      errors={visibleErrors}
+                      showValidationFeedback={showValidationFeedback}
                       fieldBase={fieldBase}
                       fieldWithIcon={fieldWithIcon}
                       fieldFocus={fieldFocus}
@@ -197,7 +202,7 @@ export default function Step1PersonalReservationSection({
                       bookingType={bookingType}
                       activeGuestTab={activeGuestTab}
                       guestDetails={guestDetails}
-                      errors={errors}
+                      errors={visibleErrors}
                       paymentConfirmed={paymentConfirmed}
                       onGuestDetailsUpdate={handleGuestDetailsUpdate}
                     />

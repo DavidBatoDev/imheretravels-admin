@@ -2,8 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
-import { Suspense } from "react";
-import { useEffect, useRef } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -189,6 +188,11 @@ const Page = () => {
   const sideEffects = createDefaultReservationSideEffects({ db, router });
   const previousStepRef = useRef(step);
   const stepSwipeDirection = step >= previousStepRef.current ? 1 : -1;
+  const [step1ValidationAttempted, setStep1ValidationAttempted] =
+    useState(false);
+  const [validationToastDismissed, setValidationToastDismissed] =
+    useState(false);
+  const visibleStep1Errors = step1ValidationAttempted ? errors : {};
 
   // Get reservation fee from selected package (not the full deposit)
   const selectedPackage = tourPackages.find((p) => p.id === tourPackage);
@@ -597,7 +601,8 @@ const Page = () => {
     clearing,
     selectedPackage,
     tourDate,
-    errors,
+    errors: visibleStep1Errors,
+    showValidationFeedback: step1ValidationAttempted,
     bookingType,
     groupSize,
     activeGuestTab,
@@ -722,6 +727,10 @@ const Page = () => {
     setGroupSize,
     setErrors,
     errors,
+    step1ValidationAttempted,
+    setStep1ValidationAttempted,
+    validationToastDismissed,
+    setValidationToastDismissed,
     ANIM_DURATION,
     checkExistingPaymentsAndMaybeProceed,
     isCreatingPayment,
@@ -882,7 +891,7 @@ const Page = () => {
                   dateMounted={dateMounted}
                   tourPackage={tourPackage}
                   tourDate={tourDate}
-                  errors={errors}
+                  errors={visibleStep1Errors}
                   tourDateOptions={tourDateOptions}
                   setShowTourModal={setShowTourModal}
                   setHighlightsExpanded={setHighlightsExpanded}

@@ -79,6 +79,10 @@ export type StepFooterActionsSectionProps = {
   setGroupSize: React.Dispatch<React.SetStateAction<number>>;
   setErrors: React.Dispatch<React.SetStateAction<{ [k: string]: string }>>;
   errors: { [k: string]: string };
+  step1ValidationAttempted: boolean;
+  setStep1ValidationAttempted: React.Dispatch<React.SetStateAction<boolean>>;
+  validationToastDismissed: boolean;
+  setValidationToastDismissed: React.Dispatch<React.SetStateAction<boolean>>;
   ANIM_DURATION: number;
   checkExistingPaymentsAndMaybeProceed: () => void | Promise<void>;
   isCreatingPayment: boolean;
@@ -133,6 +137,10 @@ export default function StepFooterActionsSection({
   setGroupSize,
   setErrors,
   errors,
+  step1ValidationAttempted,
+  setStep1ValidationAttempted,
+  validationToastDismissed,
+  setValidationToastDismissed,
   ANIM_DURATION,
   checkExistingPaymentsAndMaybeProceed,
   isCreatingPayment,
@@ -161,7 +169,9 @@ export default function StepFooterActionsSection({
   selectedPaymentPlanLabel,
 }: StepFooterActionsSectionProps) {
   const validationToastDescription =
-    step === 1 ? getStep1ValidationToastDescription(errors) : null;
+    step === 1 && step1ValidationAttempted && !validationToastDismissed
+      ? getStep1ValidationToastDescription(errors)
+      : null;
 
   return (
     <>
@@ -203,6 +213,8 @@ export default function StepFooterActionsSection({
               setAdditionalGuests([]);
               setGroupSize(3);
               setErrors({});
+              setStep1ValidationAttempted(false);
+              setValidationToastDismissed(false);
               setTimeout(() => setClearing(false), 10);
 
               setTimeout(() => {
@@ -225,6 +237,8 @@ export default function StepFooterActionsSection({
         <button
           type="button"
           onClick={() => {
+            setStep1ValidationAttempted(true);
+            setValidationToastDismissed(false);
             console.log("🔍 Continue to Payment clicked");
             console.log("📊 Validation state:", {
               isCreatingPayment,
@@ -751,8 +765,29 @@ export default function StepFooterActionsSection({
         <div
           role="alert"
           aria-live="assertive"
-          className="fixed left-3 right-3 top-3 z-[100] rounded-lg border border-destructive/30 bg-destructive px-4 py-3 text-destructive-foreground shadow-xl animate-in fade-in slide-in-from-top-2 sm:left-auto sm:right-4 sm:top-auto sm:bottom-4 sm:w-[420px] sm:max-w-[calc(100vw-2rem)] sm:px-5 sm:py-4"
+          className="fixed left-3 right-3 top-3 z-[100] rounded-lg border border-destructive/30 bg-destructive px-4 py-3 pr-11 text-destructive-foreground shadow-xl animate-in fade-in slide-in-from-top-2 sm:left-4 sm:right-auto sm:w-[420px] sm:max-w-[calc(100vw-2rem)] sm:px-5 sm:py-4 sm:pr-12"
         >
+          <button
+            type="button"
+            aria-label="Dismiss validation message"
+            onClick={() => setValidationToastDismissed(true)}
+            className="absolute right-3 top-3 inline-flex h-7 w-7 items-center justify-center rounded-full text-destructive-foreground/90 transition-colors hover:bg-white/15 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/60"
+          >
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+              aria-hidden
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
           <div className="text-sm font-semibold">
             Missing reservation details
           </div>

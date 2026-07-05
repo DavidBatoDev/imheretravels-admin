@@ -13,6 +13,7 @@ type NationalityOption = {
 type MainBookerFormSectionProps = {
   paymentConfirmed: boolean;
   errors: { [k: string]: string };
+  showValidationFeedback: boolean;
   fieldBase: string;
   fieldWithIcon: string;
   fieldFocus: string;
@@ -46,6 +47,7 @@ type MainBookerFormSectionProps = {
 export default function MainBookerFormSection({
   paymentConfirmed,
   errors,
+  showValidationFeedback,
   fieldBase,
   fieldWithIcon,
   fieldFocus,
@@ -323,7 +325,9 @@ export default function MainBookerFormSection({
             ariaLabel="Nationality"
             className="mt-1"
             disabled={paymentConfirmed}
-            isValid={!!nationality && !errors.nationality}
+            isValid={
+              showValidationFeedback && !!nationality && !errors.nationality
+            }
             searchable={true}
           />
           {errors.nationality && (

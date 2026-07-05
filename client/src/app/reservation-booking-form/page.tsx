@@ -721,6 +721,7 @@ const Page = () => {
     setAdditionalGuests,
     setGroupSize,
     setErrors,
+    errors,
     ANIM_DURATION,
     checkExistingPaymentsAndMaybeProceed,
     isCreatingPayment,

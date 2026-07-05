@@ -28,6 +28,31 @@ type AvailablePaymentTerm = {
   isLastMinute: boolean;
 };
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const getStep1ValidationToastDescription = (errors: { [k: string]: string }) => {
+  if (errors.tourPackage) {
+    return "Select a tour before continuing to payment.";
+  }
+
+  if (errors.tourDate) {
+    return "Choose your preferred tour date before continuing to payment.";
+  }
+
+  if (
+    errors.guests ||
+    Object.keys(errors).some((key) => key.startsWith("guest-"))
+  ) {
+    return "Check the highlighted guest details before continuing.";
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return "Check the highlighted personal details before continuing.";
+  }
+
+  return null;
+};
+
 export type StepFooterActionsSectionProps = {
   step: number;
   bookingConfirmed: boolean;
@@ -53,6 +78,7 @@ export type StepFooterActionsSectionProps = {
   setAdditionalGuests: React.Dispatch<React.SetStateAction<string[]>>;
   setGroupSize: React.Dispatch<React.SetStateAction<number>>;
   setErrors: React.Dispatch<React.SetStateAction<{ [k: string]: string }>>;
+  errors: { [k: string]: string };
   ANIM_DURATION: number;
   checkExistingPaymentsAndMaybeProceed: () => void | Promise<void>;
   isCreatingPayment: boolean;
@@ -106,6 +132,7 @@ export default function StepFooterActionsSection({
   setAdditionalGuests,
   setGroupSize,
   setErrors,
+  errors,
   ANIM_DURATION,
   checkExistingPaymentsAndMaybeProceed,
   isCreatingPayment,
@@ -133,9 +160,13 @@ export default function StepFooterActionsSection({
   numberOfPeople,
   selectedPaymentPlanLabel,
 }: StepFooterActionsSectionProps) {
+  const validationToastDescription =
+    step === 1 ? getStep1ValidationToastDescription(errors) : null;
+
   return (
-    <div className="flex items-center justify-between mt-2">
-      {step > 1 && !bookingConfirmed ? (
+    <>
+      <div className="flex items-center justify-between mt-2">
+        {step > 1 && !bookingConfirmed ? (
         <button
           type="button"
           onClick={() => {
@@ -198,7 +229,7 @@ export default function StepFooterActionsSection({
             console.log("📊 Validation state:", {
               isCreatingPayment,
               email: !!email,
-              emailValid: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email),
+              emailValid: EMAIL_REGEX.test(email),
               birthdate: !!birthdate,
               firstName: !!firstName,
               lastName: !!lastName,
@@ -218,7 +249,7 @@ export default function StepFooterActionsSection({
               guestDetailsValid: !guestDetails.some(
                 (guest) =>
                   !guest.email ||
-                  !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guest.email) ||
+                  !EMAIL_REGEX.test(guest.email) ||
                   !guest.birthdate ||
                   !guest.firstName ||
                   !guest.lastName ||
@@ -714,6 +745,22 @@ export default function StepFooterActionsSection({
           </div>
         </div>
       )}
-    </div>
+      </div>
+
+      {validationToastDescription && (
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="fixed left-3 right-3 top-3 z-[100] rounded-lg border border-destructive/30 bg-destructive px-4 py-3 text-destructive-foreground shadow-xl animate-in fade-in slide-in-from-top-2 sm:left-auto sm:right-4 sm:top-auto sm:bottom-4 sm:w-[420px] sm:max-w-[calc(100vw-2rem)] sm:px-5 sm:py-4"
+        >
+          <div className="text-sm font-semibold">
+            Missing reservation details
+          </div>
+          <div className="mt-1 text-sm leading-snug opacity-95">
+            {validationToastDescription}
+          </div>
+        </div>
+      )}
+    </>
   );
 }

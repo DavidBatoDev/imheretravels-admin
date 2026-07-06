@@ -2585,6 +2585,20 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
             <section id="section-reviews" className="mt-10 md:mt-14">
               <h2 className="font-hk-grotesk text-h3-mobile md:text-h3-desktop text-midnight">What people say about us</h2>
 
+              {/* Reviews are now managed centrally in the Tour Reviews dashboard —
+                  that collection (not this embedded editor) is what the website
+                  renders, including verified traveler submissions. */}
+              <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900">
+                <p className="font-body text-b4-desktop">
+                  Reviews shown on the website are now managed in the{" "}
+                  <a href="/reviews" className="font-semibold underline">
+                    Tour Reviews
+                  </a>{" "}
+                  dashboard — including verified traveler submissions, photos, and hide/publish.
+                  Edits made below are legacy and no longer appear on the site.
+                </p>
+              </div>
+
               {/* Empty state — greyed-out placeholder cards */}
               {reviewFields.length === 0 && (
                 <>

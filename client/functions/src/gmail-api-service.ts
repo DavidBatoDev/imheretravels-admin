@@ -138,6 +138,7 @@ export class GmailApiService {
     cc?: string[];
     from?: string;
     replyTo?: string;
+    headers?: Record<string, string>; // Extra headers, e.g. List-Unsubscribe
     attachments?: Array<{
       filename: string;
       content: Buffer;
@@ -154,6 +155,7 @@ export class GmailApiService {
         cc = [],
         from = "Bella | ImHereTravels <bella@imheretravels.com>",
         replyTo,
+        headers = {},
         attachments = [],
       } = emailData;
 
@@ -166,6 +168,7 @@ export class GmailApiService {
         cc,
         from,
         replyTo,
+        headers,
         attachments,
       });
 
@@ -536,6 +539,7 @@ export class GmailApiService {
     cc?: string[];
     from?: string;
     replyTo?: string;
+    headers?: Record<string, string>; // Extra headers, e.g. List-Unsubscribe
     attachments?: Array<{
       filename: string;
       content: Buffer;
@@ -551,6 +555,7 @@ export class GmailApiService {
       cc = [],
       from,
       replyTo,
+      headers = {},
       attachments = [],
     } = emailData;
 
@@ -578,6 +583,10 @@ export class GmailApiService {
 
       if (replyTo) {
         lines.push(`Reply-To: ${replyTo}`);
+      }
+
+      for (const [headerName, headerValue] of Object.entries(headers)) {
+        lines.push(`${headerName}: ${headerValue}`);
       }
 
       lines.push("");
@@ -609,6 +618,10 @@ export class GmailApiService {
 
     if (replyTo) {
       lines.push(`Reply-To: ${replyTo}`);
+    }
+
+    for (const [headerName, headerValue] of Object.entries(headers)) {
+      lines.push(`${headerName}: ${headerValue}`);
     }
 
     lines.push("");

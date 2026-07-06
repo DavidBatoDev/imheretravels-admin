@@ -31,8 +31,8 @@ export { onStripePaymentSuccess } from "./on-stripe-payment-success"; // Trigger
 export { processScheduledEmails } from "./scheduled-emails";
 // Export payment reminder trigger
 export { onPaymentReminderEnabled } from "./payment-reminder-trigger";
-// Export cleanup function for abandoned payments (runs daily at 2 AM UTC)
-export { cleanupAbandonedPayments } from "./scheduled-cleanup-abandoned-payments";
+// Follow-up emails for abandoned bookings + marketing contact capture (runs every 10 min)
+export { sendAbandonedBookingFollowUps } from "./scheduled-abandoned-booking-followups";
 // Export price history tracking function
 export { onTourPackagePriceUpdate } from "./on-tour-package-price-update";
 export { applyLateFeesDaily } from "./scheduled-late-fees";

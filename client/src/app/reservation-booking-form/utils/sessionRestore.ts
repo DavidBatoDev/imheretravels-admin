@@ -38,6 +38,26 @@ export const shouldAutoRestoreFromUrlPayment = (payment: {
   return getSessionRestoreStatus(payment) === "terms_selected";
 };
 
+/**
+ * URL restore for still-unpaid drafts, gated behind an explicit resume param
+ * (`?paymentid=<id>&resume=1`) so only abandoned-booking follow-up email links
+ * change behavior — organic `?paymentid=` navigation is untouched.
+ */
+export const shouldResumePendingFromUrl = (
+  payment: {
+    status?: string;
+    payment?: { status?: string };
+  },
+  hasResumeParam: boolean,
+): boolean => {
+  if (!hasResumeParam) {
+    return false;
+  }
+
+  const status = getSessionRestoreStatus(payment);
+  return status === "reserve_pending" || status === "pending";
+};
+
 export const getSessionRestoreRoute = (status: string): SessionRestoreRoute => {
   if (status === "reserve_pending") {
     return "pending-step2";

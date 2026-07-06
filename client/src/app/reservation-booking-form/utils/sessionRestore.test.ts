@@ -8,6 +8,7 @@ import {
   getSessionRestoreStatus,
   isStaleReservationSessionKey,
   shouldAutoRestoreFromUrlPayment,
+  shouldResumePendingFromUrl,
 } from "./sessionRestore";
 
 describe("sessionRestore", () => {
@@ -67,6 +68,35 @@ describe("sessionRestore", () => {
     ).toBe(true);
     expect(
       shouldAutoRestoreFromUrlPayment({ payment: { status: "reserve_paid" } }),
+    ).toBe(false);
+  });
+
+  it("resumes pending drafts from URL only with the resume param", () => {
+    expect(
+      shouldResumePendingFromUrl(
+        { payment: { status: "reserve_pending" } },
+        true,
+      ),
+    ).toBe(true);
+    expect(shouldResumePendingFromUrl({ status: "pending" }, true)).toBe(true);
+
+    // No resume param → organic ?paymentid= navigation stays unchanged
+    expect(
+      shouldResumePendingFromUrl(
+        { payment: { status: "reserve_pending" } },
+        false,
+      ),
+    ).toBe(false);
+
+    // Paid or plan-selected drafts never take the pending-resume path
+    expect(
+      shouldResumePendingFromUrl({ payment: { status: "reserve_paid" } }, true),
+    ).toBe(false);
+    expect(
+      shouldResumePendingFromUrl(
+        { payment: { status: "terms_selected" } },
+        true,
+      ),
     ).toBe(false);
   });
 

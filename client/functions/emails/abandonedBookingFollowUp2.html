@@ -1,0 +1,335 @@
+<!-- abandonedBookingFollowUp2.html - Nunjucks Version -->
+<!-- Sent ~1 day after a customer reaches the payment step without paying -->
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Your Reservation Is Still Saved</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #f5f5f5;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div
+      style="
+        font-family: Arial, sans-serif;
+        background-color: #f5f5f5;
+        margin: 0;
+        padding: 0;
+      "
+    >
+      <!-- Header with Logo -->
+      <div style="text-align: center; padding: 20px; background-color: #ffffff">
+        <img
+          src="https://firebasestorage.googleapis.com/v0/b/imheretravels-a3f81.firebasestorage.app/o/images%2F1768292814673_%F0%9F%9A%A3%20Logo%20Center%20(Row%20For%20Content%20Columns).png?alt=media&token=476fb69b-4cd5-4c56-901a-9190c15685f0"
+          alt="ImHereTravels Logo"
+          style="
+            width: 90%;
+            max-width: 550px;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+          "
+        />
+      </div>
+
+      <!-- Hero Image -->
+      <div style="width: 100%; margin: 0 auto">
+        <img
+          src="{% if tourPackageCoverImage %}{{ tourPackageCoverImage }}{% else %}https://firebasestorage.googleapis.com/v0/b/imheretravels-a3f81.firebasestorage.app/o/images%2F1767334951959_b0f582526af6adb523ad1036d0b0a6ff3437ea61.jpg?alt=media&token=c56af73d-0bfa-492d-8680-e1588d72d1b6{% endif %}"
+          alt="ImHereTravels Banner"
+          style="
+            width: 100%;
+            max-width: 636px;
+            height: 300px;
+            object-fit: cover;
+            object-position: 50% 85%;
+            display: block;
+            margin: 0 auto;
+          "
+        />
+      </div>
+
+      <div
+        style="
+          max-width: 600px;
+          margin: 0 auto;
+          background-color: #ffffff;
+          padding: 30px 20px;
+        "
+      >
+        <!-- Header -->
+        <div style="text-align: center; margin-bottom: 25px">
+          <h2
+            style="
+              color: #333333;
+              margin: 0;
+              font-size: 20px;
+              font-weight: bold;
+            "
+          >
+            We saved your reservation
+          </h2>
+        </div>
+
+        <!-- Greeting -->
+        <p style="font-size: 15px; color: #666666; margin: 0 0 20px 0">
+          Hi <strong>{{ firstName }}</strong>,
+        </p>
+
+        <p style="font-size: 15px; color: #666666; margin: 0 0 15px 0">
+          Still thinking it over? Your saved reservation for
+          <strong style="color: #e74c3c">{{ tourPackageName }}</strong
+          >{% if tourDate %} on <strong>{{ tourDate }}</strong>{% endif %} is
+          still available — but our group sizes are limited and dates can fill
+          up.
+        </p>
+
+        <p style="font-size: 15px; color: #666666; margin: 0 0 25px 0">
+          If something held you back — a question, a doubt, or just timing —
+          we'd genuinely love to hear about it. Reply to this email and Bella
+          will help you out.
+        </p>
+
+        <!-- Reservation Details -->
+        <div
+          style="
+            background-color: #f5f5f5;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border-left: 5px solid #e74c3c;
+          "
+        >
+          <h3
+            style="
+              color: #333333;
+              margin: 0 0 15px 0;
+              font-size: 16px;
+              font-weight: bold;
+            "
+          >
+            Your Saved Reservation
+          </h3>
+          <table
+            style="width: 100%; border-collapse: collapse; font-size: 14px"
+          >
+            <tr style="border-bottom: 1px solid #e0e0e0">
+              <td style="padding: 10px 0; color: #666666; font-weight: 500">
+                Tour
+              </td>
+              <td style="padding: 10px 0; color: #333333; text-align: right">
+                {{ tourPackageName }}
+              </td>
+            </tr>
+            {% if tourDate %}
+            <tr style="border-bottom: 1px solid #e0e0e0">
+              <td style="padding: 10px 0; color: #666666; font-weight: 500">
+                Departure Date
+              </td>
+              <td style="padding: 10px 0; color: #333333; text-align: right">
+                {{ tourDate }}
+              </td>
+            </tr>
+            {% endif %}
+            {% if reservationFee %}
+            <tr>
+              <td style="padding: 10px 0; color: #666666; font-weight: 500">
+                Reservation Fee
+              </td>
+              <td
+                style="
+                  padding: 10px 0;
+                  color: #e74c3c;
+                  font-weight: bold;
+                  text-align: right;
+                "
+              >
+                {{ reservationFee }}
+              </td>
+            </tr>
+            {% endif %}
+          </table>
+        </div>
+
+        <!-- CTA -->
+        <div style="text-align: center; margin: 30px 0">
+          <a
+            href="{{ resumeUrl }}"
+            target="_blank"
+            style="
+              display: inline-block;
+              background-color: #e74c3c;
+              color: white;
+              text-decoration: none;
+              font-weight: bold;
+              padding: 14px 36px;
+              border-radius: 25px;
+              font-size: 15px;
+              text-align: center;
+            "
+          >
+            Complete my reservation
+          </a>
+          <p style="font-size: 12px; color: #999999; margin: 15px 0 0 0">
+            If the button doesn't work, copy and paste this link into your
+            browser:
+          </p>
+          <p
+            style="
+              font-size: 12px;
+              color: #999999;
+              margin: 5px 0 0 0;
+              word-break: break-all;
+            "
+          >
+            {{ resumeUrl }}
+          </p>
+        </div>
+
+        <p style="font-size: 14px; color: #666666; margin: 0 0 25px 0">
+          Everything you entered is still saved — completing your reservation
+          takes under a minute.
+        </p>
+
+        <!-- Closing Message -->
+        <p style="font-size: 15px; color: #666666; margin: 25px 0 10px 0">
+          We hope to see you out there!
+        </p>
+        <p style="font-size: 15px; color: #666666; margin: 10px 0">
+          Warm regards,
+        </p>
+        <p style="font-size: 15px; color: #333333; margin: 10px 0">
+          <strong>Bella | ImHereTravels</strong>
+        </p>
+
+        <!-- Need Help Section -->
+        <div
+          style="
+            background-color: #f5f5f5;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border-left: 5px solid #e74c3c;
+            text-align: center;
+          "
+        >
+          <h4
+            style="
+              color: #333333;
+              margin: 0 0 12px 0;
+              font-size: 14px;
+              font-weight: bold;
+            "
+          >
+            Need help?
+          </h4>
+          <p style="font-size: 13px; color: #666666; margin: 5px 0">
+            Email us at
+            <a
+              href="mailto:bella@imheretravels.com"
+              style="color: #e74c3c; text-decoration: none"
+              >bella@imheretravels.com</a
+            >
+          </p>
+          <p style="font-size: 13px; color: #666666; margin: 5px 0 15px 0">
+            or call us at <strong>+63 998 247 6847</strong>
+          </p>
+
+          <!-- Social Media Icons -->
+          <div style="margin-top: 15px">
+            <p
+              style="
+                color: #333333;
+                font-size: 13px;
+                font-weight: bold;
+                margin: 0 0 10px 0;
+              "
+            >
+              Connect
+            </p>
+            <a
+              href="https://instagram.com/imheretravels"
+              style="display: inline-block; margin: 0 8px"
+            >
+              <img
+                src="https://firebasestorage.googleapis.com/v0/b/imheretravels-a3f81.firebasestorage.app/o/images%2F1769577611985_instagram-icon.png?alt=media&token=26e11a52-4b1b-4323-bca0-8ffb3b8889ab"
+                alt="Instagram"
+                style="width: 24px; height: 24px; display: inline-block"
+              />
+            </a>
+            <a
+              href="https://www.facebook.com/profile.php?id=100089932897402"
+              style="display: inline-block; margin: 0 8px"
+            >
+              <img
+                src="https://firebasestorage.googleapis.com/v0/b/imheretravels-a3f81.firebasestorage.app/o/images%2F1769578187350_facebook-icon.png?alt=media&token=0d59a081-d764-463a-8949-533dab620dc0"
+                alt="Facebook"
+                style="width: 24px; height: 24px; display: inline-block"
+              />
+            </a>
+            <a
+              href="https://www.tiktok.com/@imheretravels"
+              style="display: inline-block; margin: 0 8px"
+            >
+              <img
+                src="https://firebasestorage.googleapis.com/v0/b/imheretravels-a3f81.firebasestorage.app/o/images%2F1769577615216_tiktok-icon.png?alt=media&token=2d2d9e95-52c5-4cf7-8906-7377ad7957d8"
+                alt="TikTok"
+                style="width: 24px; height: 24px; display: inline-block"
+              />
+            </a>
+            <a
+              href="https://imheretravels.com"
+              style="display: inline-block; margin: 0 8px"
+            >
+              <img
+                src="https://firebasestorage.googleapis.com/v0/b/imheretravels-a3f81.firebasestorage.app/o/images%2F1769577613602_link-icon.png?alt=media&token=2a058d58-eaf7-4f53-bdea-845b2409764d"
+                alt="Website"
+                style="width: 24px; height: 24px; display: inline-block"
+              />
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div
+        style="
+          max-width: 600px;
+          margin: 0 auto;
+          background-color: #2c3e50;
+          padding: 30px 20px;
+          text-align: center;
+          color: #999;
+          font-size: 12px;
+        "
+      >
+        <div style="margin-bottom: 15px">
+          <img
+            src="https://firebasestorage.googleapis.com/v0/b/imheretravels-a3f81.firebasestorage.app/o/images%2F1768292814673_%F0%9F%9A%A3%20Logo%20Center%20(Row%20For%20Content%20Columns).png?alt=media&token=476fb69b-4cd5-4c56-901a-9190c15685f0"
+            alt="ImHereTravels Logo"
+            style="width: 150px; height: auto; margin-bottom: 10px"
+          />
+        </div>
+        <p style="color: #666; margin: 0 0 10px 0">
+          © {{ currentYear }} I'm Here Travels. All rights reserved.
+        </p>
+        <p style="color: #666; margin: 0; font-size: 11px">
+          You're receiving this because you started a booking at ImHereTravels.
+          <a
+            href="{{ unsubscribeUrl }}"
+            style="color: #999; text-decoration: underline"
+            >Unsubscribe</a
+          >
+          from these emails.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

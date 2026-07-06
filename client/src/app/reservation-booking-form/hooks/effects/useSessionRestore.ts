@@ -3,9 +3,11 @@ import { getCountries, type Country } from "react-phone-number-input";
 import type { Firestore } from "firebase/firestore";
 import { deriveCustomerRestoreState } from "../../utils/customerHydration";
 import {
+  buildStripePaymentDocSessionKey,
   getSessionRestoreRoute,
   getSessionRestoreStatus,
   shouldAutoRestoreFromUrlPayment,
+  shouldResumePendingFromUrl,
 } from "../../utils/sessionRestore";
 import {
   deriveBookingRestoreState,
@@ -107,6 +109,7 @@ export const useSessionRestore = ({
     const loadFromSession = async () => {
       try {
         const urlPaymentId = searchParams?.get("paymentid");
+        const hasResumeParam = searchParams?.get("resume") === "1";
 
         if (urlPaymentId) {
           try {
@@ -181,6 +184,82 @@ export const useSessionRestore = ({
                   setSelectedPaymentPlan(data.payment.selectedPaymentPlan);
                 setStep(3);
                 setCompletedSteps([1, 2, 3]);
+
+                return;
+              }
+
+              // Unpaid draft opened from a follow-up email link
+              // (?paymentid=<id>&resume=1): rehydrate and land on the
+              // payment step, mirroring the sessionStorage pending-step2 path.
+              if (shouldResumePendingFromUrl(data, hasResumeParam)) {
+                if (debug)
+                  console.debug("URL restore (pending resume): loading doc", {
+                    urlPaymentId,
+                    data,
+                  });
+
+                if (!mounted) return;
+
+                setPaymentDocId(urlPaymentId);
+
+                const restoredCustomer = deriveCustomerRestoreState({
+                  record: data,
+                  countries: getCountries(),
+                  getCallingCode: (country) =>
+                    safeGetCountryCallingCode(country as Country),
+                  onUnmatchedPhone: "set-number",
+                });
+                if (restoredCustomer.email) setEmail(restoredCustomer.email);
+                if (restoredCustomer.firstName)
+                  setFirstName(restoredCustomer.firstName);
+                if (restoredCustomer.lastName)
+                  setLastName(restoredCustomer.lastName);
+                if (restoredCustomer.birthdate)
+                  setBirthdate(restoredCustomer.birthdate);
+                if (restoredCustomer.nationality)
+                  setNationality(restoredCustomer.nationality);
+                if (restoredCustomer.whatsAppCountry)
+                  setWhatsAppCountry(
+                    restoredCustomer.whatsAppCountry as Country,
+                  );
+                if (restoredCustomer.whatsAppNumber)
+                  setWhatsAppNumber(restoredCustomer.whatsAppNumber);
+                const restoredBookingState = deriveBookingRestoreState(data);
+
+                if (data.booking?.type)
+                  setBookingType(restoredBookingState.bookingType);
+                if (typeof data.booking?.groupSize === "number")
+                  setGroupSize(restoredBookingState.groupSize);
+
+                if (restoredBookingState.shouldMountGuests) {
+                  scheduleGuestsMountHeightSync({
+                    setGuestsMounted,
+                    getContentHeight: () =>
+                      guestsContentRef.current?.scrollHeight ?? 0,
+                    setGuestsHeight,
+                  });
+                }
+
+                setAdditionalGuests(restoredBookingState.additionalGuests);
+                if (data.tour?.packageId) setTourPackage(data.tour.packageId);
+                if (data.tour?.date) setTourDate(data.tour.date);
+
+                // Persist the session key so in-tab behavior afterwards
+                // matches an organic (non-email) session.
+                try {
+                  if (data.customer?.email && data.tour?.packageId) {
+                    sessionStorage.setItem(
+                      buildStripePaymentDocSessionKey(
+                        data.customer.email,
+                        data.tour.packageId,
+                      ),
+                      urlPaymentId,
+                    );
+                  }
+                } catch {}
+
+                setStep(2);
+                setCompletedSteps((prev) => Array.from(new Set([...prev, 1])));
 
                 return;
               }

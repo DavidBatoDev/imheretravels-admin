@@ -61,6 +61,16 @@ export interface StripePaymentDocument {
     sentAt?: Timestamp; // When notification was sent
   };
 
+  // ========== Abandoned-Booking Follow-Up Tracking (Nested Object) ==========
+  // Written by the sendAbandonedBookingFollowUps Cloud Function. Deliberately
+  // separate from timestamps.updatedAt so the abandoned-payments cleanup job
+  // still treats the draft as inactive.
+  followUps?: {
+    first?: { sentAt: Timestamp; messageId: string };
+    second?: { sentAt: Timestamp; messageId: string };
+    suppressedReason?: string; // e.g. "paid_elsewhere" | "unsubscribed" | "recently_emailed"
+  };
+
   // ========== Timestamps (Nested Object) ==========
   timestamps: {
     createdAt: Timestamp; // When payment was initiated

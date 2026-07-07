@@ -124,6 +124,10 @@ const schema = z.object({
   footnote: z.string().optional().or(z.literal("")),
   brochureLink: z.string().url().optional().or(z.literal("")),
   preDeparturePack: z.string().url().optional().or(z.literal("")),
+  // TourRadar per-tour review widget. `Url` accepts the iframe src OR the full
+  // "<iframe …>" embed snippet from the Widget Center, so it's a free string.
+  tourRadarWidgetId: z.string().optional().or(z.literal("")),
+  tourRadarWidgetUrl: z.string().optional().or(z.literal("")),
   pricing: z.object({
     original: z.preprocess(toOptionalNumber, z.number().min(0.01)),
     discounted: optNum,
@@ -987,6 +991,7 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
       destinations: [],
       stripePaymentLink: "", depositNote: "", footnote: "",
       brochureLink: "", preDeparturePack: "",
+      tourRadarWidgetId: "", tourRadarWidgetUrl: "",
       pricing: { original: undefined, discounted: undefined, deposit: undefined, currency: "GBP" },
       travelDates: [{ startDate: "", endDate: "", isAvailable: true, hasCustomPricing: false,
         customOriginal: undefined, customDiscounted: undefined, customDeposit: undefined,
@@ -1172,6 +1177,8 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
         stripePaymentLink: tour.stripePaymentLink ?? "", depositNote: (tour as any).depositNote ?? "",
         footnote: (tour as any).footnote ?? "", brochureLink: tour.brochureLink ?? "",
         preDeparturePack: tour.preDeparturePack ?? "",
+        tourRadarWidgetId: (tour as any).tourRadarWidgetId ?? "",
+        tourRadarWidgetUrl: (tour as any).tourRadarWidgetUrl ?? "",
         pricing: tour.pricing ? {
           original: tour.pricing.original ?? undefined, discounted: tour.pricing.discounted ?? undefined,
           deposit: tour.pricing.deposit ?? undefined, currency: tour.pricing.currency || "GBP",
@@ -2597,6 +2604,32 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
                   dashboard — including verified traveler submissions, photos, and hide/publish.
                   Edits made below are legacy and no longer appear on the site.
                 </p>
+              </div>
+
+              {/* TourRadar per-tour review widget (from Operator Dashboard → Widget
+                  Center). When set, www renders a "Reviews on TourRadar" section on
+                  this tour's page. Paste the iframe src URL or the full embed snippet. */}
+              <div className="mt-6 rounded-lg border border-border px-4 py-3 space-y-2">
+                <p className="font-body text-b4-desktop font-semibold text-midnight">
+                  TourRadar reviews widget
+                </p>
+                <div data-field="tourRadarWidgetUrl" className="flex items-center gap-2 border border-border rounded-md px-3 py-1.5">
+                  <ExternalLink className="h-3.5 w-3.5 text-dark-gray shrink-0" />
+                  <InlineInput
+                    value={gv("tourRadarWidgetUrl") ?? ""}
+                    onChange={(v) => sv("tourRadarWidgetUrl", v)}
+                    placeholder="TourRadar widget embed URL (iframe src) or full snippet"
+                    className="font-body text-b4-desktop text-dark-gray"
+                  />
+                </div>
+                <div data-field="tourRadarWidgetId" className="flex items-center gap-2 border border-border rounded-md px-3 py-1.5">
+                  <InlineInput
+                    value={gv("tourRadarWidgetId") ?? ""}
+                    onChange={(v) => sv("tourRadarWidgetId", v)}
+                    placeholder="TourRadar widget id (optional)"
+                    className="font-body text-b4-desktop text-dark-gray"
+                  />
+                </div>
               </div>
 
               {/* Empty state — greyed-out placeholder cards */}

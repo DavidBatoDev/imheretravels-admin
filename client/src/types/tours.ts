@@ -35,6 +35,10 @@ export interface TourPackage {
   brochureLink?: string; // Google Drive or other brochure link
   stripePaymentLink?: string; // Stripe payment link
   preDeparturePack?: string; // Pre-departure pack link
+  // TourRadar per-tour "Tour Reviews" widget (from Operator Dashboard → Widget Center).
+  // Store whichever the Widget Center emits: a bare widget id and/or a full embed URL.
+  tourRadarWidgetId?: string;
+  tourRadarWidgetUrl?: string;
   // WWW PRESENTATION FIELDS
   seo?: { title?: string; description?: string }; // SEO overrides; falls back to name/description
   comingSoon?: boolean; // Gate full content on www
@@ -274,6 +278,8 @@ export interface TourFormDataWithStringDates {
   brochureLink?: string;
   stripePaymentLink?: string;
   preDeparturePack?: string;
+  tourRadarWidgetId?: string;
+  tourRadarWidgetUrl?: string;
   previousSlugs?: PreviousSlug[];
 }
 

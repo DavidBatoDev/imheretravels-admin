@@ -56,6 +56,13 @@ export function subscribeToReviews(
           verified: raw.verified === true,
           bookingId: raw.bookingId || undefined,
           bookingCode: raw.bookingCode || undefined,
+          externalId: raw.externalId || undefined,
+          externalSource: raw.externalSource || undefined,
+          externalUpdatedAt: toMillis(raw.externalUpdatedAt) || undefined,
+          externalReply: raw.externalReply || undefined,
+          reviewerFullName: raw.reviewerFullName || undefined,
+          assigned: raw.assigned === true,
+          deletedOnGoogleAt: toMillis(raw.deletedOnGoogleAt) || undefined,
           createdAt: toMillis(raw.createdAt),
           updatedAt: toMillis(raw.updatedAt),
           displayDate: raw.displayDate || undefined,
@@ -108,6 +115,61 @@ export async function updateReviewPhotos(
     updatedAt: Timestamp.now(),
   });
   await pingRevalidate(pathsFor(tourSlug));
+}
+
+export interface ReviewEdits {
+  rating: number;
+  title?: string;
+  bodyMarkdown: string;
+  reviewerFirstName: string;
+  reviewerLastName?: string;
+  reviewerLocation?: string;
+  displayDate?: string;
+}
+
+export async function updateReview(
+  id: string,
+  edits: ReviewEdits,
+  tourSlug?: string,
+): Promise<void> {
+  await updateDoc(doc(db, COLLECTION, id), {
+    rating: edits.rating,
+    title: edits.title ?? null,
+    bodyMarkdown: edits.bodyMarkdown,
+    reviewerFirstName: edits.reviewerFirstName,
+    reviewerLastName: edits.reviewerLastName ?? null,
+    reviewerLocation: edits.reviewerLocation ?? null,
+    displayDate: edits.displayDate ?? null,
+    updatedAt: Timestamp.now(),
+  });
+  await pingRevalidate(pathsFor(tourSlug));
+}
+
+/**
+ * Assign an external (e.g. Google) review to a tour, or mark it hub-only.
+ *
+ * Google reviews arrive with no tour association (empty tour fields). This is the
+ * sanctioned way to place one on a tour page: pass the target tour, or `null` to
+ * clear the assignment (review then shows only on the community hub). `assigned`
+ * is set true either way so it's out of the "untriaged" bucket. When the tour
+ * changes we revalidate BOTH the new and previous tour paths so the old page
+ * drops it.
+ */
+export async function assignReviewTour(
+  id: string,
+  tour: { id: string; slug: string; name: string } | null,
+  prevSlug?: string,
+): Promise<void> {
+  await updateDoc(doc(db, COLLECTION, id), {
+    tourId: tour?.id ?? "",
+    tourSlug: tour?.slug ?? "",
+    tourName: tour?.name ?? "",
+    assigned: true,
+    updatedAt: Timestamp.now(),
+  });
+  const paths = new Set(pathsFor(tour?.slug));
+  if (prevSlug && prevSlug !== tour?.slug) paths.add(`/tours/${prevSlug}`);
+  await pingRevalidate(Array.from(paths));
 }
 
 export async function deleteReview(id: string, tourSlug?: string): Promise<void> {

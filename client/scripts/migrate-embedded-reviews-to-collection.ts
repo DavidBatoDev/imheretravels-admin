@@ -21,6 +21,9 @@
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import * as path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Initialize Firebase Admin if not already initialized
 if (getApps().length === 0) {

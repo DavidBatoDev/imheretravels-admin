@@ -13,7 +13,8 @@
     "delete-migration-emails": "ts-node src/delete-migration-emails-script.ts",
     "cleanup-booking-links": "ts-node src/cleanup-booking-links-script.ts",
     "update-scheduled-email-rows": "ts-node src/update-scheduled-email-rows-script.ts",
-    "skip-old-emails": "ts-node src/skip-old-emails-script.ts"
+    "skip-old-emails": "ts-node src/skip-old-emails-script.ts",
+    "test:google-reviews": "ts-node src/google-reviews-map.test.ts"
   },
   "engines": {
     "node": "20"

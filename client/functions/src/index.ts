@@ -38,6 +38,8 @@ export { onTourPackagePriceUpdate } from "./on-tour-package-price-update";
 export { applyLateFeesDaily } from "./scheduled-late-fees";
 // Publishes tours whose scheduledPublishAt time has passed (runs every 15 min)
 export { publishScheduledTours } from "./scheduled-publish-tours";
+// Imports Google Business Profile reviews into tourReviews (runs every 6 hours)
+export { syncGoogleReviews } from "./scheduled-sync-google-reviews";
 export { exportProdFirestoreCollections } from "./scheduled-prod-firestore-export";
 
 // export { telegramBot } from "./telegram-bot";

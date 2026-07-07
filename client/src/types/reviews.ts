@@ -8,7 +8,12 @@
  */
 
 export type ReviewStatus = "published" | "hidden" | "pending";
-export type ReviewSource = "user" | "admin";
+export type ReviewSource = "user" | "admin" | "google" | "tourradar";
+
+/** True for federated reviews (Google/TourRadar) — cards only, never count toward ratings. */
+export function isExternalSource(source?: ReviewSource): boolean {
+  return source === "google" || source === "tourradar";
+}
 
 /** Full Firestore document shape for `tourReviews/{id}`. */
 export interface ReviewDoc {
@@ -34,6 +39,17 @@ export interface ReviewDoc {
 
   bookingId?: string; // PRIVATE — audit/dedup only
   bookingCode?: string; // PRIVATE — audit/dedup only
+
+  // External-source provenance (present when source === "google"). Federated
+  // reviews arrive with no tour: tourId/tourSlug/tourName stay "" until an admin
+  // assigns a tour (or marks the review hub-only).
+  externalId?: string; // dedup key = external review id / content hash
+  externalSource?: "google" | "tourradar"; // provider discriminator
+  externalUpdatedAt?: number; // epoch ms, Google updateTime — detects edits on re-sync
+  externalReply?: string; // owner reply (reviewReply.comment), display-only
+  reviewerFullName?: string; // Google displayName as-received (before first-name split)
+  assigned?: boolean; // admin has triaged (assigned a tour OR marked hub-only)
+  deletedOnGoogleAt?: number; // epoch ms — flagged when absent from a later sync
 
   createdAt: number; // epoch ms
   updatedAt: number; // epoch ms

@@ -10,14 +10,14 @@ export const metadata: Metadata = {
 
 export default function ReviewsPage() {
   return (
-    <DashboardLayout>
+    <DashboardLayout fullWidth>
       <PermissionGuard permission="canManageTours">
-        <div className="space-y-6">
+        <div className="space-y-5 px-4 py-6 sm:px-6 lg:px-8">
           <div>
-            <h1 className="text-3xl font-bold text-foreground font-hk-grotesk">
+            <h1 className="text-2xl font-bold text-foreground font-hk-grotesk">
               Tour Reviews
             </h1>
-            <p className="text-muted-foreground text-lg">
+            <p className="mt-1 text-base text-muted-foreground">
               Moderate traveler reviews, add photos, and hide or publish reviews
             </p>
           </div>

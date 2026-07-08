@@ -42,7 +42,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Star, MoreHorizontal, Eye, EyeOff, Trash2, ImagePlus, X, Plus, Search,
   BadgeCheck, Loader2, Pencil, ExternalLink, ChevronDown, ChevronUp, FilterX,
-  Smile, UploadCloud, MapPin,
+  Smile, UploadCloud, MapPin, Play,
 } from "lucide-react";
 
 const ALLOWED = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
@@ -617,6 +617,31 @@ export default function ReviewsList() {
                                   <X className="h-3 w-3" />
                                 </button>
                               </span>
+                            ))}
+                          </div>
+                        )}
+                        {r.videos && r.videos.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {r.videos.map((v) => (
+                              <a
+                                key={v.src}
+                                href={v.src}
+                                target="_blank"
+                                rel="noreferrer"
+                                title="Play video"
+                                className="group relative block h-14 w-14 overflow-hidden rounded ring-1 ring-border"
+                              >
+                                {v.poster ? (
+                                  <img src={v.poster} alt="" className="h-full w-full object-cover transition group-hover:opacity-80" />
+                                ) : (
+                                  <span className="flex h-full w-full items-center justify-center bg-muted" />
+                                )}
+                                <span className="absolute inset-0 flex items-center justify-center">
+                                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black/55 text-white">
+                                    <Play className="h-3.5 w-3.5 fill-current" />
+                                  </span>
+                                </span>
+                              </a>
                             ))}
                           </div>
                         )}

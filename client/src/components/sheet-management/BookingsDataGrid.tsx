@@ -1303,6 +1303,14 @@ export default function BookingsDataGrid({
     ) => {
       const key = `${rowId}:${columnId}`;
 
+      // Never persist edits to read-only columns (e.g. late-fee penalties), which
+      // may only be written by the guarded late-fee engine. This is the backstop
+      // for every editing path, regardless of how the cell was rendered.
+      const targetColumn = columns.find((c) => c.id === columnId);
+      if (targetColumn?.readOnly) {
+        return;
+      }
+
       // Convert value based on data type
       let finalValue: any = value;
       if (dataType === "currency") {
@@ -1318,6 +1326,9 @@ export default function BookingsDataGrid({
         if (localRowId === rowId && localColumnId !== columnId) {
           // Convert based on column type
           const col = columns.find((c) => c.id === localColumnId);
+          if (col?.readOnly) {
+            return; // never persist read-only columns via the batch save
+          }
           let convertedValue: any = localValue;
           if (col?.dataType === "currency") {
             convertedValue =
@@ -3836,6 +3847,21 @@ export default function BookingsDataGrid({
 
           const cellValue = row[column.key as keyof SheetData];
           const displayValue = getInputValue(row.id, column.key, cellValue);
+
+          // Read-only columns (e.g. late-fee penalties) are never editable in the
+          // grid — they may only be written by the guarded late-fee engine.
+          if (col.readOnly) {
+            return (
+              <span
+                className={`flex h-8 w-full items-center px-2 text-xs ${
+                  hasColor ? "text-black" : "text-muted-foreground"
+                }`}
+                title="Read-only — set automatically by the system"
+              >
+                {displayValue}
+              </span>
+            );
+          }
 
           const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
             const newValue = e.target.value;

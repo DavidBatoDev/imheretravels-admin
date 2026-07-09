@@ -10,5 +10,7 @@ export const p2LateFeesPenaltyColumn: BookingSheetColumn = {
     includeInForms: false,
     color: "yellow",
     width: 150,
+    // Late fees may only be set by the guarded late-fee engine, never typed in by hand.
+    readOnly: true,
   },
 };

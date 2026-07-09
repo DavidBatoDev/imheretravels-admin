@@ -11,7 +11,7 @@ import {
   setDoc,
   where,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import type { Booking } from "@/types/bookings";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -159,6 +159,8 @@ export default function LateFeesSection() {
   const [isResendNoticeFlow, setIsResendNoticeFlow] = useState(false);
   const [isLoadingNoticePreview, setIsLoadingNoticePreview] = useState(false);
   const [isSendingNotice, setIsSendingNotice] = useState(false);
+  const [waiveRow, setWaiveRow] = useState<LateFeeRow | null>(null);
+  const [isWaiving, setIsWaiving] = useState(false);
 
   useEffect(() => {
     setQuickSort("overdue-desc");
@@ -575,6 +577,34 @@ export default function LateFeesSection() {
     }
   };
 
+  const handleConfirmWaive = async () => {
+    if (!waiveRow) return;
+
+    setIsWaiving(true);
+    try {
+      await ScheduledEmailService.waiveLateFee(
+        waiveRow.bookingDocId,
+        waiveRow.termKey,
+        { waivedBy: auth.currentUser?.email || undefined },
+      );
+
+      toast({
+        title: "Late Fee Waived",
+        description: `${waiveRow.term} late fee removed for ${waiveRow.bookingCode}.`,
+      });
+      setWaiveRow(null);
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Error",
+        description: "Failed to waive late fee.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsWaiving(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -837,6 +867,18 @@ export default function LateFeesSection() {
                               -
                             </span>
                           )}
+
+                          {row.penalty > 0 && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 px-3 text-red-600 hover:text-red-700"
+                              disabled={isBusy}
+                              onClick={() => setWaiveRow(row)}
+                            >
+                              Waive
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -870,6 +912,32 @@ export default function LateFeesSection() {
               disabled={isProcessingNow}
             >
               {isProcessingNow ? "Sending..." : "Send notice to all pending"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={waiveRow !== null}
+        onOpenChange={(open) => {
+          if (!open) setWaiveRow(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Waive this late fee?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {waiveRow
+                ? `This removes the ${waiveRow.term} late fee (${formatGBP(
+                    waiveRow.penalty,
+                  )}) for ${waiveRow.bookingCode} — ${waiveRow.fullName}, restoring their balance. This action is logged.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isWaiving}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmWaive} disabled={isWaiving}>
+              {isWaiving ? "Waiving..." : "Waive late fee"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

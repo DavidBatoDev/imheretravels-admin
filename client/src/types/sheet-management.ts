@@ -77,6 +77,7 @@ export interface SheetColumn {
   loadOptions?: (context?: { formData?: any }) => Promise<string[]>; // Dynamic options loader for select type columns (can access formData for context-aware options)
   color?: ColumnColor; // Optional column color theme
   showColumn?: boolean; // Whether to show/hide this column in the grid (default: true)
+  readOnly?: boolean; // Whether this column is locked from manual editing in the grid (default: false)
   defaultValue?: any;
   validation?: {
     min?: number;

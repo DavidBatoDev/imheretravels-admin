@@ -533,6 +533,39 @@ export class ScheduledEmailService {
   }
 
   /**
+   * Waive (reverse) an applied late fee for a specific booking term.
+   */
+  static async waiveLateFee(
+    bookingId: string,
+    termKey: "p1" | "p2" | "p3" | "p4",
+    options?: {
+      reason?: string;
+      waivedBy?: string;
+    },
+  ) {
+    const response = await fetch("/api/late-fees/waive", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        bookingId,
+        termKey,
+        reason: options?.reason || "",
+        waivedBy: options?.waivedBy || "",
+      }),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || `HTTP error! status: ${response.status}`);
+    }
+
+    return result.data;
+  }
+
+  /**
    * Get editable late-fee notice content before sending.
    */
   static async getLateFeeNoticePreview(

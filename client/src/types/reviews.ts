@@ -21,6 +21,18 @@ export interface ReviewVideo {
   poster?: string; // still-frame image URL shown before playback
 }
 
+/** Airbnb-style per-category ratings (mirror of web/types/review.ts). */
+export const REVIEW_CATEGORIES = [
+  { key: "guide", label: "Guide" },
+  { key: "experience", label: "Experience" },
+  { key: "value", label: "Value" },
+  { key: "food", label: "Food" },
+  { key: "accommodation", label: "Accommodation" },
+] as const;
+
+export type CategoryKey = (typeof REVIEW_CATEGORIES)[number]["key"];
+export type CategoryRatings = Partial<Record<CategoryKey, number>>; // 1–5 per rated category
+
 /** Full Firestore document shape for `tourReviews/{id}`. */
 export interface ReviewDoc {
   id: string;
@@ -30,12 +42,14 @@ export interface ReviewDoc {
   tourName: string;
 
   rating: number; // 1–5
+  categoryRatings?: CategoryRatings; // optional per-category stars (first-party only)
   title?: string;
   bodyMarkdown: string;
 
   reviewerFirstName: string;
   reviewerLastName?: string;
   reviewerLocation?: string;
+  reviewerCountryEmoji?: string; // nationality flag (e.g. TourRadar countryEmoji)
   reviewerAvatar?: string;
   photos?: string[];
   videos?: ReviewVideo[];
@@ -69,6 +83,7 @@ export interface NewAdminReview {
   tourSlug: string;
   tourName: string;
   rating: number;
+  categoryRatings?: CategoryRatings;
   title?: string;
   bodyMarkdown: string;
   reviewerFirstName: string;
@@ -77,4 +92,8 @@ export interface NewAdminReview {
   reviewerAvatar?: string;
   photos?: string[];
   displayDate?: string;
+  /** Set when the optional booking-check step matched a confirmed booking. */
+  bookingId?: string;
+  bookingCode?: string;
+  verified?: boolean;
 }

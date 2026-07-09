@@ -203,6 +203,7 @@ async function main() {
         reviewerFirstName: first,
         ...(last ? { reviewerLastName: last } : {}),
         reviewerFullName: r.reviewer,
+        ...(r.countryEmoji ? { reviewerCountryEmoji: r.countryEmoji } : {}),
         ...(avatarUrl ? { reviewerAvatar: avatarUrl } : {}),
         ...(photoUrls.length ? { photos: photoUrls.filter(Boolean) } : {}),
         ...(videoObjs.length ? { videos: videoObjs } : {}),

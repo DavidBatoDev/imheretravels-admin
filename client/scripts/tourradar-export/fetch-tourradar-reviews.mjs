@@ -129,6 +129,7 @@ function parseReviews(fragment, tour) {
       tour: tour.name,
       reviewer: (j.authorName || "").trim(),
       avatar: httpsify((j.authorImage || "").trim()) || null,
+      countryEmoji: (j.countryEmoji || "").trim(), // nationality flag (may be "")
       rating: Number(j.rating) || 5,
       dateISO: iso,
       dateDisplayRaw: j.date || "", // e.g. "March 22nd, 2026" (with ordinal)

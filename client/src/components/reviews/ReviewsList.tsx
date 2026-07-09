@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, getDocs, query } from "firebase/firestore";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { db } from "@/lib/firebase";
 import { uploadFile, STORAGE_BUCKET } from "@/utils/file-upload";
 import {
@@ -13,9 +14,16 @@ import {
   createAdminReview,
   updateReview,
   assignReviewTour,
+  verifyAdminBooking,
+  tourNamesLooselyMatch,
+  type BookingCheckMatch,
 } from "@/services/reviews-service";
-import type { ReviewDoc } from "@/types/reviews";
-import { isExternalSource } from "@/types/reviews";
+import type { ReviewDoc, CategoryRatings } from "@/types/reviews";
+import { isExternalSource, REVIEW_CATEGORIES } from "@/types/reviews";
+import MarkdownEditor from "./MarkdownEditor";
+import DisplayDatePicker, { formatDisplayDate } from "./DisplayDatePicker";
+import NationalitySelect from "./NationalitySelect";
+import { getNationalityOptions } from "@/app/reservation-booking-form/utils/nationalityUtils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +37,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+  Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -42,8 +50,19 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Star, MoreHorizontal, Eye, EyeOff, Trash2, ImagePlus, X, Plus, Search,
   BadgeCheck, Loader2, Pencil, ExternalLink, ChevronDown, ChevronUp, FilterX,
-  Smile, UploadCloud, MapPin, Play,
+  Smile, MapPin, Play,
 } from "lucide-react";
+
+/** Matches the public site's write-review form (WriteReviewButton.tsx). */
+const FORM_LABEL_CLS = "mb-1.5 block font-hk-grotesk text-h6-desktop font-bold text-midnight";
+const FORM_INPUT_CLS =
+  "rounded-md border border-light-grey bg-white px-4 py-3 font-body text-b2-desktop text-midnight outline-none focus-visible:ring-0 focus:border-crimson-red placeholder:text-grey";
+
+/** Human-readable reasons for a failed booking check (mirrors www/app/api/reviews/verify/route.ts). */
+const BOOKING_CHECK_REASONS: Record<string, string> = {
+  not_found: "No booking found with that email or booking ID.",
+  not_confirmed: "That booking isn't confirmed or completed yet.",
+};
 
 const ALLOWED = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
 
@@ -132,6 +151,94 @@ function Stars({ n }: { n: number }) {
   );
 }
 
+/** Compact interactive 5-star picker (used for category ratings in both dialogs). */
+function StarPicker({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+}) {
+  const [hover, setHover] = useState(0);
+  return (
+    <div className="flex gap-0.5" role="radiogroup" aria-label="Rating">
+      {[1, 2, 3, 4, 5].map((n) => {
+        const active = (hover || value) >= n;
+        return (
+          <button
+            key={n}
+            type="button"
+            role="radio"
+            aria-checked={value === n}
+            aria-label={`${n} star${n > 1 ? "s" : ""}`}
+            onMouseEnter={() => setHover(n)}
+            onMouseLeave={() => setHover(0)}
+            onClick={() => onChange(value === n ? 0 : n)}
+            className="p-0.5"
+          >
+            <Star
+              className={`h-5 w-5 transition-colors ${
+                active ? "fill-crimson-red text-crimson-red" : "fill-transparent text-muted-foreground"
+              }`}
+            />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Optional per-category star inputs (Guide / Experience / …). */
+function CategoryStarInputs({
+  value,
+  onChange,
+}: {
+  value: CategoryRatings;
+  onChange: (v: CategoryRatings) => void;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-medium">
+        Category ratings <span className="font-normal text-muted-foreground">(optional)</span>
+      </label>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {REVIEW_CATEGORIES.map((cat) => (
+          <div key={cat.key} className="flex items-center justify-between gap-2">
+            <span className="text-sm text-foreground">{cat.label}</span>
+            <StarPicker
+              value={value[cat.key] ?? 0}
+              onChange={(n) => {
+                const next = { ...value };
+                if (n) next[cat.key] = n;
+                else delete next[cat.key];
+                onChange(next);
+              }}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Faithful port of the public site's `Stars` (www/app/components/reviews/Stars.tsx). */
+function CardStars({ count }: { count: number }) {
+  const rounded = Math.max(0, Math.min(5, Math.round(count)));
+  return (
+    <div className="flex gap-0.5 text-crimson-red" aria-label={`${rounded} out of 5 stars`}>
+      {Array.from({ length: 5 }).map((_, i) => (
+        <svg
+          key={i}
+          viewBox="0 0 20 20"
+          className={`size-4 ${i < rounded ? "fill-current" : "fill-light-grey"}`}
+        >
+          <path d="M10 1.5l2.6 5.3 5.9.9-4.2 4.1 1 5.8L10 14.9l-5.3 2.7 1-5.8L1.5 7.7l5.9-.9z" />
+        </svg>
+      ))}
+    </div>
+  );
+}
+
 function DisplayDateSelect({
   value,
   onChange,
@@ -161,6 +268,29 @@ function DisplayDateSelect({
   );
 }
 
+const MARKDOWN_PROSE_CLASSNAME = [
+  "font-body text-b2-mobile md:text-b2-desktop text-midnight",
+  "[&_p]:my-0 [&_p+p]:mt-3",
+  "[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5",
+  "[&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5",
+  "[&_li]:mt-1",
+  "[&_a]:text-crimson-red [&_a]:underline",
+  "[&_blockquote]:border-l-2 [&_blockquote]:border-light-grey [&_blockquote]:pl-4 [&_blockquote]:text-grey",
+  "[&_strong]:font-bold",
+  "[&_h3]:font-hk-grotesk [&_h3]:text-h6-desktop [&_h3]:font-bold [&_h3]:mt-3",
+  "[&_h4]:font-hk-grotesk [&_h4]:font-bold [&_h4]:mt-3",
+].join(" ");
+
+const MARKDOWN_ALLOWED = ["p", "br", "strong", "em", "del", "a", "ul", "ol", "li", "blockquote", "code", "h3", "h4"];
+
+const PREVIEW_PHOTO_COUNT = 3; // matches ReviewPhotos' preview-mode thumbnail cap
+
+/**
+ * Draft-data render of the public site's review card
+ * (www/app/components/reviews/ReviewCard.tsx) — same brand tokens, type scale
+ * and layout, adapted to take the create form's in-progress field values
+ * instead of a saved `PublicReview`.
+ */
 function ReviewPreview({
   tourName,
   rating,
@@ -181,6 +311,13 @@ function ReviewPreview({
   photos: string[];
 }) {
   const reviewBody = body.trim() || "Your review will appear here as you write.";
+  const date =
+    displayDate.trim() ||
+    new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric" }).format(
+      new Date(),
+    );
+  const shownPhotos = photos.slice(0, PREVIEW_PHOTO_COUNT);
+  const overflow = photos.length - shownPhotos.length;
 
   return (
     <div className="space-y-3">
@@ -190,55 +327,56 @@ function ReviewPreview({
         </p>
         <p className="text-sm text-muted-foreground">This mirrors the public review card.</p>
       </div>
-      <div className="rounded-lg border bg-background p-4 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-foreground">
-              {firstName.trim() || "Reviewer"}
-            </p>
-            <p className="truncate text-xs text-muted-foreground">
-              {location.trim() || "Location"}
-            </p>
-          </div>
-          <Stars n={rating} />
+
+      <div className="flex flex-col gap-5 rounded-lg bg-white p-8 shadow-small">
+        <div className="flex items-center justify-between gap-3">
+          <CardStars count={rating} />
+          <span className="font-body text-b4-desktop text-grey">{date}</span>
         </div>
-        {tourName && (
-          <p className="mt-3 rounded-md bg-muted/60 px-2.5 py-1.5 text-xs font-medium text-foreground">
-            {tourName}
+
+        {title.trim() && (
+          <p className="-mb-2 font-hk-grotesk text-h6-desktop font-bold text-midnight">
+            {title.trim()}
           </p>
         )}
-        {title.trim() && <h3 className="mt-3 text-base font-semibold">{title.trim()}</h3>}
-        <div className="mt-2 text-sm leading-6 text-muted-foreground">
-          <ReactMarkdown
-            components={{
-              p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-              strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
-              a: ({ children, href }) => (
-                <a href={href} className="font-medium text-crimson-red underline">
-                  {children}
-                </a>
-              ),
-              ul: ({ children }) => <ul className="mb-2 list-disc pl-5">{children}</ul>,
-              ol: ({ children }) => <ol className="mb-2 list-decimal pl-5">{children}</ol>,
-            }}
-          >
+
+        <div className={MARKDOWN_PROSE_CLASSNAME}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} allowedElements={MARKDOWN_ALLOWED}>
             {reviewBody}
           </ReactMarkdown>
         </div>
-        {photos.length > 0 && (
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            {photos.slice(0, 6).map((url) => (
-              <img
-                key={url}
-                src={url}
-                alt=""
-                className="aspect-square w-full rounded-md object-cover ring-1 ring-border"
-              />
+
+        {shownPhotos.length > 0 && (
+          <div className="grid grid-cols-3 gap-2">
+            {shownPhotos.map((url, i) => (
+              <div key={url} className="relative aspect-square w-full overflow-hidden rounded-sm bg-light-grey">
+                <img src={url} alt="" className="size-full object-cover" />
+                {overflow > 0 && i === shownPhotos.length - 1 && (
+                  <span className="absolute inset-0 flex items-center justify-center bg-midnight/60 font-hk-grotesk text-h6-desktop font-bold text-white">
+                    +{overflow}
+                  </span>
+                )}
+              </div>
             ))}
           </div>
         )}
-        <div className="mt-4 border-t pt-3 text-xs text-muted-foreground">
-          {displayDate || "Display date hidden"}
+
+        {tourName && (
+          <p className="font-body text-b4-desktop text-crimson-red underline">{tourName}</p>
+        )}
+
+        <div className="mt-auto flex items-center gap-4 pt-2">
+          <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-light-grey font-hk-grotesk text-h6-desktop font-bold text-midnight">
+            {(firstName.trim() || "Reviewer").charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate font-hk-grotesk text-h6-desktop font-bold text-midnight">
+              {firstName.trim() || "Reviewer"}
+            </p>
+            {location.trim() && (
+              <p className="font-body text-b4-desktop text-vivid-orange">{location.trim()}</p>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -896,20 +1034,75 @@ function CreateReviewDialog({
   onCreated: () => void;
 }) {
   const { toast } = useToast();
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [tourSlug, setTourSlug] = useState("");
   const [rating, setRating] = useState(5);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [categoryRatings, setCategoryRatings] = useState<CategoryRatings>({});
   const [firstName, setFirstName] = useState("");
-  const [location, setLocation] = useState("");
+  const [nationality, setNationality] = useState("");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  const [displayDate, setDisplayDate] = useState("");
+  const [displayDateISO, setDisplayDateISO] = useState("");
   const [photos, setPhotos] = useState<PendingPhoto[]>([]);
   const [saving, setSaving] = useState(false);
   const photosRef = useRef<PendingPhoto[]>([]);
   const selectedTour = tours.find((t) => t.slug === tourSlug);
   const previewPhotos = photos.map((photo) => photo.previewUrl);
+  const displayDate = displayDateISO ? formatDisplayDate(displayDateISO) : "";
+  const nationalityOptions = useMemo(() => getNationalityOptions(), []);
+
+  const [bookingIdentifier, setBookingIdentifier] = useState("");
+  const [bookingCheckState, setBookingCheckState] = useState<"idle" | "checking" | "verified" | "error">("idle");
+  const [bookingCheckMessage, setBookingCheckMessage] = useState("");
+  const [verifiedBooking, setVerifiedBooking] = useState<{ bookingId: string; bookingCode: string } | null>(null);
+  const [bookingChoices, setBookingChoices] = useState<BookingCheckMatch[] | null>(null);
+
+  function applyBookingMatch(match: BookingCheckMatch) {
+    // Exact match first — tour names often overlap ("Philippine Sunset" vs.
+    // "Philippine Sunset (with Jess)"), and loose substring matching alone
+    // would grab whichever overlapping tour happens to sort first.
+    const exact = tours.find((t) => t.name.trim().toLowerCase() === match.tourName.trim().toLowerCase());
+    const found = exact ?? tours.find((t) => tourNamesLooselyMatch(t.name, match.tourName));
+    if (found) setTourSlug(found.slug);
+    setVerifiedBooking({ bookingId: match.bookingId, bookingCode: match.bookingCode });
+    setBookingCheckState("verified");
+    setBookingCheckMessage(
+      found
+        ? `Confirmed booking — ${match.firstName || "traveler"} · ${found.name}`
+        : `Confirmed booking — ${match.firstName || "traveler"} · ${match.tourName} (no matching tour package — select manually)`,
+    );
+    if (!firstName.trim() && match.firstName) setFirstName(match.firstName);
+    if (!nationality && match.nationality) setNationality(match.nationality);
+    setBookingChoices(null);
+  }
+
+  async function checkBooking() {
+    const identifier = bookingIdentifier.trim();
+    if (!identifier) return;
+    setBookingCheckState("checking");
+    setBookingChoices(null);
+    try {
+      const result = await verifyAdminBooking({ identifier });
+      if (!result.ok) {
+        setBookingCheckState("error");
+        setBookingCheckMessage(BOOKING_CHECK_REASONS[result.reason] ?? "Booking check failed.");
+        setVerifiedBooking(null);
+        return;
+      }
+      if (result.matches.length === 1) {
+        applyBookingMatch(result.matches[0]);
+      } else {
+        setBookingChoices(result.matches);
+        setBookingCheckState("idle");
+        setBookingCheckMessage("");
+      }
+    } catch (e) {
+      setBookingCheckState("error");
+      setBookingCheckMessage(String(e));
+      setVerifiedBooking(null);
+    }
+  }
 
   useEffect(() => {
     photosRef.current = photos;
@@ -930,11 +1123,17 @@ function CreateReviewDialog({
   function reset() {
     setTourSlug("");
     setRating(5);
+    setCategoryRatings({});
     setFirstName("");
-    setLocation("");
+    setNationality("");
     setTitle("");
     setBody("");
-    setDisplayDate("");
+    setDisplayDateISO("");
+    setBookingIdentifier("");
+    setBookingCheckState("idle");
+    setBookingCheckMessage("");
+    setVerifiedBooking(null);
+    setBookingChoices(null);
     clearPhotos();
   }
 
@@ -1017,12 +1216,16 @@ function CreateReviewDialog({
         tourSlug: tour.slug,
         tourName: tour.name,
         rating,
+        categoryRatings: Object.keys(categoryRatings).length ? categoryRatings : undefined,
         title: title.trim() || undefined,
         bodyMarkdown: body.trim(),
         reviewerFirstName: firstName.trim(),
-        reviewerLocation: location.trim() || undefined,
+        reviewerLocation: nationality || undefined,
         photos: uploadedPhotos,
-        displayDate: displayDate.trim() || undefined,
+        displayDate: displayDate || undefined,
+        bookingId: verifiedBooking?.bookingId,
+        bookingCode: verifiedBooking?.bookingCode,
+        verified: !!verifiedBooking,
       });
       onCreated();
       reset();
@@ -1036,11 +1239,22 @@ function CreateReviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="grid max-h-[92vh] w-[calc(100vw-2rem)] max-w-6xl grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0">
+      <DialogContent
+        hideClose
+        className="grid max-h-[92vh] w-[calc(100vw-2rem)] max-w-6xl grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-lg bg-white p-0 shadow-xlarge"
+      >
+        <DialogClose
+          aria-label="Close"
+          className="absolute right-3 top-3 z-10 rounded-full bg-white/90 p-2 text-midnight shadow-small backdrop-blur transition-opacity hover:bg-light-grey focus:outline-none focus:ring-2 focus:ring-crimson-red disabled:pointer-events-none"
+        >
+          <X className="size-5" />
+        </DialogClose>
         <DialogHeader className="border-b px-6 py-5 pr-12">
-          <DialogTitle>Add a review</DialogTitle>
-          <DialogDescription>
-            Create an admin-authored review. It publishes immediately (unverified).
+          <DialogTitle className="font-hk-grotesk text-h4-desktop text-midnight">Add a review</DialogTitle>
+          <DialogDescription className="font-body text-b4-desktop text-grey">
+            {verifiedBooking
+              ? "Create an admin-authored review. It publishes immediately as a verified review."
+              : "Create an admin-authored review. It publishes immediately (unverified)."}
           </DialogDescription>
         </DialogHeader>
 
@@ -1048,9 +1262,72 @@ function CreateReviewDialog({
           <div className="min-h-0 overflow-y-auto px-6 py-5">
             <div className="space-y-4">
               <div>
-                <label className="mb-1.5 block text-sm font-medium">Tour</label>
+                <label className={FORM_LABEL_CLS}>
+                  Booking email or ID <span className="font-normal text-grey">(optional)</span>
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    value={bookingIdentifier}
+                    onChange={(e) => {
+                      setBookingIdentifier(e.target.value);
+                      setBookingCheckState("idle");
+                      setBookingCheckMessage("");
+                      setVerifiedBooking(null);
+                      setBookingChoices(null);
+                    }}
+                    className={FORM_INPUT_CLS}
+                    placeholder="you@email.com or booking ID"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={checkBooking}
+                    disabled={!bookingIdentifier.trim() || bookingCheckState === "checking"}
+                    className="shrink-0 rounded-md border-light-grey px-4"
+                  >
+                    {bookingCheckState === "checking" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Check"
+                    )}
+                  </Button>
+                </div>
+                {bookingCheckState === "verified" && (
+                  <p className="mt-1.5 flex items-center gap-1.5 font-body text-b4-desktop text-spring-green">
+                    <BadgeCheck className="size-4" /> {bookingCheckMessage}
+                  </p>
+                )}
+                {bookingCheckState === "error" && (
+                  <p className="mt-1.5 font-body text-b4-desktop text-crimson-red">{bookingCheckMessage}</p>
+                )}
+                {bookingChoices && bookingChoices.length > 1 && (
+                  <div className="mt-2">
+                    <label className={`${FORM_LABEL_CLS} mb-1`}>
+                      This traveler has confirmed bookings for {bookingChoices.length} tours — which one?
+                    </label>
+                    <Select onValueChange={(tourName) => {
+                      const match = bookingChoices.find((m) => m.tourName === tourName);
+                      if (match) applyBookingMatch(match);
+                    }}>
+                      <SelectTrigger className={FORM_INPUT_CLS}>
+                        <SelectValue placeholder="Select the tour this review is for" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {bookingChoices.map((m) => (
+                          <SelectItem key={m.tourName} value={m.tourName}>
+                            {m.tourName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className={FORM_LABEL_CLS}>Tour</label>
                 <Select value={tourSlug} onValueChange={setTourSlug}>
-                  <SelectTrigger className="bg-background">
+                  <SelectTrigger className={FORM_INPUT_CLS}>
                     <SelectValue placeholder="Select a tour" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1064,85 +1341,128 @@ function CreateReviewDialog({
               </div>
 
               <div>
-                <label className="mb-1.5 block text-sm font-medium">Rating</label>
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setRating(n)}
-                      className="rounded-md p-0.5 transition hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
-                      aria-label={`${n} star rating`}
-                    >
-                      <Star
-                        className={`h-6 w-6 ${
-                          n <= rating ? "fill-crimson-red text-crimson-red" : "text-muted-foreground"
-                        }`}
-                      />
-                    </button>
-                  ))}
+                <label className={FORM_LABEL_CLS}>Your rating</label>
+                <div className="flex gap-1" role="radiogroup" aria-label="Rating">
+                  {[1, 2, 3, 4, 5].map((n) => {
+                    const active = (hoverRating || rating) >= n;
+                    return (
+                      <button
+                        key={n}
+                        type="button"
+                        role="radio"
+                        aria-checked={rating === n}
+                        aria-label={`${n} star${n > 1 ? "s" : ""}`}
+                        onMouseEnter={() => setHoverRating(n)}
+                        onMouseLeave={() => setHoverRating(0)}
+                        onClick={() => setRating(n)}
+                        className="p-0.5"
+                      >
+                        <Star
+                          className={`size-8 transition-colors ${
+                            active ? "fill-crimson-red text-crimson-red" : "fill-transparent text-grey"
+                          }`}
+                        />
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
+              <CategoryStarInputs value={categoryRatings} onChange={setCategoryRatings} />
+
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium">First name</label>
+                  <label className={FORM_LABEL_CLS}>First name</label>
                   <Input
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
-                    className="bg-background"
+                    className={FORM_INPUT_CLS}
                     placeholder="Jamie"
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium">Location</label>
-                  <Input
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                    className="bg-background"
-                    placeholder="London, United Kingdom"
+                  <label className={FORM_LABEL_CLS}>
+                    Nationality <span className="font-normal text-grey">(optional)</span>
+                  </label>
+                  <NationalitySelect
+                    value={nationality || null}
+                    onChange={setNationality}
+                    options={nationalityOptions}
+                    placeholder="Select nationality"
+                    ariaLabel="Nationality"
+                    searchable
                   />
                 </div>
               </div>
 
               <div>
-                <label className="mb-1.5 block text-sm font-medium">Headline</label>
+                <label className={FORM_LABEL_CLS}>
+                  Headline <span className="font-normal text-grey">(optional)</span>
+                </label>
                 <Input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="bg-background"
+                  className={FORM_INPUT_CLS}
                   placeholder="Unforgettable island hopping"
+                  maxLength={120}
                 />
               </div>
 
               <div>
-                <div className="mb-1.5 flex items-center justify-between gap-3">
-                  <label className="block text-sm font-medium">Review</label>
-                  <EmojiPickerButton textareaRef={bodyRef} value={body} onChange={setBody} />
-                </div>
-                <Textarea
-                  ref={bodyRef}
-                  rows={7}
+                <label className={`${FORM_LABEL_CLS} after:ml-0.5 after:text-crimson-red after:content-['*']`}>
+                  Your review
+                </label>
+                <MarkdownEditor
                   value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                  className="resize-y bg-background"
-                  placeholder="Share the travel moment, guide highlight, or favorite stop..."
+                  onChange={setBody}
+                  placeholder="Share the travel moment, guide highlight, or favorite stop…"
+                  highlighted
                 />
               </div>
 
               <div>
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <label className="block text-sm font-medium">Tour pictures</label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => photoInputRef.current?.click()}
-                    disabled={photos.length >= 6}
-                    className="h-8"
-                  >
-                    <ImagePlus className="mr-2 h-4 w-4" /> Add photos
-                  </Button>
+                <label className={FORM_LABEL_CLS}>
+                  Tour pictures <span className="font-normal text-grey">(up to 6)</span>
+                </label>
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                  {Array.from({ length: 6 }).map((_, i) => {
+                    const photo = photos[i];
+                    if (photo) {
+                      return (
+                        <div
+                          key={photo.id}
+                          className="group relative aspect-square overflow-hidden rounded-md bg-light-grey"
+                        >
+                          <img src={photo.previewUrl} alt="" className="size-full object-cover" />
+                          <button
+                            type="button"
+                            aria-label="Remove photo"
+                            onClick={() => removePendingPhoto(photo.id)}
+                            className="absolute right-1 top-1 rounded-full bg-midnight/70 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        </div>
+                      );
+                    }
+                    const isNextSlot = i === photos.length;
+                    return (
+                      <button
+                        key={`empty-${i}`}
+                        type="button"
+                        disabled={!isNextSlot}
+                        onClick={() => photoInputRef.current?.click()}
+                        className={`flex aspect-square flex-col items-center justify-center gap-1 rounded-md border-2 border-dashed transition-colors ${
+                          isNextSlot
+                            ? "border-grey/40 text-grey hover:border-crimson-red hover:text-crimson-red"
+                            : "cursor-default border-light-grey text-light-grey"
+                        }`}
+                      >
+                        <ImagePlus className="size-5" />
+                        {isNextSlot && <span className="font-body text-b4-desktop">Add photo</span>}
+                      </button>
+                    );
+                  })}
                 </div>
                 <input
                   ref={photoInputRef}
@@ -1152,40 +1472,13 @@ function CreateReviewDialog({
                   className="hidden"
                   onChange={onPendingPhotosPicked}
                 />
-                <button
-                  type="button"
-                  onClick={() => photoInputRef.current?.click()}
-                  className="flex min-h-24 w-full flex-col items-center justify-center rounded-lg border border-dashed bg-background px-4 py-5 text-center text-sm text-muted-foreground transition hover:border-crimson-red hover:text-foreground"
-                >
-                  <UploadCloud className="mb-2 h-5 w-5" />
-                  Upload review photos, up to 6 images
-                </button>
-                {photos.length > 0 && (
-                  <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
-                    {photos.map((photo) => (
-                      <div key={photo.id} className="group relative">
-                        <img
-                          src={photo.previewUrl}
-                          alt=""
-                          className="aspect-square w-full rounded-md object-cover ring-1 ring-border"
-                        />
-                        <button
-                          type="button"
-                          aria-label="Remove pending photo"
-                          onClick={() => removePendingPhoto(photo.id)}
-                          className="absolute -right-1.5 -top-1.5 rounded-full bg-background p-1 shadow ring-1 ring-border hover:bg-destructive hover:text-destructive-foreground"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
 
               <div>
-                <label className="mb-1.5 block text-sm font-medium">Display date</label>
-                <DisplayDateSelect value={displayDate} onChange={setDisplayDate} />
+                <label className={FORM_LABEL_CLS}>
+                  Display date <span className="font-normal text-grey">(optional)</span>
+                </label>
+                <DisplayDatePicker value={displayDateISO} onChange={setDisplayDateISO} />
               </div>
 
               <div className="lg:hidden">
@@ -1193,7 +1486,7 @@ function CreateReviewDialog({
                   tourName={selectedTour?.name}
                   rating={rating}
                   firstName={firstName}
-                  location={location}
+                  location={nationality}
                   title={title}
                   body={body}
                   displayDate={displayDate}
@@ -1203,12 +1496,12 @@ function CreateReviewDialog({
             </div>
           </div>
 
-          <aside className="hidden min-h-0 overflow-y-auto border-l bg-muted/20 p-5 lg:block">
+          <aside className="hidden min-h-0 overflow-y-auto border-l bg-light-grey/40 p-5 lg:block">
             <ReviewPreview
               tourName={selectedTour?.name}
               rating={rating}
               firstName={firstName}
-              location={location}
+              location={nationality}
               title={title}
               body={body}
               displayDate={displayDate}
@@ -1217,11 +1510,20 @@ function CreateReviewDialog({
           </aside>
         </div>
 
-        <DialogFooter className="border-t bg-background px-6 py-4">
-          <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={saving}>
+        <DialogFooter className="border-t bg-white px-6 py-4">
+          <Button
+            variant="ghost"
+            onClick={() => handleOpenChange(false)}
+            disabled={saving}
+            className="rounded-full px-4 py-2 font-body text-b4-desktop font-medium text-midnight hover:bg-light-grey"
+          >
             Cancel
           </Button>
-          <Button onClick={submit} disabled={saving}>
+          <Button
+            onClick={submit}
+            disabled={saving}
+            className="rounded-full bg-crimson-red px-6 py-3 font-body text-b2-desktop font-medium text-white shadow-small transition-all hover:bg-light-red hover:shadow-medium disabled:opacity-50"
+          >
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Add review
           </Button>
@@ -1243,6 +1545,7 @@ function EditReviewDialog({
   const { toast } = useToast();
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const [rating, setRating] = useState(5);
+  const [categoryRatings, setCategoryRatings] = useState<CategoryRatings>({});
   const [firstName, setFirstName] = useState("");
   const [location, setLocation] = useState("");
   const [title, setTitle] = useState("");
@@ -1254,6 +1557,7 @@ function EditReviewDialog({
   useEffect(() => {
     if (!review) return;
     setRating(review.rating);
+    setCategoryRatings(review.categoryRatings ?? {});
     setFirstName(review.reviewerFirstName);
     setLocation(review.reviewerLocation ?? "");
     setTitle(review.title ?? "");
@@ -1272,6 +1576,7 @@ function EditReviewDialog({
         review.id,
         {
           rating,
+          categoryRatings: Object.keys(categoryRatings).length ? categoryRatings : null,
           title: title.trim() || undefined,
           bodyMarkdown: body.trim(),
           reviewerFirstName: firstName.trim(),
@@ -1316,6 +1621,8 @@ function EditReviewDialog({
               ))}
             </div>
           </div>
+
+          <CategoryStarInputs value={categoryRatings} onChange={setCategoryRatings} />
 
           <div className="grid grid-cols-2 gap-3">
             <div>

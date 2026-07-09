@@ -16,6 +16,7 @@ import {
   getSchedulePolicy,
   type SchedulePolicy,
 } from "@/lib/schedule-policy";
+import SchedulePolicyBadge from "@/components/bookings/SchedulePolicyBadge";
 import type { Booking } from "@/types/bookings";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -774,19 +775,10 @@ export default function LateFeesSection() {
                         <div className="text-xs text-muted-foreground">
                           {row.tourPackageName}
                         </div>
-                        {row.schedulePolicy && (
-                          <Badge
-                            variant="outline"
-                            className={`mt-1 text-[10px] font-medium ${
-                              row.schedulePolicy.key === "legacy"
-                                ? "border-amber-300 bg-amber-50 text-amber-700"
-                                : "border-gray-200 bg-gray-50 text-gray-600"
-                            }`}
-                            title={row.schedulePolicy.description}
-                          >
-                            {row.schedulePolicy.label}
-                          </Badge>
-                        )}
+                        <SchedulePolicyBadge
+                          policy={row.schedulePolicy}
+                          className="mt-1"
+                        />
                       </TableCell>
                       <TableCell className="py-2 align-top">
                         <div>{row.fullName}</div>

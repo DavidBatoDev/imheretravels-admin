@@ -57,6 +57,7 @@ import { SheetColumn } from "@/types/sheet-management";
 import { allBookingSheetColumns } from "@/app/functions/columns";
 import { functionMap } from "@/app/functions/columns/functions-index";
 import { bookingService } from "@/services/booking-service";
+import { getSchedulePolicy } from "@/lib/schedule-policy";
 import { useToast } from "@/hooks/use-toast";
 import EditBookingModal from "./EditBookingModal";
 import { db } from "@/lib/firebase";
@@ -1135,6 +1136,32 @@ export default function BookingDetailModal({
                             "N/A"}
                         </p>
                       </div>
+
+                      {/* Schedule Policy (derived from reservation date) */}
+                      {(() => {
+                        const policy = getSchedulePolicy(
+                          currentBooking?.reservationDate,
+                        );
+                        if (!policy) return null;
+                        return (
+                          <div>
+                            <p className="text-[9px] sm:text-xs text-muted-foreground font-medium mb-1 uppercase">
+                              Schedule Policy
+                            </p>
+                            <Badge
+                              variant="outline"
+                              className={`text-[11px] sm:text-sm font-medium border px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full rounded-br-none ${
+                                policy.key === "legacy"
+                                  ? "border-amber-300 bg-amber-50 text-amber-700"
+                                  : "border-gray-200 bg-gray-50 text-gray-600"
+                              }`}
+                              title={policy.description}
+                            >
+                              {policy.label}
+                            </Badge>
+                          </div>
+                        );
+                      })()}
 
                       {/* Plan Selected Date */}
                       {currentBooking?.selectedPlanAt && (

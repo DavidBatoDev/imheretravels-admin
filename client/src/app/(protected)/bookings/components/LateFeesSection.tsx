@@ -12,6 +12,10 @@ import {
   where,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import {
+  getSchedulePolicy,
+  type SchedulePolicy,
+} from "@/lib/schedule-policy";
 import type { Booking } from "@/types/bookings";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -76,6 +80,7 @@ interface LateFeeRow {
   isPaid: boolean;
   noticeStatus: "sent" | "none";
   noticeLink?: string;
+  schedulePolicy: SchedulePolicy | null;
 }
 
 const TERM_KEYS: TermKey[] = ["p1", "p2", "p3", "p4"];
@@ -300,6 +305,7 @@ export default function LateFeesSection() {
           isPaid,
           noticeStatus: noticeLink ? "sent" : "none",
           noticeLink,
+          schedulePolicy: getSchedulePolicy(reservationDate),
         });
       }
     }
@@ -768,6 +774,19 @@ export default function LateFeesSection() {
                         <div className="text-xs text-muted-foreground">
                           {row.tourPackageName}
                         </div>
+                        {row.schedulePolicy && (
+                          <Badge
+                            variant="outline"
+                            className={`mt-1 text-[10px] font-medium ${
+                              row.schedulePolicy.key === "legacy"
+                                ? "border-amber-300 bg-amber-50 text-amber-700"
+                                : "border-gray-200 bg-gray-50 text-gray-600"
+                            }`}
+                            title={row.schedulePolicy.description}
+                          >
+                            {row.schedulePolicy.label}
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="py-2 align-top">
                         <div>{row.fullName}</div>

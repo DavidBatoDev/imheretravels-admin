@@ -2,8 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, getDocs, query } from "firebase/firestore";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { db } from "@/lib/firebase";
 import { uploadFile, STORAGE_BUCKET } from "@/utils/file-upload";
 import {
@@ -11,6 +9,7 @@ import {
   setReviewStatus,
   deleteReview,
   updateReviewPhotos,
+  updateReviewVideos,
   createAdminReview,
   updateReview,
   assignReviewTour,
@@ -18,8 +17,17 @@ import {
   tourNamesLooselyMatch,
   type BookingCheckMatch,
 } from "@/services/reviews-service";
-import type { ReviewDoc, CategoryRatings } from "@/types/reviews";
+import type { ReviewDoc, CategoryRatings, PublicReview, ReviewVideo } from "@/types/reviews";
 import { isExternalSource, REVIEW_CATEGORIES } from "@/types/reviews";
+import ReviewCard from "@/components/reviews/public/ReviewCard";
+import ReviewMediaStrip from "./ReviewMediaStrip";
+import ReviewsSiteView from "./ReviewsSiteView";
+import type { SourceFilter, StatusFilter } from "./AdminReviewsFilterBar";
+import {
+  DEFAULT_SORT,
+  sortReviews,
+  type SortValue,
+} from "@/components/reviews/public/reviews-filter";
 import MarkdownEditor from "./MarkdownEditor";
 import DisplayDatePicker, { formatDisplayDate } from "./DisplayDatePicker";
 import NationalitySelect from "./NationalitySelect";
@@ -50,7 +58,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Star, MoreHorizontal, Eye, EyeOff, Trash2, ImagePlus, X, Plus, Search,
   BadgeCheck, Loader2, Pencil, ExternalLink, ChevronDown, ChevronUp, FilterX,
-  Smile, MapPin, Play,
+  Smile, MapPin, Play, Rows3, LayoutGrid,
 } from "lucide-react";
 
 /** Matches the public site's write-review form (WriteReviewButton.tsx). */
@@ -65,6 +73,25 @@ const BOOKING_CHECK_REASONS: Record<string, string> = {
 };
 
 const ALLOWED = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+
+// Mirrors www/lib/review-upload.ts so admin and the public form accept the same
+// clips. The public card plays at most one video per review.
+const ALLOWED_VIDEO = ["video/mp4", "video/quicktime"];
+const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
+const MAX_VIDEOS_PER_REVIEW = 1;
+
+/** Upload one trip video to Storage and return its public URL. Throws on failure. */
+async function uploadReviewVideo(file: File, tourId?: string): Promise<string> {
+  const res = await uploadFile(file, {
+    bucket: STORAGE_BUCKET,
+    folder: `review-videos/${tourId || "admin"}`,
+    maxSize: MAX_VIDEO_BYTES,
+    allowedTypes: ALLOWED_VIDEO,
+    generateUniqueName: true,
+  });
+  if (!res.success || !res.data) throw new Error(res.error ?? "Upload failed");
+  return res.data.publicUrl;
+}
 
 type TourOption = { id: string; slug: string; name: string };
 type PendingPhoto = { id: string; file: File; previewUrl: string };
@@ -221,23 +248,6 @@ function CategoryStarInputs({
   );
 }
 
-/** Faithful port of the public site's `Stars` (www/app/components/reviews/Stars.tsx). */
-function CardStars({ count }: { count: number }) {
-  const rounded = Math.max(0, Math.min(5, Math.round(count)));
-  return (
-    <div className="flex gap-0.5 text-crimson-red" aria-label={`${rounded} out of 5 stars`}>
-      {Array.from({ length: 5 }).map((_, i) => (
-        <svg
-          key={i}
-          viewBox="0 0 20 20"
-          className={`size-4 ${i < rounded ? "fill-current" : "fill-light-grey"}`}
-        >
-          <path d="M10 1.5l2.6 5.3 5.9.9-4.2 4.1 1 5.8L10 14.9l-5.3 2.7 1-5.8L1.5 7.7l5.9-.9z" />
-        </svg>
-      ))}
-    </div>
-  );
-}
 
 function DisplayDateSelect({
   value,
@@ -268,31 +278,14 @@ function DisplayDateSelect({
   );
 }
 
-const MARKDOWN_PROSE_CLASSNAME = [
-  "font-body text-b2-mobile md:text-b2-desktop text-midnight",
-  "[&_p]:my-0 [&_p+p]:mt-3",
-  "[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5",
-  "[&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5",
-  "[&_li]:mt-1",
-  "[&_a]:text-crimson-red [&_a]:underline",
-  "[&_blockquote]:border-l-2 [&_blockquote]:border-light-grey [&_blockquote]:pl-4 [&_blockquote]:text-grey",
-  "[&_strong]:font-bold",
-  "[&_h3]:font-hk-grotesk [&_h3]:text-h6-desktop [&_h3]:font-bold [&_h3]:mt-3",
-  "[&_h4]:font-hk-grotesk [&_h4]:font-bold [&_h4]:mt-3",
-].join(" ");
-
-const MARKDOWN_ALLOWED = ["p", "br", "strong", "em", "del", "a", "ul", "ol", "li", "blockquote", "code", "h3", "h4"];
-
-const PREVIEW_PHOTO_COUNT = 3; // matches ReviewPhotos' preview-mode thumbnail cap
-
 /**
- * Draft-data render of the public site's review card
- * (www/app/components/reviews/ReviewCard.tsx) — same brand tokens, type scale
- * and layout, adapted to take the create form's in-progress field values
- * instead of a saved `PublicReview`.
+ * Live preview of the review being composed — rendered with the *actual* public
+ * `ReviewCard`, not a lookalike, so the preview can never drift from the site.
+ * The draft form values are projected into a `PublicReview` for it to consume.
  */
 function ReviewPreview({
   tourName,
+  tourSlug,
   rating,
   firstName,
   location,
@@ -300,8 +293,11 @@ function ReviewPreview({
   body,
   displayDate,
   photos,
+  videos,
+  verified,
 }: {
   tourName?: string;
+  tourSlug?: string;
   rating: number;
   firstName: string;
   location: string;
@@ -309,76 +305,33 @@ function ReviewPreview({
   body: string;
   displayDate: string;
   photos: string[];
+  videos?: ReviewVideo[];
+  verified: boolean;
 }) {
-  const reviewBody = body.trim() || "Your review will appear here as you write.";
-  const date =
-    displayDate.trim() ||
-    new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric" }).format(
-      new Date(),
-    );
-  const shownPhotos = photos.slice(0, PREVIEW_PHOTO_COUNT);
-  const overflow = photos.length - shownPhotos.length;
+  const draft: PublicReview = {
+    id: "__draft__",
+    tourSlug: tourSlug ?? "",
+    tourName: tourName ?? "",
+    rating,
+    title: title.trim() || undefined,
+    bodyMarkdown: body.trim() || "Your review will appear here as you write.",
+    reviewerFirstName: firstName.trim() || "Reviewer",
+    reviewerLocation: location.trim() || undefined,
+    photos,
+    videos,
+    verified,
+    createdAt: Date.now(),
+    displayDate: displayDate.trim() || undefined,
+    source: "admin",
+  };
 
   return (
-    <div className="space-y-3">
+    <div className="reviews-site-view space-y-3 rounded-brand-md p-1">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Live preview
-        </p>
-        <p className="text-sm text-muted-foreground">This mirrors the public review card.</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-grey">Live preview</p>
+        <p className="text-sm text-dark-gray">This is the public review card.</p>
       </div>
-
-      <div className="flex flex-col gap-5 rounded-lg bg-white p-8 shadow-small">
-        <div className="flex items-center justify-between gap-3">
-          <CardStars count={rating} />
-          <span className="font-body text-b4-desktop text-grey">{date}</span>
-        </div>
-
-        {title.trim() && (
-          <p className="-mb-2 font-hk-grotesk text-h6-desktop font-bold text-midnight">
-            {title.trim()}
-          </p>
-        )}
-
-        <div className={MARKDOWN_PROSE_CLASSNAME}>
-          <ReactMarkdown remarkPlugins={[remarkGfm]} allowedElements={MARKDOWN_ALLOWED}>
-            {reviewBody}
-          </ReactMarkdown>
-        </div>
-
-        {shownPhotos.length > 0 && (
-          <div className="grid grid-cols-3 gap-2">
-            {shownPhotos.map((url, i) => (
-              <div key={url} className="relative aspect-square w-full overflow-hidden rounded-sm bg-light-grey">
-                <img src={url} alt="" className="size-full object-cover" />
-                {overflow > 0 && i === shownPhotos.length - 1 && (
-                  <span className="absolute inset-0 flex items-center justify-center bg-midnight/60 font-hk-grotesk text-h6-desktop font-bold text-white">
-                    +{overflow}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {tourName && (
-          <p className="font-body text-b4-desktop text-crimson-red underline">{tourName}</p>
-        )}
-
-        <div className="mt-auto flex items-center gap-4 pt-2">
-          <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-light-grey font-hk-grotesk text-h6-desktop font-bold text-midnight">
-            {(firstName.trim() || "Reviewer").charAt(0).toUpperCase()}
-          </div>
-          <div className="min-w-0">
-            <p className="truncate font-hk-grotesk text-h6-desktop font-bold text-midnight">
-              {firstName.trim() || "Reviewer"}
-            </p>
-            {location.trim() && (
-              <p className="font-body text-b4-desktop text-vivid-orange">{location.trim()}</p>
-            )}
-          </div>
-        </div>
-      </div>
+      <ReviewCard review={draft} showTour={!!tourName} as="div" />
     </div>
   );
 }
@@ -400,6 +353,35 @@ const UNASSIGNED_FILTER = "__unassigned";
 
 const WEBSITE_URL = process.env.NEXT_PUBLIC_WEBSITE_URL || "";
 
+/** One segment of the Table / Site view switch. */
+function ViewTab({
+  icon: Icon,
+  label,
+  active,
+  onClick,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`flex h-9 items-center gap-1.5 rounded px-3 text-sm transition-colors ${
+        active
+          ? "bg-primary text-primary-foreground"
+          : "text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      <Icon className="h-4 w-4" />
+      {label}
+    </button>
+  );
+}
+
 export default function ReviewsList() {
   const { toast } = useToast();
   const [reviews, setReviews] = useState<ReviewDoc[]>([]);
@@ -407,9 +389,14 @@ export default function ReviewsList() {
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [tourFilter, setTourFilter] = useState("all");
-  const [sourceFilter, setSourceFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
+
+  // "table" = the moderation grid; "site" = the public /reviews page, with controls.
+  // Both read the same filter state, so switching view keeps your place.
+  const [view, setView] = useState<"table" | "site">("table");
+  const [sort, setSort] = useState<SortValue>(DEFAULT_SORT);
 
   const [toDelete, setToDelete] = useState<ReviewDoc | null>(null);
   const [toEdit, setToEdit] = useState<ReviewDoc | null>(null);
@@ -426,9 +413,11 @@ export default function ReviewsList() {
     });
   }
 
-  // Add-photos wiring: a hidden file input targeted at one review.
+  // Add-photos / add-video wiring: hidden file inputs targeted at one review.
   const fileRef = useRef<HTMLInputElement | null>(null);
   const photoTarget = useRef<ReviewDoc | null>(null);
+  const videoFileRef = useRef<HTMLInputElement | null>(null);
+  const videoTarget = useRef<ReviewDoc | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -489,6 +478,18 @@ export default function ReviewsList() {
       );
     });
   }, [reviews, search, statusFilter, tourFilter, sourceFilter]);
+
+  /** Tour options with per-tour review counts, for the site view's tour menu. */
+  const siteTours = useMemo(() => {
+    const counts = new Map<string, number>();
+    reviews.forEach((r) => {
+      if (r.tourSlug) counts.set(r.tourSlug, (counts.get(r.tourSlug) ?? 0) + 1);
+    });
+    return tourNames.map((t) => ({ ...t, count: counts.get(t.slug) ?? 0 }));
+  }, [reviews, tourNames]);
+
+  /** The site view orders cards the way the public hub does. */
+  const sortedForSite = useMemo(() => sortReviews(filtered, sort), [filtered, sort]);
 
   const hasActiveFilters =
     search.trim() !== "" ||
@@ -594,6 +595,45 @@ export default function ReviewsList() {
     }
   }
 
+  function triggerAddVideo(r: ReviewDoc) {
+    videoTarget.current = r;
+    videoFileRef.current?.click();
+  }
+
+  async function onVideoPicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const target = videoTarget.current;
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!target || !file) return;
+    setBusyId(target.id);
+    try {
+      const url = await uploadReviewVideo(file, target.tourId);
+      // The public card plays one clip, so a new upload replaces the old one.
+      await updateReviewVideos(target.id, [{ src: url }], target.tourSlug);
+      toast({ title: "Video added" });
+    } catch (err) {
+      toast({
+        title: "Video upload failed",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setBusyId(null);
+      videoTarget.current = null;
+    }
+  }
+
+  async function removeVideo(r: ReviewDoc, src: string) {
+    setBusyId(r.id);
+    try {
+      await updateReviewVideos(r.id, (r.videos ?? []).filter((v) => v.src !== src), r.tourSlug);
+    } catch (e) {
+      toast({ title: "Update failed", description: String(e), variant: "destructive" });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* Hidden file input for add-photos */}
@@ -605,65 +645,99 @@ export default function ReviewsList() {
         className="hidden"
         onChange={onFilesPicked}
       />
+      {/* Hidden file input for add-video (one clip per review) */}
+      <input
+        ref={videoFileRef}
+        type="file"
+        accept={ALLOWED_VIDEO.join(",")}
+        className="hidden"
+        onChange={onVideoPicked}
+      />
 
       {/* Toolbar */}
       <div className="flex flex-col gap-3 rounded-lg border bg-card p-3 shadow-sm xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="relative w-full sm:max-w-sm">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search quote, name, or tour…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-10 bg-background pl-9"
+        {/* The site view ships its own (public-looking) filter bar over the same
+            state, so the admin controls would be a confusing duplicate there. */}
+        {view === "table" ? (
+          <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="relative w-full sm:max-w-sm">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search quote, name, or tour…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-10 bg-background pl-9"
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
+              <SelectTrigger className="h-10 w-full bg-background sm:w-44">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="published">Published</SelectItem>
+                <SelectItem value="hidden">Hidden</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={sourceFilter} onValueChange={(v) => setSourceFilter(v as SourceFilter)}>
+              <SelectTrigger className="h-10 w-full bg-background sm:w-44">
+                <SelectValue placeholder="Source" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All sources</SelectItem>
+                <SelectItem value="user">Verified booking</SelectItem>
+                <SelectItem value="admin">Admin-added</SelectItem>
+                <SelectItem value="google">via Google</SelectItem>
+                <SelectItem value="tourradar">via TourRadar</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={tourFilter} onValueChange={setTourFilter}>
+              <SelectTrigger className="h-10 w-full bg-background sm:w-56">
+                <SelectValue placeholder="Tour" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All tours</SelectItem>
+                <SelectItem value={UNASSIGNED_FILTER}>Unassigned</SelectItem>
+                {tourNames.map((t) => (
+                  <SelectItem key={t.slug} value={t.slug}>
+                    {t.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {hasActiveFilters && (
+              <Button variant="outline" size="sm" onClick={clearFilters} className="h-10 shrink-0">
+                <FilterX className="mr-2 h-4 w-4" /> Clear filters
+              </Button>
+            )}
+          </div>
+        ) : (
+          <p className="flex-1 text-sm text-muted-foreground">
+            Exactly what travelers see on the public reviews page — plus hidden and
+            pending reviews, which never appear there.
+          </p>
+        )}
+        <div className="flex shrink-0 items-center gap-2 self-start xl:self-auto">
+          {/* Table = moderate at a glance. Site view = see exactly what travelers see. */}
+          <div className="flex items-center rounded-md border bg-background p-0.5">
+            <ViewTab
+              icon={Rows3}
+              label="Table"
+              active={view === "table"}
+              onClick={() => setView("table")}
+            />
+            <ViewTab
+              icon={LayoutGrid}
+              label="Site view"
+              active={view === "site"}
+              onClick={() => setView("site")}
             />
           </div>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-10 w-full bg-background sm:w-44">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="published">Published</SelectItem>
-              <SelectItem value="hidden">Hidden</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={sourceFilter} onValueChange={setSourceFilter}>
-            <SelectTrigger className="h-10 w-full bg-background sm:w-44">
-              <SelectValue placeholder="Source" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All sources</SelectItem>
-              <SelectItem value="user">Verified booking</SelectItem>
-              <SelectItem value="admin">Admin-added</SelectItem>
-              <SelectItem value="google">via Google</SelectItem>
-              <SelectItem value="tourradar">via TourRadar</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={tourFilter} onValueChange={setTourFilter}>
-            <SelectTrigger className="h-10 w-full bg-background sm:w-56">
-              <SelectValue placeholder="Tour" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All tours</SelectItem>
-              <SelectItem value={UNASSIGNED_FILTER}>Unassigned</SelectItem>
-              {tourNames.map((t) => (
-                <SelectItem key={t.slug} value={t.slug}>
-                  {t.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {hasActiveFilters && (
-            <Button variant="outline" size="sm" onClick={clearFilters} className="h-10 shrink-0">
-              <FilterX className="mr-2 h-4 w-4" /> Clear filters
-            </Button>
-          )}
+          <Button onClick={() => setCreateOpen(true)} className="h-10">
+            <Plus className="mr-2 h-4 w-4" /> Add review
+          </Button>
         </div>
-        <Button onClick={() => setCreateOpen(true)} className="h-10 shrink-0 self-start xl:self-auto">
-          <Plus className="mr-2 h-4 w-4" /> Add review
-        </Button>
       </div>
 
       <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
@@ -677,6 +751,36 @@ export default function ReviewsList() {
         )}
       </div>
 
+      {view === "site" ? (
+        loading ? (
+          <div className="flex justify-center py-20">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <ReviewsSiteView
+            reviews={sortedForSite}
+            totalCount={counts.total}
+            tours={siteTours}
+            query={search}
+            onQueryChange={setSearch}
+            tour={tourFilter === "all" ? null : tourFilter}
+            onTourChange={(slug) => setTourFilter(slug ?? "all")}
+            sort={sort}
+            onSortChange={setSort}
+            status={statusFilter}
+            onStatusChange={setStatusFilter}
+            source={sourceFilter}
+            onSourceChange={setSourceFilter}
+            busyId={busyId}
+            onToggleHidden={toggleHidden}
+            onEdit={setToEdit}
+            onAssign={setToAssign}
+            onDelete={setToDelete}
+            onAddPhotos={triggerAddPhotos}
+            onAddVideo={triggerAddVideo}
+          />
+        )
+      ) : (
       <Card className="overflow-hidden">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -734,55 +838,14 @@ export default function ReviewsList() {
                             )}
                           </button>
                         )}
-                        {r.photos && r.photos.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {r.photos.map((url) => (
-                              <span key={url} className="group relative">
-                                <a href={url} target="_blank" rel="noreferrer">
-                                  <img
-                                    src={url}
-                                    alt=""
-                                    className="h-14 w-14 rounded object-cover ring-1 ring-border transition group-hover:opacity-80"
-                                  />
-                                </a>
-                                <button
-                                  type="button"
-                                  aria-label="Remove photo"
-                                  onClick={() => removePhoto(r, url)}
-                                  disabled={busyId === r.id}
-                                  className="absolute -right-1.5 -top-1.5 rounded-full bg-background p-1 shadow ring-1 ring-border hover:bg-destructive hover:text-destructive-foreground"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        {r.videos && r.videos.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {r.videos.map((v) => (
-                              <a
-                                key={v.src}
-                                href={v.src}
-                                target="_blank"
-                                rel="noreferrer"
-                                title="Play video"
-                                className="group relative block h-14 w-14 overflow-hidden rounded ring-1 ring-border"
-                              >
-                                {v.poster ? (
-                                  <img src={v.poster} alt="" className="h-full w-full object-cover transition group-hover:opacity-80" />
-                                ) : (
-                                  <span className="flex h-full w-full items-center justify-center bg-muted" />
-                                )}
-                                <span className="absolute inset-0 flex items-center justify-center">
-                                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black/55 text-white">
-                                    <Play className="h-3.5 w-3.5 fill-current" />
-                                  </span>
-                                </span>
-                              </a>
-                            ))}
-                          </div>
-                        )}
+                        <ReviewMediaStrip
+                          photos={r.photos}
+                          videos={r.videos}
+                          authorAlt={r.reviewerFirstName}
+                          disabled={busyId === r.id}
+                          onRemovePhoto={(url) => removePhoto(r, url)}
+                          onRemoveVideo={(src) => removeVideo(r, src)}
+                        />
                       </TableCell>
                       <TableCell className="px-4 py-3 align-top">
                         <div className="flex items-center gap-1 font-medium">
@@ -882,6 +945,10 @@ export default function ReviewsList() {
                             <DropdownMenuItem onClick={() => triggerAddPhotos(r)}>
                               <ImagePlus className="mr-2 h-4 w-4" /> Add photos
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => triggerAddVideo(r)}>
+                              <Play className="mr-2 h-4 w-4" />
+                              {r.videos?.length ? "Replace video" : "Add video"}
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"
                               onClick={() => setToDelete(r)}
@@ -900,6 +967,7 @@ export default function ReviewsList() {
           </div>
         </CardContent>
       </Card>
+      )}
 
       <CreateReviewDialog
         open={createOpen}
@@ -1045,10 +1113,15 @@ function CreateReviewDialog({
   const [body, setBody] = useState("");
   const [displayDateISO, setDisplayDateISO] = useState("");
   const [photos, setPhotos] = useState<PendingPhoto[]>([]);
+  const [video, setVideo] = useState<PendingPhoto | null>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<PendingPhoto | null>(null);
   const [saving, setSaving] = useState(false);
   const photosRef = useRef<PendingPhoto[]>([]);
   const selectedTour = tours.find((t) => t.slug === tourSlug);
   const previewPhotos = photos.map((photo) => photo.previewUrl);
+  // Preview plays the local blob until the real upload happens on submit.
+  const previewVideos = video ? [{ src: video.previewUrl }] : undefined;
   const displayDate = displayDateISO ? formatDisplayDate(displayDateISO) : "";
   const nationalityOptions = useMemo(() => getNationalityOptions(), []);
 
@@ -1109,8 +1182,13 @@ function CreateReviewDialog({
   }, [photos]);
 
   useEffect(() => {
+    videoRef.current = video;
+  }, [video]);
+
+  useEffect(() => {
     return () => {
       photosRef.current.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
+      if (videoRef.current) URL.revokeObjectURL(videoRef.current.previewUrl);
     };
   }, []);
 
@@ -1118,6 +1196,38 @@ function CreateReviewDialog({
     photosRef.current.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
     photosRef.current = [];
     setPhotos([]);
+  }
+
+  function clearVideo() {
+    if (videoRef.current) URL.revokeObjectURL(videoRef.current.previewUrl);
+    videoRef.current = null;
+    setVideo(null);
+  }
+
+  function onPendingVideoPicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!ALLOWED_VIDEO.includes(file.type)) {
+      return toast({
+        title: "Unsupported video",
+        description: "Use an MP4 or MOV clip.",
+        variant: "destructive",
+      });
+    }
+    if (file.size > MAX_VIDEO_BYTES) {
+      return toast({
+        title: "Video is too large",
+        description: `Keep it under ${Math.round(MAX_VIDEO_BYTES / 1024 / 1024)} MB.`,
+        variant: "destructive",
+      });
+    }
+    clearVideo(); // one clip per review — the new pick replaces the old
+    setVideo({
+      id: `${file.name}-${file.lastModified}`,
+      file,
+      previewUrl: URL.createObjectURL(file),
+    });
   }
 
   function reset() {
@@ -1135,6 +1245,7 @@ function CreateReviewDialog({
     setVerifiedBooking(null);
     setBookingChoices(null);
     clearPhotos();
+    clearVideo();
   }
 
   function handleOpenChange(nextOpen: boolean) {
@@ -1211,6 +1322,10 @@ function CreateReviewDialog({
         uploadedPhotos.push(res.data.publicUrl);
       }
 
+      const uploadedVideos = video
+        ? [{ src: await uploadReviewVideo(video.file, tour.id) }]
+        : undefined;
+
       await createAdminReview({
         tourId: tour.id,
         tourSlug: tour.slug,
@@ -1222,6 +1337,7 @@ function CreateReviewDialog({
         reviewerFirstName: firstName.trim(),
         reviewerLocation: nationality || undefined,
         photos: uploadedPhotos,
+        videos: uploadedVideos,
         displayDate: displayDate || undefined,
         bookingId: verifiedBooking?.bookingId,
         bookingCode: verifiedBooking?.bookingCode,
@@ -1476,6 +1592,52 @@ function CreateReviewDialog({
 
               <div>
                 <label className={FORM_LABEL_CLS}>
+                  Trip video{" "}
+                  <span className="font-normal text-grey">
+                    (optional — {MAX_VIDEOS_PER_REVIEW}, MP4 or MOV, max{" "}
+                    {Math.round(MAX_VIDEO_BYTES / 1024 / 1024)} MB)
+                  </span>
+                </label>
+                {video ? (
+                  <div className="group relative w-40 overflow-hidden rounded-md bg-midnight">
+                    <video
+                      src={video.previewUrl}
+                      muted
+                      loop
+                      autoPlay
+                      playsInline
+                      className="aspect-[3/4] w-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      aria-label="Remove video"
+                      onClick={clearVideo}
+                      className="absolute right-1 top-1 rounded-full bg-midnight/70 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => videoInputRef.current?.click()}
+                    className="flex h-24 w-40 flex-col items-center justify-center gap-1 rounded-md border-2 border-dashed border-grey/40 text-grey transition-colors hover:border-crimson-red hover:text-crimson-red"
+                  >
+                    <Play className="size-5" />
+                    <span className="font-body text-b4-desktop">Add video</span>
+                  </button>
+                )}
+                <input
+                  ref={videoInputRef}
+                  type="file"
+                  accept={ALLOWED_VIDEO.join(",")}
+                  className="hidden"
+                  onChange={onPendingVideoPicked}
+                />
+              </div>
+
+              <div>
+                <label className={FORM_LABEL_CLS}>
                   Display date <span className="font-normal text-grey">(optional)</span>
                 </label>
                 <DisplayDatePicker value={displayDateISO} onChange={setDisplayDateISO} />
@@ -1484,6 +1646,7 @@ function CreateReviewDialog({
               <div className="lg:hidden">
                 <ReviewPreview
                   tourName={selectedTour?.name}
+                  tourSlug={selectedTour?.slug}
                   rating={rating}
                   firstName={firstName}
                   location={nationality}
@@ -1491,6 +1654,8 @@ function CreateReviewDialog({
                   body={body}
                   displayDate={displayDate}
                   photos={previewPhotos}
+                  videos={previewVideos}
+                  verified={!!verifiedBooking}
                 />
               </div>
             </div>
@@ -1499,6 +1664,7 @@ function CreateReviewDialog({
           <aside className="hidden min-h-0 overflow-y-auto border-l bg-light-grey/40 p-5 lg:block">
             <ReviewPreview
               tourName={selectedTour?.name}
+              tourSlug={selectedTour?.slug}
               rating={rating}
               firstName={firstName}
               location={nationality}
@@ -1506,6 +1672,8 @@ function CreateReviewDialog({
               body={body}
               displayDate={displayDate}
               photos={previewPhotos}
+              videos={previewVideos}
+              verified={!!verifiedBooking}
             />
           </aside>
         </div>

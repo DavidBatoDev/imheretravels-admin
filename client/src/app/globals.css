@@ -1314,3 +1314,80 @@
   border-color: inherit !important;
   background-color: inherit !important;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Public reviews UI — ported from www/app/globals.css
+   Supports src/components/reviews/public/*, which renders the public site's
+   review cards inside the admin "Site view". Brand colors are hardcoded here
+   because www defines them as Tailwind v4 `@theme` CSS vars, which admin
+   (Tailwind v3, JS config) does not generate.
+   NOTE: `img-shimmer` is distinct from admin's own `shimmer` keyframe above.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Hides the scrollbar on the review focus-modal's scroll container. */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Image skeleton (shimmer sweep) — light-grey base with a soft white band. */
+@keyframes img-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.img-skeleton {
+  background-color: #f2f0ee; /* --color-light-grey */
+  background-image: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0) 20%,
+    rgba(255, 255, 255, 0.55) 50%,
+    rgba(255, 255, 255, 0) 80%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: img-shimmer 1.6s ease-in-out infinite;
+}
+
+/* Newly-revealed review text: a soft highlighter flash that fades out. */
+@keyframes review-highlight {
+  0%,
+  55% {
+    background-color: #fbe687; /* --color-light-yellow */
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.review-reveal-highlight :is(p, li) {
+  border-radius: 6px;
+  margin-inline: -0.375rem;
+  padding-inline: 0.375rem;
+  animation: review-highlight 1.8s ease-out 0.2s both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .img-skeleton {
+    animation: none;
+    background-image: none;
+  }
+  .review-reveal-highlight :is(p, li) {
+    animation: none;
+  }
+}
+
+/* The site view must preview the live (light-only) public page, so it opts out
+   of the admin's dark theme regardless of the dashboard's current mode. */
+.reviews-site-view {
+  color-scheme: light;
+  background-color: #ffffff;
+  color: #1c1f2a; /* midnight */
+}

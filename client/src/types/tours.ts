@@ -39,6 +39,12 @@ export interface TourPackage {
   // Store whichever the Widget Center emits: a bare widget id and/or a full embed URL.
   tourRadarWidgetId?: string;
   tourRadarWidgetUrl?: string;
+  /**
+   * TourRadar's tour id — the `{id}` in `tourradar.com/t/{id}`. Drives the review
+   * import and the outbound "via TourRadar" link. This is NOT `tourRadarWidgetId`,
+   * which is a separate Widget Center identifier.
+   */
+  tourRadarTourId?: string;
   // WWW PRESENTATION FIELDS
   seo?: { title?: string; description?: string }; // SEO overrides; falls back to name/description
   comingSoon?: boolean; // Gate full content on www
@@ -117,7 +123,6 @@ export interface TourDetails {
   faqs?: TourFaq[]; // FAQ section
   thingsToKnow?: TourThingToKnow[]; // "Things to Know" cards (per-tour override)
   tips?: TourTip[]; // Tips section (per-tour override)
-  reviews?: TourReview[]; // "What people say about us" section; falls back to generic placeholders on www when absent
   map?: { image?: string; embedUrl?: string }; // Map section
 }
 
@@ -150,15 +155,6 @@ export interface TourTip {
   icon?: string;
   title: string;
   description: string;
-}
-
-export interface TourReview {
-  rating: number;           // 1–5 stars
-  date: string;             // e.g. "May 2023"
-  body: string;             // Review text
-  reviewerName: string;     // e.g. "Flynn Deanne"
-  reviewerLocation: string; // e.g. "London, United Kingdom"
-  reviewerAvatar?: string;  // Optional URL / storage path
 }
 
 export interface TourItinerary {
@@ -280,6 +276,7 @@ export interface TourFormDataWithStringDates {
   preDeparturePack?: string;
   tourRadarWidgetId?: string;
   tourRadarWidgetUrl?: string;
+  tourRadarTourId?: string;
   previousSlugs?: PreviousSlug[];
 }
 

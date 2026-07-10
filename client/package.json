@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "check:reviews-ui": "node scripts/check-reviews-ui-sync.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:booking-flow": "vitest run src/app/reservation-booking-form/utils/bookingFlow.test.ts",
@@ -81,7 +82,9 @@
     "import:dev": "node scripts/import-to-dev.js",
     "reschedule-pending-payment-reminders": "tsx scripts/reschedule-pending-payment-reminders.ts",
     "reschedule-pending-payment-reminders:dry-run": "tsx scripts/reschedule-pending-payment-reminders.ts --dry-run",
-    "reschedule-pending-payment-reminders:production": "tsx scripts/reschedule-pending-payment-reminders.ts --production"
+    "reschedule-pending-payment-reminders:production": "tsx scripts/reschedule-pending-payment-reminders.ts --production",
+    "sync:tourradar:dry-run": "node scripts/tourradar-export/run-local-sync.mjs --dry-run",
+    "sync:tourradar": "node scripts/tourradar-export/run-local-sync.mjs --production"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

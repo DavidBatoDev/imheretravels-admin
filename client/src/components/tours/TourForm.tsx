@@ -48,14 +48,6 @@ import {
 } from "./dnd/SortableList";
 import TourDatePicker from "./TourDatePicker";
 import ImagePickerModal from "@/components/shared/ImagePickerModal";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import TourSettingsPanel from "./TourSettingsPanel";
 import SlugChangeModal from "./SlugChangeModal";
 import HeroSetupPanel from "./HeroSetupPanel";
@@ -128,6 +120,12 @@ const schema = z.object({
   // "<iframe …>" embed snippet from the Widget Center, so it's a free string.
   tourRadarWidgetId: z.string().optional().or(z.literal("")),
   tourRadarWidgetUrl: z.string().optional().or(z.literal("")),
+  // TourRadar's tour id (the `{id}` in /t/{id}) — digits only. Drives the review import.
+  tourRadarTourId: z
+    .string()
+    .regex(/^\d+$/, "TourRadar tour ID must be digits only")
+    .optional()
+    .or(z.literal("")),
   pricing: z.object({
     original: z.preprocess(toOptionalNumber, z.number().min(0.01)),
     discounted: optNum,
@@ -173,14 +171,6 @@ const schema = z.object({
     faqs: z.array(z.object({ question: z.string(), answer: z.string() })).optional(),
     thingsToKnow: z.array(z.object({ icon: z.string().optional(), title: z.string(), description: z.string(), ctaLabel: z.string(), ctaHref: z.string() })).optional(),
     tips: z.array(z.object({ icon: z.string().optional(), title: z.string(), description: z.string() })).optional(),
-    reviews: z.array(z.object({
-      rating: z.preprocess(toOptionalNumber, z.number().min(1).max(5).default(5)),
-      date: z.string(),
-      body: z.string(),
-      reviewerName: z.string(),
-      reviewerLocation: z.string(),
-      reviewerAvatar: z.string().optional(),
-    })).optional(),
     map: z.object({ image: z.string().optional(), embedUrl: z.string().optional() }).optional(),
   }),
 });
@@ -207,7 +197,7 @@ const PANEL_FIELDS = new Set([
 const SECTION_LABELS: Record<string, string> = {
   "details.itinerary": "Itinerary", "details.highlights": "Highlight",
   "details.requirements": "Requirement", "details.faqs": "FAQ",
-  "details.accommodations": "Accommodation", "details.reviews": "Review",
+  "details.accommodations": "Accommodation",
   "details.tags": "Tag", "details.inclusions": "Inclusion",
   "details.thingsToKnow": "Things to know", "details.tips": "Tip",
   "details.keyFacts": "Key fact", travelDates: "Travel date",
@@ -262,21 +252,6 @@ const TAG_PALETTE = [
 
 const CURRENCY_SYM: Record<string, string> = { USD: "$", EUR: "£", GBP: "£" };
 const ALL_ICONS = Object.keys(ICON_COMPONENTS);
-
-// ─── Reviews ─────────────────────────────────────────────────────────────────
-
-// Generic reviewer profiles. Double as (a) the greyed-out placeholder cards shown
-// when a tour has no reviews and (b) presets the admin can pick to pre-fill a new
-// review card. Avatars live in www/public/reviews/avatars and are served from www.
-const PLACEHOLDER_REVIEWS = [
-  { rating: 5, date: "May 2023", body: "Had an amazing time on the trial tour! Action packed with lots of fun things on the itinerary, and a great bunch of people. Would definitely go again!", reviewerName: "Flynn Deanne", reviewerLocation: "London, United Kingdom", reviewerAvatar: "/reviews/avatars/flynn.jpg" },
-  { rating: 5, date: "February 2024", body: "My experience has been amazing, I'll never forget it. I met extraordinary people and explored beautiful places. I definitely recommend to book a trip!", reviewerName: "Manuel Madonna", reviewerLocation: "Milan, Italy", reviewerAvatar: "/reviews/avatars/manuel.jpg" },
-  { rating: 5, date: "July 2024", body: "I enjoyed the tour! Seamless coordination of transportation and accommodation made me feel like a VIP throughout the trip! LOVED every bit of it!! I highly recommend!", reviewerName: "Bella Millan", reviewerLocation: "Cagayan, Philippines", reviewerAvatar: "/reviews/avatars/bella.jpg" },
-];
-
-// Profiles offered in the "Add review" menu. Selecting one pre-fills the card.
-const REVIEW_PRESETS = PLACEHOLDER_REVIEWS;
-const BLANK_REVIEW = { rating: 5, date: "", body: "", reviewerName: "", reviewerLocation: "", reviewerAvatar: "" };
 
 // ─── "Things to Know" / "Tips" defaults ────────────────────────────────────────
 
@@ -400,104 +375,6 @@ function toEmbedUrl(raw?: string): string {
   const place = s.match(/\/maps\/place\/([^/@?]+)/);
   const query = place ? decodeURIComponent(place[1].replace(/\+/g, " ")) : s;
   return `https://maps.google.com/maps?q=${encodeURIComponent(query)}&output=embed`;
-}
-
-// "+ Add review" trigger with a menu to start blank or from a preset profile.
-function AddReviewMenu({
-  onAdd,
-  className,
-}: {
-  onAdd: (review: typeof BLANK_REVIEW) => void;
-  className?: string;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className={`flex items-center gap-1 font-body text-b4-desktop text-crimson-red hover:text-light-red ${className ?? ""}`}
-        >
-          <Plus className="h-4 w-4" /> Add review
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-72">
-        <DropdownMenuItem onClick={() => onAdd({ ...BLANK_REVIEW })}>
-          <Plus className="mr-2 h-4 w-4" /> Blank review
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-dark-gray">Use a profile</DropdownMenuLabel>
-        {REVIEW_PRESETS.map((preset) => (
-          <DropdownMenuItem
-            key={preset.reviewerName}
-            onClick={() => onAdd({ ...preset })}
-            className="gap-3 py-2"
-          >
-            <span className="size-9 shrink-0 overflow-hidden rounded-full bg-light-grey">
-              <img src={resolveImg(preset.reviewerAvatar)} alt="" className="h-full w-full object-cover" />
-            </span>
-            <span className="min-w-0">
-              <span className="block truncate font-medium text-midnight">{preset.reviewerName}</span>
-              <span className="block truncate text-xs text-dark-gray">{preset.reviewerLocation}</span>
-            </span>
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function StarRatingInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  return (
-    <div className="flex gap-0.5">
-      {[1, 2, 3, 4, 5].map((n) => (
-        <button
-          key={n}
-          type="button"
-          onClick={() => onChange(n)}
-          className="text-lg leading-none focus:outline-none"
-          aria-label={`${n} star${n !== 1 ? "s" : ""}`}
-        >
-          <span className={n <= value ? "text-crimson-red" : "text-light-grey"}>★</span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-
-const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-const CURRENT_YEAR = new Date().getFullYear();
-const YEARS = Array.from({ length: 10 }, (_, i) => CURRENT_YEAR - i);
-
-function MonthYearPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const parts = value ? value.split(" ") : [];
-  const selectedMonth = parts[0] ?? "";
-  const selectedYear = parts[1] ?? "";
-
-  const handleSelect = (month: string, year: string) => {
-    if (month && year) { onChange(`${month} ${year}`); setOpen(false); }
-  };
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button type="button" className="font-body text-b5-desktop text-dark-gray hover:text-midnight transition-colors">
-          {value || <span className="text-dark-gray/50">Month Year</span>}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-56 p-3 space-y-2" align="end">
-        <Select value={selectedMonth} onValueChange={(m) => handleSelect(m, selectedYear || String(CURRENT_YEAR))}>
-          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Month" /></SelectTrigger>
-          <SelectContent>{MONTHS.map((m) => <SelectItem key={m} value={m} className="text-xs">{m}</SelectItem>)}</SelectContent>
-        </Select>
-        <Select value={selectedYear} onValueChange={(y) => handleSelect(selectedMonth || MONTHS[0], y)}>
-          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Year" /></SelectTrigger>
-          <SelectContent>{YEARS.map((y) => <SelectItem key={y} value={String(y)} className="text-xs">{y}</SelectItem>)}</SelectContent>
-        </Select>
-      </PopoverContent>
-    </Popover>
-  );
 }
 
 // ─── Inline editing primitives ────────────────────────────────────────────────
@@ -991,7 +868,7 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
       destinations: [],
       stripePaymentLink: "", depositNote: "", footnote: "",
       brochureLink: "", preDeparturePack: "",
-      tourRadarWidgetId: "", tourRadarWidgetUrl: "",
+      tourRadarWidgetId: "", tourRadarWidgetUrl: "", tourRadarTourId: "",
       pricing: { original: undefined, discounted: undefined, deposit: undefined, currency: "GBP" },
       travelDates: [{ startDate: "", endDate: "", isAvailable: true, hasCustomPricing: false,
         customOriginal: undefined, customDiscounted: undefined, customDeposit: undefined,
@@ -1001,7 +878,7 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
         itinerary: [{ day: 1, title: "", description: "", image: undefined, accommodation: undefined, activities: undefined, meals: undefined, details: cloneDayDetails() }],
         requirements: [""],
         keyFacts: cloneKeyFacts(), tags: [], inclusions: cloneInclusions(), accommodations: [], faqs: cloneFaqs(),
-        thingsToKnow: cloneThingsToKnow(), tips: cloneTips(), reviews: [], map: { image: "", embedUrl: "" },
+        thingsToKnow: cloneThingsToKnow(), tips: cloneTips(), map: { image: "", embedUrl: "" },
       },
     },
   });
@@ -1055,7 +932,6 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
   const { fields: faqFields, append: addFaq, remove: rmFaq, move: moveFaq } = useFieldArray({ control: form.control, name: "details.faqs" });
   const { fields: ttkFields, append: addTtk, remove: rmTtk, move: moveTtk, replace: replaceTtk } = useFieldArray({ control: form.control, name: "details.thingsToKnow" });
   const { fields: tipFields, append: addTip, remove: rmTip, move: moveTip, replace: replaceTip } = useFieldArray({ control: form.control, name: "details.tips" });
-  const { fields: reviewFields, append: addReview, remove: rmReview, move: moveReview } = useFieldArray({ control: form.control, name: "details.reviews" as any });
   const { fields: reqFields, append: addReq, remove: rmReq } = useFieldArray({ control: form.control, name: "details.requirements" as any });
   const { fields: dateFields, append: addDate, remove: rmDate } = useFieldArray({ control: form.control, name: "travelDates" });
   const { fields: kfFields, append: addKf, remove: rmKf, move: moveKf } = useFieldArray({ control: form.control, name: "details.keyFacts" as any });
@@ -1076,7 +952,6 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
   const faqs = w("details.faqs") as any[] | undefined;
   const ttks = w("details.thingsToKnow") as any[] | undefined;
   const tips = w("details.tips") as any[] | undefined;
-  const reviews = w("details.reviews") as any[] | undefined;
   const kfData = w("details.keyFacts") as Array<{ icon: string; label: string; values: string[] }> | undefined;
   const travelDates = w("travelDates") as any[] | undefined; // Tour Dates key-fact display
   const mapData = w("details.map") as any;   // conditional render of map section
@@ -1179,6 +1054,7 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
         preDeparturePack: tour.preDeparturePack ?? "",
         tourRadarWidgetId: (tour as any).tourRadarWidgetId ?? "",
         tourRadarWidgetUrl: (tour as any).tourRadarWidgetUrl ?? "",
+        tourRadarTourId: (tour as any).tourRadarTourId ?? "",
         pricing: tour.pricing ? {
           original: tour.pricing.original ?? undefined, discounted: tour.pricing.discounted ?? undefined,
           deposit: tour.pricing.deposit ?? undefined, currency: tour.pricing.currency || "GBP",
@@ -1256,9 +1132,6 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
     } else if (field.startsWith("itinerary-")) {
       const i = Number(field.replace("itinerary-", ""));
       sv(`details.itinerary.${i}.image`, urls[0]);
-    } else if (field.startsWith("review-")) {
-      const i = Number(field.replace("review-", ""));
-      sv(`details.reviews.${i}.reviewerAvatar`, urls[0]);
     }
 
     setPickerState(null);
@@ -2592,17 +2465,15 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
             <section id="section-reviews" className="mt-10 md:mt-14">
               <h2 className="font-hk-grotesk text-h3-mobile md:text-h3-desktop text-midnight">What people say about us</h2>
 
-              {/* Reviews are now managed centrally in the Tour Reviews dashboard —
-                  that collection (not this embedded editor) is what the website
-                  renders, including verified traveler submissions. */}
-              <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900">
-                <p className="font-body text-b4-desktop">
-                  Reviews shown on the website are now managed in the{" "}
-                  <a href="/reviews" className="font-semibold underline">
+              {/* Reviews live in the `tourReviews` collection, edited in the Tour
+                  Reviews dashboard. Nothing on this form writes them. */}
+              <div className="mt-4 rounded-lg border border-border bg-light-grey/40 px-4 py-3">
+                <p className="font-body text-b4-desktop text-dark-gray">
+                  Reviews for this tour are managed in the{" "}
+                  <a href="/reviews" className="font-semibold text-crimson-red underline">
                     Tour Reviews
                   </a>{" "}
-                  dashboard — including verified traveler submissions, photos, and hide/publish.
-                  Edits made below are legacy and no longer appear on the site.
+                  dashboard — verified traveler submissions, photos, and hide/publish.
                 </p>
               </div>
 
@@ -2632,112 +2503,28 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
                 </div>
               </div>
 
-              {/* Empty state — greyed-out placeholder cards */}
-              {reviewFields.length === 0 && (
-                <>
-                  <ul className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-3 opacity-40 pointer-events-none select-none">
-                    {PLACEHOLDER_REVIEWS.map((r, i) => (
-                      <li key={i} className="rounded-2xl bg-white shadow-low p-6 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex gap-0.5">
-                            {[1,2,3,4,5].map((n) => (
-                              <span key={n} className="text-lg leading-none text-crimson-red">★</span>
-                            ))}
-                          </div>
-                          <span className="font-body text-b5-desktop text-dark-gray">{r.date}</span>
-                        </div>
-                        <p className="font-body text-b4-desktop text-midnight">{r.body}</p>
-                        <div className="flex items-center gap-3 pt-2">
-                          <span className="size-10 shrink-0 overflow-hidden rounded-full bg-light-grey">
-                            <img src={resolveImg(r.reviewerAvatar)} alt="" className="h-full w-full object-cover" />
-                          </span>
-                          <div>
-                            <p className="font-body text-b4-desktop font-semibold text-midnight">{r.reviewerName}</p>
-                            <p className="font-body text-b5-desktop text-crimson-red">{r.reviewerLocation}</p>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="mt-3 font-body text-b5-desktop text-dark-gray italic">
-                    No reviews yet — generic placeholder cards shown on www.
-                  </p>
-                  <AddReviewMenu onAdd={(r) => (addReview as any)(r)} className="mt-4" />
-                </>
-              )}
+              {/* The tour's id on TourRadar — the `{id}` in tourradar.com/t/{id}. This
+                  drives the scheduled review import and the outbound "via TourRadar"
+                  link on each imported card. It is NOT the widget id above. */}
+              <div className="mt-6 rounded-lg border border-border px-4 py-3 space-y-2">
+                <p className="font-body text-b4-desktop font-semibold text-midnight">
+                  TourRadar tour ID
+                </p>
+                <p className="font-body text-b4-desktop text-dark-gray">
+                  The number in <span className="font-mono">tourradar.com/t/<b>321149</b></span>.
+                  Set this to include the tour in the scheduled review import. Leave blank if
+                  the tour isn&apos;t listed on TourRadar.
+                </p>
+                <div data-field="tourRadarTourId" className="flex items-center gap-2 border border-border rounded-md px-3 py-1.5">
+                  <InlineInput
+                    value={gv("tourRadarTourId") ?? ""}
+                    onChange={(v) => sv("tourRadarTourId", v)}
+                    placeholder="e.g. 321149"
+                    className="font-body text-b4-desktop text-dark-gray"
+                  />
+                </div>
+              </div>
 
-              {/* Filled state — inline editable cards */}
-              {reviewFields.length > 0 && (
-                <>
-                  <SortableList ids={(reviewFields as any[]).map((f) => f.id)} strategy={rectSortingStrategy} onReorder={(a, b) => moveReview(a, b)}>
-                    <ul className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-3">
-                      {(reviewFields as any[]).map((field, i) => {
-                        const review = reviews?.[i];
-                        return (
-                          <SortableItem key={field.id} id={field.id}>
-                            {({ setNodeRef, style, handle }) => (
-                              <li ref={setNodeRef} style={style} className="rounded-2xl bg-white shadow-low p-6 space-y-3 group/review">
-                                <div className="flex items-center justify-between">
-                                  <StarRatingInput
-                                    value={review?.rating ?? 5}
-                                    onChange={(v) => sv(`details.reviews.${i}.rating`, v)}
-                                  />
-                                  <div className="flex items-center gap-1">
-                                    <MonthYearPicker
-                                      value={review?.date ?? ""}
-                                      onChange={(v) => sv(`details.reviews.${i}.date`, v)}
-                                    />
-                                    <DragHandle handle={handle} className="opacity-0 group-hover/review:opacity-100 transition-opacity" />
-                                    <button type="button" onClick={() => rmReview(i)} className="text-crimson-red opacity-0 group-hover/review:opacity-100 transition-opacity">
-                                      <X className="h-4 w-4" />
-                                    </button>
-                                  </div>
-                                </div>
-                                <InlineTextarea
-                                  value={review?.body ?? ""}
-                                  onChange={(v) => sv(`details.reviews.${i}.body`, v)}
-                                  placeholder="Review text…"
-                                  className="font-body text-b4-desktop text-midnight"
-                                />
-                                <div className="flex items-center gap-3 pt-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => setPickerState({ field: `review-${i}`, initialUrl: resolveImg(review?.reviewerAvatar) || undefined })}
-                                    title={review?.reviewerAvatar ? "Change reviewer photo" : "Add reviewer photo"}
-                                    className="group/avatar relative size-10 shrink-0 overflow-hidden rounded-full bg-light-grey"
-                                  >
-                                    {review?.reviewerAvatar ? (
-                                      <img src={resolveImg(review.reviewerAvatar)} alt="" className="h-full w-full object-cover" />
-                                    ) : null}
-                                    <span className="absolute inset-0 flex items-center justify-center bg-midnight/40 opacity-0 transition-opacity group-hover/avatar:opacity-100">
-                                      <ImageIcon className="h-4 w-4 text-white" />
-                                    </span>
-                                  </button>
-                                  <div className="flex-1 min-w-0">
-                                    <InlineInput
-                                      value={review?.reviewerName ?? ""}
-                                      onChange={(v) => sv(`details.reviews.${i}.reviewerName`, v)}
-                                      placeholder="Reviewer name"
-                                      className="font-body text-b4-desktop font-semibold text-midnight"
-                                    />
-                                    <InlineInput
-                                      value={review?.reviewerLocation ?? ""}
-                                      onChange={(v) => sv(`details.reviews.${i}.reviewerLocation`, v)}
-                                      placeholder="City, Country"
-                                      className="font-body text-b5-desktop text-crimson-red"
-                                    />
-                                  </div>
-                                </div>
-                              </li>
-                            )}
-                          </SortableItem>
-                        );
-                      })}
-                    </ul>
-                  </SortableList>
-                  <AddReviewMenu onAdd={(r) => (addReview as any)(r)} className="mt-6" />
-                </>
-              )}
             </section>
 
           </div>{/* end page container */}

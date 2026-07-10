@@ -1,5 +1,16 @@
 # 067 — Tour reviews moved to a dedicated `tourReviews` collection
 
+> **Status: consolidation complete.** The legacy `details.reviews[]` code path has
+> been removed entirely — the tour-form editor, the `TourReview` types in both apps,
+> and the www read/map path. `tourReviews` is now the single source of truth.
+>
+> No data migration was run: a dev audit found the array survived on exactly 1 of 21
+> tours, holding a single `"THIS IS A TEST!"` row. The one-off
+> `migrate-embedded-reviews-to-collection.ts` and `check-embedded-reviews.mjs` scripts
+> were deleted with it. The orphaned `details.reviews` **field is intentionally left in
+> Firestore** as a zero-cost rollback net; nothing reads it. If you later want it gone,
+> `FieldValue.delete()` it per tour — and note that prod was never audited (no prod key).
+
 ## What changed
 
 Reviews used to live as an embedded `details.reviews[]` array on each

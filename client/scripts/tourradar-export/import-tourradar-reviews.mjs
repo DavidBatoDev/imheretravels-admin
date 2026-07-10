@@ -19,9 +19,26 @@
  * Idempotent: deterministic doc id `tourradar_<reviewId>` (the stable TourRadar
  * review id). Re-runs UPDATE content in place and never clobber admin moderation
  * (status / assigned / tour assignment on an existing doc are preserved). Media
- * already re-hosted (same Storage path) is reused, not re-uploaded. After the
- * upsert, any older-scheme `source=="tourradar"` doc no longer in the feed is
- * pruned.
+ * already re-hosted (same Storage path) is reused, not re-uploaded.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * SUPERSEDED for routine syncs.
+ *
+ * Day-to-day importing is now the `syncTourRadarReviews` Cloud Function
+ * (functions/src/scheduled-sync-tourradar-reviews.ts), which runs daily, is
+ * controlled from the admin Tour Reviews page, and reads its tour list from each
+ * tourPackages doc's `tourRadarTourId`.
+ *
+ * This script is retained for the ONE-OFF PRODUCTION SEED, where you want a
+ * dry-run you can read before anything is written.
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * PRUNING is opt-in and non-destructive. `--prune` marks reviews absent from the
+ * feed with `deletedOnTourRadarAt` + `status:"hidden"`; it never deletes. Without
+ * the flag they are only reported. (This script reads a JSON snapshot and cannot
+ * tell "TourRadar removed this review" from "the scrape truncated" — so removing
+ * rows on its say-so once cost us that distinction. The Cloud Function can tell,
+ * because it compares against TourRadar's own advertised total.)
  *
  * Auth: uses admin/client/keys/dev-project-service-account.json by default
  * (→ imheretravels-dev). For production, pass a prod key:
@@ -31,7 +48,7 @@
  *
  * Usage:
  *   node admin/client/scripts/tourradar-export/import-tourradar-reviews.mjs --dry-run
- *   node admin/client/scripts/tourradar-export/import-tourradar-reviews.mjs --production
+ *   node admin/client/scripts/tourradar-export/import-tourradar-reviews.mjs --production [--prune]
  */
 
 import { initializeApp, getApps, cert } from "firebase-admin/app";
@@ -75,6 +92,7 @@ async function main() {
   const args = process.argv.slice(2);
   const isDryRun = args.includes("--dry-run");
   const isProduction = args.includes("--production");
+  const shouldPrune = args.includes("--prune");
   if (!isDryRun && !isProduction) {
     console.error("❌ Specify --dry-run or --production");
     process.exit(1);
@@ -212,6 +230,8 @@ async function main() {
         source: "tourradar",
         externalSource: "tourradar",
         externalId: id,
+        // TourRadar's tour id — drives the "via TourRadar" outbound link on the card.
+        externalTourId: String(r.tourId),
         createdAt: Timestamp.fromMillis(createdMs),
         externalUpdatedAt: Timestamp.fromMillis(createdMs),
         updatedAt: now,
@@ -240,25 +260,42 @@ async function main() {
     }
   }
 
-  // Prune any older-scheme tourradar docs (e.g. the previous hash-id imports)
-  // that are no longer in the feed.
+  // Reviews present in Firestore but absent from this snapshot. We SOFT-delete them
+  // (hide + flag) and only when explicitly asked: a truncated scrape looks exactly like
+  // "TourRadar removed these", and a hard delete would take their re-hosted media and
+  // moderation state with them.
   let pruned = 0;
   const existingSnap = await db.collection("tourReviews").where("source", "==", "tourradar").get();
-  for (const d of existingSnap.docs) {
-    if (keepIds.has(d.id)) continue;
+  const stale = existingSnap.docs.filter(
+    (d) => !keepIds.has(d.id) && !d.data().deletedOnTourRadarAt,
+  );
+  for (const d of stale) {
+    if (!shouldPrune) {
+      console.log(`[SKIP] not in feed: ${d.id} — re-run with --prune to hide it`);
+      continue;
+    }
     if (isDryRun) {
-      console.log(`[DRY] prune stale ${d.id}`);
+      console.log(`[DRY] soft-delete (hide) ${d.id}`);
     } else {
-      await d.ref.delete();
+      await d.ref.set(
+        { deletedOnTourRadarAt: now, status: "hidden", updatedAt: now },
+        { merge: true },
+      );
     }
     pruned++;
+  }
+  if (stale.length && !shouldPrune) {
+    console.warn(
+      `\n⚠️  ${stale.length} stored review(s) are not in this snapshot. Nothing was changed.`,
+    );
   }
 
   console.log("\n" + "=".repeat(60));
   console.log(
     `${isDryRun ? "Would create" : "Created"}: ${created}   ` +
       `${isDryRun ? "would update" : "Updated"}: ${updated}   ` +
-      `Pruned: ${pruned}   Media uploaded: ${uploaded}   Errors: ${errors}`,
+      `${shouldPrune ? "Hidden (soft-deleted)" : "Not in feed"}: ${shouldPrune ? pruned : stale.length}   ` +
+      `Media uploaded: ${uploaded}   Errors: ${errors}`,
   );
   console.log("=".repeat(60));
   if (isDryRun) console.log("\n⚠️  DRY RUN — re-run with --production to write.\n");

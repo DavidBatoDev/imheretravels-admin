@@ -20,7 +20,13 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { ReviewDoc, ReviewStatus, NewAdminReview, CategoryRatings } from "@/types/reviews";
+import type {
+  ReviewDoc,
+  ReviewStatus,
+  NewAdminReview,
+  CategoryRatings,
+  ReviewVideo,
+} from "@/types/reviews";
 
 const COLLECTION = "tourReviews";
 
@@ -28,6 +34,19 @@ function toMillis(v: any): number {
   if (v && typeof v.toMillis === "function") return v.toMillis();
   if (v && typeof v.seconds === "number") return v.seconds * 1000;
   return typeof v === "number" ? v : 0;
+}
+
+/** Keep only well-formed `{ src, poster? }` rows; drop anything without a src. */
+function toVideos(raw: unknown): ReviewVideo[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const videos = raw
+    .filter((v): v is Record<string, unknown> => !!v && typeof v === "object")
+    .filter((v) => typeof v.src === "string" && v.src)
+    .map((v) => ({
+      src: v.src as string,
+      ...(typeof v.poster === "string" && v.poster ? { poster: v.poster } : {}),
+    }));
+  return videos.length ? videos : undefined;
 }
 
 /** Subscribe to all reviews (newest first, sorted client-side). */
@@ -56,8 +75,10 @@ export function subscribeToReviews(
           reviewerFirstName: raw.reviewerFirstName ?? "",
           reviewerLastName: raw.reviewerLastName || undefined,
           reviewerLocation: raw.reviewerLocation || undefined,
+          reviewerCountryEmoji: raw.reviewerCountryEmoji || undefined,
           reviewerAvatar: raw.reviewerAvatar || undefined,
           photos: Array.isArray(raw.photos) ? raw.photos : undefined,
+          videos: toVideos(raw.videos),
           status: (raw.status ?? "published") as ReviewStatus,
           source: raw.source ?? "admin",
           verified: raw.verified === true,
@@ -65,11 +86,13 @@ export function subscribeToReviews(
           bookingCode: raw.bookingCode || undefined,
           externalId: raw.externalId || undefined,
           externalSource: raw.externalSource || undefined,
+          externalTourId: raw.externalTourId || undefined,
           externalUpdatedAt: toMillis(raw.externalUpdatedAt) || undefined,
           externalReply: raw.externalReply || undefined,
           reviewerFullName: raw.reviewerFullName || undefined,
           assigned: raw.assigned === true,
           deletedOnGoogleAt: toMillis(raw.deletedOnGoogleAt) || undefined,
+          deletedOnTourRadarAt: toMillis(raw.deletedOnTourRadarAt) || undefined,
           createdAt: toMillis(raw.createdAt),
           updatedAt: toMillis(raw.updatedAt),
           displayDate: raw.displayDate || undefined,
@@ -119,6 +142,19 @@ export async function updateReviewPhotos(
 ): Promise<void> {
   await updateDoc(doc(db, COLLECTION, id), {
     photos,
+    updatedAt: Timestamp.now(),
+  });
+  await pingRevalidate(pathsFor(tourSlug));
+}
+
+/** Replace a review's trip videos (public site shows at most one, played inline). */
+export async function updateReviewVideos(
+  id: string,
+  videos: ReviewVideo[],
+  tourSlug?: string,
+): Promise<void> {
+  await updateDoc(doc(db, COLLECTION, id), {
+    videos,
     updatedAt: Timestamp.now(),
   });
   await pingRevalidate(pathsFor(tourSlug));
@@ -208,6 +244,7 @@ export async function createAdminReview(input: NewAdminReview): Promise<string> 
   if (input.reviewerLocation) payload.reviewerLocation = input.reviewerLocation;
   if (input.reviewerAvatar) payload.reviewerAvatar = input.reviewerAvatar;
   if (input.photos?.length) payload.photos = input.photos;
+  if (input.videos?.length) payload.videos = input.videos;
   if (input.displayDate) payload.displayDate = input.displayDate;
   if (input.bookingId) payload.bookingId = input.bookingId;
   if (input.bookingCode) payload.bookingCode = input.bookingCode;

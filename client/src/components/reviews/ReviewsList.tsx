@@ -58,7 +58,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Star, MoreHorizontal, Eye, EyeOff, Trash2, ImagePlus, X, Plus, Search,
   BadgeCheck, Loader2, Pencil, ExternalLink, ChevronDown, ChevronUp, FilterX,
-  Smile, MapPin, Play, Rows3, LayoutGrid,
+  Smile, MapPin, Play, Rows3, LayoutGrid, AlertTriangle,
 } from "lucide-react";
 
 /** Matches the public site's write-review form (WriteReviewButton.tsx). */
@@ -973,6 +973,7 @@ export default function ReviewsList() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         tours={tours}
+        existingReviews={reviews}
         onCreated={() => toast({ title: "Review added" })}
       />
 
@@ -1094,11 +1095,13 @@ function CreateReviewDialog({
   open,
   onOpenChange,
   tours,
+  existingReviews,
   onCreated,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   tours: TourOption[];
+  existingReviews: ReviewDoc[];
   onCreated: () => void;
 }) {
   const { toast } = useToast();
@@ -1129,7 +1132,45 @@ function CreateReviewDialog({
   const [bookingCheckState, setBookingCheckState] = useState<"idle" | "checking" | "verified" | "error">("idle");
   const [bookingCheckMessage, setBookingCheckMessage] = useState("");
   const [verifiedBooking, setVerifiedBooking] = useState<{ bookingId: string; bookingCode: string } | null>(null);
-  const [bookingChoices, setBookingChoices] = useState<BookingCheckMatch[] | null>(null);
+  // All eligible tours returned by the last successful booking check (1 or many).
+  const [bookingMatches, setBookingMatches] = useState<BookingCheckMatch[] | null>(null);
+
+  // Map a booking's tour name to a known tour package (exact first, then loose).
+  const tourForMatch = (m: BookingCheckMatch) => {
+    const exact = tours.find((t) => t.name.trim().toLowerCase() === m.tourName.trim().toLowerCase());
+    return exact ?? tours.find((t) => tourNamesLooselyMatch(t.name, m.tourName));
+  };
+
+  // Once a booking is verified, the Tour dropdown is restricted to the tours the
+  // traveler actually booked — a "verified" review can't point at a tour they
+  // never took. Falls back to all tours when nothing maps (pick manually) or
+  // when no booking was checked (admin adding a review without one).
+  const bookedTourOptions = useMemo<TourOption[] | null>(() => {
+    if (!bookingMatches) return null;
+    const opts: TourOption[] = [];
+    const seen = new Set<string>();
+    for (const m of bookingMatches) {
+      const t = tourForMatch(m);
+      if (t && !seen.has(t.slug)) {
+        seen.add(t.slug);
+        opts.push(t);
+      }
+    }
+    return opts;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookingMatches, tours]);
+  const tourOptions = bookedTourOptions && bookedTourOptions.length ? bookedTourOptions : tours;
+
+  // Block creating a second review for the same booking + tour (admin dedup,
+  // mirroring the public flow's hasReviewForBooking guard).
+  const duplicateReview = useMemo(() => {
+    if (!verifiedBooking?.bookingId || !selectedTour) return null;
+    return (
+      existingReviews.find(
+        (r) => r.bookingId && r.bookingId === verifiedBooking.bookingId && r.tourId === selectedTour.id,
+      ) ?? null
+    );
+  }, [verifiedBooking, selectedTour, existingReviews]);
 
   function applyBookingMatch(match: BookingCheckMatch) {
     // Exact match first — tour names often overlap ("Philippine Sunset" vs.
@@ -1147,14 +1188,13 @@ function CreateReviewDialog({
     );
     if (!firstName.trim() && match.firstName) setFirstName(match.firstName);
     if (!nationality && match.nationality) setNationality(match.nationality);
-    setBookingChoices(null);
   }
 
   async function checkBooking() {
     const identifier = bookingIdentifier.trim();
     if (!identifier) return;
     setBookingCheckState("checking");
-    setBookingChoices(null);
+    setBookingMatches(null);
     try {
       const result = await verifyAdminBooking({ identifier });
       if (!result.ok) {
@@ -1163,10 +1203,18 @@ function CreateReviewDialog({
         setVerifiedBooking(null);
         return;
       }
+      setBookingMatches(result.matches);
+      // Drop any stale tour selection that isn't one of this traveler's tours.
+      const bookedSlugs = new Set(
+        result.matches.map((m) => tourForMatch(m)?.slug).filter(Boolean) as string[],
+      );
+      if (tourSlug && !bookedSlugs.has(tourSlug)) setTourSlug("");
       if (result.matches.length === 1) {
         applyBookingMatch(result.matches[0]);
       } else {
-        setBookingChoices(result.matches);
+        // Multiple booked tours — let the admin choose in the (now constrained)
+        // Tour dropdown below. Not marked verified until they pick one.
+        setVerifiedBooking(null);
         setBookingCheckState("idle");
         setBookingCheckMessage("");
       }
@@ -1243,7 +1291,7 @@ function CreateReviewDialog({
     setBookingCheckState("idle");
     setBookingCheckMessage("");
     setVerifiedBooking(null);
-    setBookingChoices(null);
+    setBookingMatches(null);
     clearPhotos();
     clearVideo();
   }
@@ -1302,6 +1350,12 @@ function CreateReviewDialog({
   async function submit() {
     const tour = selectedTour;
     if (!tour) return toast({ title: "Choose a tour", variant: "destructive" });
+    if (duplicateReview)
+      return toast({
+        title: "Duplicate review",
+        description: "This booking already has a review for this tour.",
+        variant: "destructive",
+      });
     if (!firstName.trim()) return toast({ title: "Enter a first name", variant: "destructive" });
     if (body.trim().length < 4) return toast({ title: "Write a review body", variant: "destructive" });
 
@@ -1389,7 +1443,7 @@ function CreateReviewDialog({
                       setBookingCheckState("idle");
                       setBookingCheckMessage("");
                       setVerifiedBooking(null);
-                      setBookingChoices(null);
+                      setBookingMatches(null);
                     }}
                     className={FORM_INPUT_CLS}
                     placeholder="you@email.com or booking ID"
@@ -1416,44 +1470,55 @@ function CreateReviewDialog({
                 {bookingCheckState === "error" && (
                   <p className="mt-1.5 font-body text-b4-desktop text-crimson-red">{bookingCheckMessage}</p>
                 )}
-                {bookingChoices && bookingChoices.length > 1 && (
-                  <div className="mt-2">
-                    <label className={`${FORM_LABEL_CLS} mb-1`}>
-                      This traveler has confirmed bookings for {bookingChoices.length} tours — which one?
-                    </label>
-                    <Select onValueChange={(tourName) => {
-                      const match = bookingChoices.find((m) => m.tourName === tourName);
-                      if (match) applyBookingMatch(match);
-                    }}>
-                      <SelectTrigger className={FORM_INPUT_CLS}>
-                        <SelectValue placeholder="Select the tour this review is for" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {bookingChoices.map((m) => (
-                          <SelectItem key={m.tourName} value={m.tourName}>
-                            {m.tourName}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                {bookingMatches && bookingMatches.length > 1 && !verifiedBooking && (
+                  <p className="mt-1.5 font-body text-b4-desktop text-dark-gray">
+                    This traveler booked {bookingMatches.length} tours — choose which one in{" "}
+                    <span className="font-semibold">Tour</span> below.
+                  </p>
                 )}
               </div>
 
               <div>
                 <label className={FORM_LABEL_CLS}>Tour</label>
-                <Select value={tourSlug} onValueChange={setTourSlug}>
+                <Select
+                  value={tourSlug}
+                  onValueChange={(slug) => {
+                    setTourSlug(slug);
+                    // Keep the verified booking in sync with the chosen tour so
+                    // bookingId / verified always match what's selected.
+                    if (bookingMatches) {
+                      const m = bookingMatches.find((mm) => tourForMatch(mm)?.slug === slug);
+                      if (m) {
+                        setVerifiedBooking({ bookingId: m.bookingId, bookingCode: m.bookingCode });
+                        setBookingCheckState("verified");
+                        setBookingCheckMessage(
+                          `Confirmed booking — ${m.firstName || "traveler"} · ${
+                            tours.find((t) => t.slug === slug)?.name ?? m.tourName
+                          }`,
+                        );
+                        if (!firstName.trim() && m.firstName) setFirstName(m.firstName);
+                        if (!nationality && m.nationality) setNationality(m.nationality);
+                      }
+                    }
+                  }}
+                >
                   <SelectTrigger className={FORM_INPUT_CLS}>
                     <SelectValue placeholder="Select a tour" />
                   </SelectTrigger>
                   <SelectContent>
-                    {tours.map((t) => (
+                    {tourOptions.map((t) => (
                       <SelectItem key={t.slug} value={t.slug}>
                         {t.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {duplicateReview && (
+                  <p className="mt-1.5 flex items-center gap-1.5 font-body text-b4-desktop text-crimson-red">
+                    <AlertTriangle className="size-4 shrink-0" />
+                    This booking already has a review for this tour — you can&apos;t add another.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -1689,7 +1754,7 @@ function CreateReviewDialog({
           </Button>
           <Button
             onClick={submit}
-            disabled={saving}
+            disabled={saving || !!duplicateReview}
             className="rounded-full bg-crimson-red px-6 py-3 font-body text-b2-desktop font-medium text-white shadow-small transition-all hover:bg-light-red hover:shadow-medium disabled:opacity-50"
           >
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

@@ -31,8 +31,9 @@ type Props = {
   disabled?: boolean;
 };
 
+// h-10 matches the sibling shadcn <Input> (First name) so the fields line up.
 const TRIGGER_CLS =
-  "w-full text-left rounded-md border border-light-grey bg-white px-4 py-3 font-body text-b2-desktop text-midnight outline-none transition-colors focus:border-crimson-red disabled:cursor-not-allowed disabled:opacity-50";
+  "flex h-10 w-full items-center text-left rounded-md border border-light-grey bg-white px-4 font-body text-b2-desktop text-midnight outline-none transition-colors focus:border-crimson-red disabled:cursor-not-allowed disabled:opacity-50";
 
 export default function NationalitySelect({
   value,

@@ -123,7 +123,7 @@ export default function DisplayDatePicker({ value, onChange, minYear }: Props) {
         ref={triggerRef}
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full rounded-md border border-light-grey bg-white px-4 py-3 text-left font-body text-b2-desktop text-midnight outline-none transition-colors hover:border-crimson-red/50 focus:border-crimson-red"
+        className="flex h-10 w-full items-center rounded-md border border-light-grey bg-white px-4 text-left font-body text-b2-desktop text-midnight outline-none transition-colors hover:border-crimson-red/50 focus:border-crimson-red"
       >
         {selectedISO ? formatDisplayDate(selectedISO) : <span className="text-grey">No display date</span>}
       </button>
@@ -131,7 +131,11 @@ export default function DisplayDatePicker({ value, onChange, minYear }: Props) {
       {open &&
         createPortal(
           <div
-            className={`fixed inset-0 z-[9999] flex items-center justify-center p-4 ${
+            // pointer-events-auto: this modal is portaled to <body>, which the
+            // parent Radix Dialog sets to `pointer-events: none` while open —
+            // without this the calendar renders on top but every click passes
+            // through to the form behind it (nothing selects).
+            className={`pointer-events-auto fixed inset-0 z-[9999] flex items-center justify-center p-4 ${
               isClosing ? "animate-[fadeOut_150ms_ease-in]" : "animate-[fadeIn_150ms_ease-out]"
             }`}
             role="dialog"

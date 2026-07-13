@@ -106,6 +106,16 @@ export default function BookingDetailModal({
   // Use real-time booking data if available, otherwise fall back to prop
   const currentBooking = realtimeBooking || booking;
 
+  // A freshly-created booking legitimately has no bookingId yet (and no
+  // traveler details) — that's a new-booking-in-progress, not a corrupt record.
+  // Distinguish it so we show a neutral setup state instead of a scary
+  // "Invalid Booking" error while the edit form auto-opens over it.
+  const looksLikeNewBooking =
+    !!currentBooking &&
+    !currentBooking.bookingId &&
+    !currentBooking.fullName &&
+    !currentBooking.emailAddress;
+
   // On first mount while open, initialize from URL once; later rely solely on local state
   const initializedEditFromUrlRef = React.useRef(false);
   useEffect(() => {
@@ -771,7 +781,8 @@ export default function BookingDetailModal({
                   Booking Details
                 </span>
                 <span className="text-base sm:text-2xl font-mono font-semibold text-crimson-red block">
-                  {currentBooking?.bookingId || "Invalid Booking"}
+                  {currentBooking?.bookingId ||
+                    (looksLikeNewBooking ? "New booking" : "Invalid Booking")}
                 </span>
               </div>
             </DialogTitle>
@@ -982,6 +993,42 @@ export default function BookingDetailModal({
         <div className="flex overflow-hidden max-h-[calc(90vh-120px)]">
           {/* Check if booking is invalid (no bookingId) */}
           {!currentBooking?.bookingId ? (
+            looksLikeNewBooking ? (
+              <div className="flex-1 flex items-center justify-center p-8">
+                <Card className="max-w-md w-full bg-muted/10 border-none">
+                  <CardContent className="p-6 text-center">
+                    <div className="mb-4">
+                      <div className="w-16 h-16 mx-auto mb-4 bg-crimson-red/10 rounded-full flex items-center justify-center">
+                        <FaEdit className="h-8 w-8 text-crimson-red" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-foreground mb-2">
+                        New booking
+                      </h3>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Let&apos;s fill in the details. The booking ID is
+                        generated once you save.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => setIsEditModalOpen(true)}
+                        className="flex-1 bg-crimson-red hover:bg-crimson-red/90 text-white"
+                      >
+                        <FaEdit className="h-4 w-4 mr-2" />
+                        Fill in details
+                      </Button>
+                      <Button
+                        onClick={() => setIsDeleteDialogOpen(true)}
+                        variant="outline"
+                        className="flex-1"
+                      >
+                        Discard
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
             <div className="flex-1 flex items-center justify-center p-8">
               <Card className="max-w-md w-full bg-muted/10 border-none">
                 <CardContent className="p-6 text-center">
@@ -1017,6 +1064,7 @@ export default function BookingDetailModal({
                 </CardContent>
               </Card>
             </div>
+            )
           ) : (
             <>
               {/* Main Content */}

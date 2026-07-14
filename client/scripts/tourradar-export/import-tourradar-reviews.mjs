@@ -52,6 +52,11 @@
  * Storage bucket defaults to `<project_id>.firebasestorage.app`; override with
  *   TR_STORAGE_BUCKET=<bucket-name>
  *
+ * TR_NAME_TO_SLUG below is dev's tour catalog. A target project's catalog can
+ * differ (e.g. prod split "Sri Lanka Wander" into two real tours dev doesn't
+ * have) — override per-run rather than editing the shared constant:
+ *   TR_SLUG_OVERRIDES='{"Sri Lanka Wander":"sri-lanka-wander-tour-coastal-coast"}'
+ *
  * Usage:
  *   node admin/client/scripts/tourradar-export/import-tourradar-reviews.mjs --dry-run
  *   node admin/client/scripts/tourradar-export/import-tourradar-reviews.mjs --production [--prune]
@@ -148,12 +153,18 @@ async function main() {
     if (t.slug) bySlug.set(t.slug, { id: d.id, slug: t.slug, name: t.name ?? t.title ?? "" });
   }
 
-  // Resolve + validate the tour mapping up front.
+  // Resolve + validate the tour mapping up front. TR_SLUG_OVERRIDES lets a
+  // single run repoint a name at a different project's catalog without
+  // touching the shared TR_NAME_TO_SLUG default.
+  const slugOverrides = process.env.TR_SLUG_OVERRIDES
+    ? JSON.parse(process.env.TR_SLUG_OVERRIDES)
+    : {};
+  const nameToSlug = { ...TR_NAME_TO_SLUG, ...slugOverrides };
   const trTours = [...new Set(reviews.map((r) => r.tour))];
   const resolved = {};
   const unmapped = [];
   for (const name of trTours) {
-    const slug = TR_NAME_TO_SLUG[name];
+    const slug = nameToSlug[name];
     const tour = slug && bySlug.get(slug);
     if (!tour) unmapped.push(name);
     else resolved[name] = tour;

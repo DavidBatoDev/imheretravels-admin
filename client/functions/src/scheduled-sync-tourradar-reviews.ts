@@ -1,6 +1,5 @@
 // functions/src/scheduled-sync-tourradar-reviews.ts
 import * as admin from "firebase-admin";
-import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { randomUUID } from "node:crypto";
@@ -11,9 +10,23 @@ import {
 } from "./tourradar-reviews-fetch";
 
 /**
- * Scheduled import of TourRadar reviews into the `tourReviews` collection
- * (source: "tourradar"). Replaces the manual two-script run in
+ * Import of TourRadar reviews into the `tourReviews` collection (source:
+ * "tourradar"). Replaces the manual two-script run in
  * `admin/client/scripts/tourradar-export/`.
+ *
+ * MANUAL-ONLY. TourRadar blocks the scrape from Cloud Functions IPs — every
+ * tour came back a byte-identical generic anti-bot challenge page (HTTP 202,
+ * 1988 bytes) when this ran as a schedule, confirmed via live deploy, not
+ * assumption. `npm run sync:tourradar` works because the block is
+ * cloud-egress-specific, not fingerprint-based. Full writeup + options
+ * considered (proxy, headless browser, official API access) in
+ * docs/proyekto-tour-review-system.md.
+ *
+ * The `onSchedule` cron (`syncTourRadarReviews`) was already config-disabled
+ * in dev for this reason and never deployed to prod; that dead code has now
+ * been removed too. `syncTourRadarReviewsNow` (the admin "Sync now" callable)
+ * is untouched — restore the `onSchedule` export below if the block is ever
+ * lifted (e.g. official TourRadar API/export-feed access).
  *
  * Which tours are imported is data, not code: every `tourPackages` doc carrying a
  * `tourRadarTourId` is synced. (That field is the `{id}` in `tourradar.com/t/{id}` —
@@ -495,24 +508,9 @@ export async function runTourRadarSync(trigger: "schedule" | "manual"): Promise<
   return { ok, perTour };
 }
 
-export const syncTourRadarReviews = onSchedule(
-  {
-    // Daily. The feed changes slowly (tens of reviews across a handful of tours) and this
-    // is a scrape, not an official API — a gentler cadence than the Google sync's 6-hourly.
-    schedule: "30 2 * * *",
-    timeZone: "UTC",
-    region: "asia-southeast1",
-    timeoutSeconds: 540,
-    memory: "1GiB", // media re-hosting buffers whole files
-  },
-  async () => {
-    try {
-      await runTourRadarSync("schedule");
-    } catch (error) {
-      logger.error("[syncTourRadarReviews] error:", error);
-    }
-  },
-);
+// The scheduled cron (`syncTourRadarReviews`, onSchedule("30 2 * * *", ...) →
+// runTourRadarSync("schedule")) is on hold — see the file header. Restore it
+// here when this picks back up.
 
 /** Admin "Sync now" — same body, but requires an authenticated tour manager. */
 export const syncTourRadarReviewsNow = onCall(

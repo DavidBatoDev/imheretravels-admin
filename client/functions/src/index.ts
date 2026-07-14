@@ -40,11 +40,9 @@ export { applyLateFeesDaily } from "./scheduled-late-fees";
 export { publishScheduledTours } from "./scheduled-publish-tours";
 // Imports Google Business Profile reviews into tourReviews (runs every 6 hours)
 export { syncGoogleReviews } from "./scheduled-sync-google-reviews";
-// Imports TourRadar reviews into tourReviews (runs daily), plus the admin "Sync now" button
-export {
-  syncTourRadarReviews,
-  syncTourRadarReviewsNow,
-} from "./scheduled-sync-tourradar-reviews";
+// Imports TourRadar reviews into tourReviews. Admin "Sync now" button only for
+// now — the scheduled cron is on hold, see scheduled-sync-tourradar-reviews.ts.
+export { syncTourRadarReviewsNow } from "./scheduled-sync-tourradar-reviews";
 export { exportProdFirestoreCollections } from "./scheduled-prod-firestore-export";
 
 // export { telegramBot } from "./telegram-bot";

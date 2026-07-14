@@ -91,7 +91,17 @@ export default function ReviewsSiteView({
         <div className="mt-6 max-w-2xl rounded-brand-lg bg-white p-6 shadow-small md:p-8">
           <RatingBreakdown reviews={publicReviews} />
           <ReviewInsights reviews={publicReviews} showHighlights={false} />
-          <CategoryRatings categories={computeCategoryAggregates(publicReviews)} />
+
+          {/* What travelers love + per-category ratings, full width — mirrors the
+              public hub's bottom section. Renders nothing when the filtered set
+              has no first-party category-rated reviews (federated TourRadar/Google
+              reviews never carry category scores). */}
+          <div className="mt-6 border-t border-light-grey pt-6">
+            <ReviewInsights reviews={publicReviews} showFacts={false} />
+            <div className="mt-4">
+              <CategoryRatings categories={computeCategoryAggregates(publicReviews)} layout="row" />
+            </div>
+          </div>
         </div>
       )}
 
@@ -117,7 +127,7 @@ export default function ReviewsSiteView({
           No reviews match the current filters.
         </p>
       ) : (
-        <ul className="mt-10 columns-1 gap-6 md:mt-12 md:columns-2 lg:columns-3 [&>li]:mb-6 [&>li]:break-inside-avoid">
+        <ul className="mt-10 space-y-6 md:mt-12">
           {reviews.map((r) => (
             <li key={r.id}>
               <ModeratedCard
@@ -184,7 +194,7 @@ function ModeratedCard({
 
       {/* Hidden reviews are dimmed + desaturated so they read as "off the site". */}
       <div className={hidden ? "opacity-50 grayscale" : ""}>
-        <ReviewCard review={toPublicReview(review)} showTour as="div" />
+        <ReviewCard review={toPublicReview(review)} showTour as="div" variant="row" />
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5">

@@ -213,7 +213,11 @@ export default function MarkdownEditor({
         // best-effort
       }
     }
-    setIsEmpty(empty);
+    // A list marker (bullet/number) is visible as soon as it's inserted,
+    // even before any text is typed into it — the placeholder must not
+    // overlap it, so treat a present list as non-empty for display purposes
+    // while still using the plain-text check above for the DOM-wipe cleanup.
+    setIsEmpty(empty && !el.querySelector("ul, ol"));
     onChange(serializeRoot(el).slice(0, maxLength));
   }
 

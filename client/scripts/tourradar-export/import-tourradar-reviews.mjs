@@ -41,8 +41,14 @@
  * because it compares against TourRadar's own advertised total.)
  *
  * Auth: uses admin/client/keys/dev-project-service-account.json by default
- * (→ imheretravels-dev). For production, pass a prod key:
- *   TR_SERVICE_ACCOUNT=/abs/path/prod-service-account.json node …/import-tourradar-reviews.mjs --production
+ * (→ imheretravels-dev). For production, either:
+ *   - pass a prod key file:
+ *       TR_SERVICE_ACCOUNT=/abs/path/prod-service-account.json node …/import-tourradar-reviews.mjs --production
+ *   - or use Application Default Credentials (no key file on disk). Requires
+ *     the gcloud CLI, logged in as an account with Firestore + Storage write
+ *     access on the prod project — NOT the same login as `firebase login`:
+ *       gcloud auth application-default login
+ *       TR_USE_ADC=1 TR_PROJECT_ID=imheretravels-a3f81 node …/import-tourradar-reviews.mjs --production
  * Storage bucket defaults to `<project_id>.firebasestorage.app`; override with
  *   TR_STORAGE_BUCKET=<bucket-name>
  *
@@ -51,7 +57,7 @@
  *   node admin/client/scripts/tourradar-export/import-tourradar-reviews.mjs --production [--prune]
  */
 
-import { initializeApp, getApps, cert } from "firebase-admin/app";
+import { initializeApp, getApps, cert, applicationDefault } from "firebase-admin/app";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { readFileSync } from "node:fs";
@@ -98,19 +104,35 @@ async function main() {
     process.exit(1);
   }
 
-  const keyPath =
-    process.env.TR_SERVICE_ACCOUNT ||
-    path.resolve(__dirname, "../../keys/dev-project-service-account.json");
-  const serviceAccount = JSON.parse(readFileSync(keyPath, "utf-8"));
-  const bucketName =
-    process.env.TR_STORAGE_BUCKET || `${serviceAccount.project_id}.firebasestorage.app`;
+  const useAdc = process.env.TR_USE_ADC === "1" || process.env.TR_USE_ADC === "true";
+  let projectId;
+  let credential;
+  if (useAdc) {
+    // No key file on disk — relies on `gcloud auth application-default login`
+    // having already been run. applicationDefault() can't tell us the project
+    // id, so it must be supplied explicitly.
+    projectId = process.env.TR_PROJECT_ID;
+    if (!projectId) {
+      console.error("❌ TR_USE_ADC=1 requires TR_PROJECT_ID (e.g. imheretravels-a3f81)");
+      process.exit(1);
+    }
+    credential = applicationDefault();
+  } else {
+    const keyPath =
+      process.env.TR_SERVICE_ACCOUNT ||
+      path.resolve(__dirname, "../../keys/dev-project-service-account.json");
+    const serviceAccount = JSON.parse(readFileSync(keyPath, "utf-8"));
+    projectId = serviceAccount.project_id;
+    credential = cert(serviceAccount);
+  }
+  const bucketName = process.env.TR_STORAGE_BUCKET || `${projectId}.firebasestorage.app`;
   if (!getApps().length) {
-    initializeApp({ credential: cert(serviceAccount), storageBucket: bucketName });
+    initializeApp({ credential, projectId, storageBucket: bucketName });
   }
   const db = getFirestore();
   const bucket = getStorage().bucket();
   console.log(`\n📦 TourRadar → tourReviews import`);
-  console.log(`   project: ${serviceAccount.project_id}`);
+  console.log(`   project: ${projectId}`);
   console.log(`   bucket:  ${bucket.name}`);
   console.log(`   mode:    ${isDryRun ? "DRY RUN (no writes)" : "PRODUCTION (will write)"}\n`);
 

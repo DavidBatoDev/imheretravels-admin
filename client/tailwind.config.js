@@ -50,6 +50,7 @@ module.exports = {
         "b1":         ["1.25rem", { lineHeight: "1.5", fontWeight: "500" }],
         "b2-desktop": ["1.125rem",{ lineHeight: "1.5", fontWeight: "500" }],
         "b2-mobile":  ["1rem",    { lineHeight: "1.5", fontWeight: "500" }],
+        "b3-desktop": ["1rem",    { lineHeight: "1.5", fontWeight: "500" }],
         "b4-desktop": ["0.875rem",{ lineHeight: "1.5", fontWeight: "500" }],
         "b4-mobile":  ["0.75rem", { lineHeight: "1.5", fontWeight: "500" }],
       },

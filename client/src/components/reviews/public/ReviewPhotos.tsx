@@ -32,11 +32,14 @@ export default function ReviewPhotos({
   videos = [],
   authorAlt,
   preview = false,
+  rail = false,
 }: {
   photos?: string[];
   videos?: ReviewVideo[];
   authorAlt: string;
   preview?: boolean;
+  /** Compact list-row mode: one full-height cover tile with a `+N` badge. */
+  rail?: boolean;
 }) {
   // Videos first — they're the most engaging thing to open.
   const media: MediaItem[] = [
@@ -45,10 +48,6 @@ export default function ReviewPhotos({
   ];
   const [active, setActive] = useState<number | null>(null);
   const [mounted, setMounted] = useState(false);
-  // Featured video orientation (many uploads are phone-shot portrait): once the
-  // metadata loads we switch the preview box to a portrait shape instead of
-  // cropping the video into a short landscape band.
-  const [featuredPortrait, setFeaturedPortrait] = useState(false);
   const touchStartX = useRef<number | null>(null);
   const viewerRef = useRef<HTMLDivElement>(null);
   const reduce = !!useReducedMotion();
@@ -98,88 +97,59 @@ export default function ReviewPhotos({
     />
   );
 
-  // ── Card preview: adaptive collage (video beside photos, or a photo grid) ────
-  const v0 = media[0];
-  const featuredVideo = (className: string, remaining: number) =>
-    v0.type === "video" ? (
+  let gallery: React.ReactNode;
+  if (rail) {
+    // Compact row rail: a single cover tile filling the (stretched) parent, with
+    // a `+N` badge for the rest. Opens the same lightbox as every other tile.
+    const cover = media[0];
+    const remaining = media.length - 1;
+    const thumb = cover.type === "video" ? cover.poster : cover.src;
+    gallery = (
       <button
         type="button"
         onClick={() => setActive(0)}
-        aria-label={`Play video from ${authorAlt}`}
-        className={`group relative w-full overflow-hidden rounded-brand-sm bg-midnight ${className}`}
+        aria-label={`View ${media.length} trip ${media.length === 1 ? "photo" : "photos"} from ${authorAlt}`}
+        className="group/rail relative h-full w-full overflow-hidden bg-light-grey"
       >
-        <video
-          src={v0.src}
-          poster={v0.poster}
-          muted
-          loop
-          autoPlay
-          playsInline
-          preload="metadata"
-          onLoadedMetadata={(e) => {
-            const v = e.currentTarget;
-            if (v.videoWidth && v.videoHeight)
-              setFeaturedPortrait(v.videoHeight > v.videoWidth);
-          }}
-          className="size-full object-cover"
-        />
-        {remaining > 0 ? (
-          <span className="absolute inset-0 flex items-center justify-center bg-midnight/60 font-sans text-h6-desktop font-bold text-white">
-            +{remaining}
-          </span>
+        {thumb ? (
+          <ImageWithSkeleton
+            src={thumb}
+            alt={`Trip ${cover.type} from ${authorAlt}`}
+            fill
+            sizes="160px"
+            className="object-cover transition-transform duration-300 group-hover/rail:scale-105"
+          />
         ) : (
+          <span className="flex size-full items-center justify-center bg-midnight/80" />
+        )}
+        {cover.type === "video" && remaining === 0 && (
           <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <span className="flex size-9 items-center justify-center rounded-full bg-black/50 text-white">
               <Play className="size-4 translate-x-px fill-current" />
             </span>
           </span>
         )}
+        {remaining > 0 && (
+          <span className="absolute inset-0 flex items-center justify-center bg-midnight/50 font-sans text-h6-desktop font-bold text-white">
+            +{remaining}
+          </span>
+        )}
       </button>
-    ) : null;
-
-  let gallery: React.ReactNode;
-  if (preview) {
-    const hasVideo = videos.length > 0 && v0.type === "video";
-
-    if (hasVideo && photos.length > 0) {
-      // Collage: photos on the LEFT, video on the RIGHT — fills the card width and
-      // gives portrait videos a proper tall slot instead of a cropped band.
-      const leftPhotos = photos.slice(0, 2);
-      const remaining = media.length - (1 + leftPhotos.length);
-      gallery = (
-        <div className="grid h-64 grid-cols-2 gap-2">
-          <div className={`h-full ${leftPhotos.length === 2 ? "grid grid-rows-2 gap-2" : ""}`}>
-            {leftPhotos.map((_, pi) =>
-              tile(
-                videos.length + pi,
-                "size-full",
-                pi === leftPhotos.length - 1 ? remaining : 0,
-              ),
-            )}
-          </div>
-          {featuredVideo("h-full", 0)}
-        </div>
-      );
-    } else if (hasVideo) {
-      // Video only → orientation-aware single box (portrait no longer cropped).
-      gallery = featuredVideo(featuredPortrait ? "aspect-[3/4]" : "h-44", media.length - 1);
-    } else {
-      // Photos only.
-      const count = Math.min(photos.length, PHOTO_PREVIEW);
-      const remaining = media.length - count;
-      gallery =
-        photos.length === 1 ? (
-          tile(0, "h-56 w-full")
-        ) : (
-          <div className="grid grid-cols-3 gap-2">
-            {photos
-              .slice(0, PHOTO_PREVIEW)
-              .map((_, pi) =>
-                tile(pi, "aspect-square w-full", pi === count - 1 ? remaining : 0),
-              )}
-          </div>
-        );
-    }
+    );
+  } else if (preview) {
+    // Uniform collage: up to PHOTO_PREVIEW square tiles in a row (video first,
+    // when present), each the same fixed size, with a "+N" overflow badge on the
+    // last tile — so the media block is the same size on every card regardless
+    // of how many photos/videos a review has.
+    const count = Math.min(media.length, PHOTO_PREVIEW);
+    const remaining = media.length - count;
+    gallery = (
+      <div className="grid grid-cols-3 gap-2">
+        {Array.from({ length: count }, (_, i) =>
+          tile(i, "aspect-square w-full", i === count - 1 ? remaining : 0),
+        )}
+      </div>
+    );
   } else {
     // Full grid (focus modal): show everything.
     gallery = (

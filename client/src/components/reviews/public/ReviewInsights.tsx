@@ -7,6 +7,13 @@ const YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 const monthYear = (ms: number) =>
   new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(new Date(ms));
 
+/** Reviews created within the last year. Kept out of render so the component
+ *  body stays pure (no direct `Date.now()` call during render). */
+function countRecent(reviews: PublicReview[]): number {
+  const cutoff = Date.now() - YEAR_MS;
+  return reviews.filter((r) => r.createdAt && r.createdAt >= cutoff).length;
+}
+
 /**
  * Compact trust + freshness signals shown under the rating breakdown:
  * verified-traveler framing, how recent the reviews are, and a short
@@ -16,31 +23,37 @@ const monthYear = (ms: number) =>
  */
 export default function ReviewInsights({
   reviews,
+  showFacts = true,
   showHighlights = true,
 }: {
   reviews: PublicReview[];
+  /** The verified / latest / last-year facts line. */
+  showFacts?: boolean;
+  /** The "Travelers love: …" keyword chips. */
   showHighlights?: boolean;
 }) {
   if (reviews.length === 0) return null;
 
-  const verified = reviews.filter((r) => r.verified).length;
-  const latestMs = reviews.reduce((m, r) => Math.max(m, r.createdAt || 0), 0);
-  const recentCount = reviews.filter((r) => r.createdAt && r.createdAt >= Date.now() - YEAR_MS).length;
   const loved = showHighlights ? buildKeywordChips(reviews).slice(0, 3) : [];
 
   const facts: React.ReactNode[] = [];
-  if (verified > 0) {
-    facts.push(
-      <span key="verified" className="inline-flex items-center gap-1 text-spring-green">
-        <BadgeCheck className="size-3.5" />
-        <span className="text-grey">
-          {verified} from verified traveler{verified === 1 ? "" : "s"}
-        </span>
-      </span>,
-    );
+  if (showFacts) {
+    const verified = reviews.filter((r) => r.verified).length;
+    const latestMs = reviews.reduce((m, r) => Math.max(m, r.createdAt || 0), 0);
+    const recentCount = countRecent(reviews);
+    if (verified > 0) {
+      facts.push(
+        <span key="verified" className="inline-flex items-center gap-1 text-spring-green">
+          <BadgeCheck className="size-3.5" />
+          <span className="text-grey">
+            {verified} from verified traveler{verified === 1 ? "" : "s"}
+          </span>
+        </span>,
+      );
+    }
+    if (latestMs > 0) facts.push(<span key="latest">Latest {monthYear(latestMs)}</span>);
+    if (recentCount > 0) facts.push(<span key="recent">{recentCount} in the last year</span>);
   }
-  if (latestMs > 0) facts.push(<span key="latest">Latest {monthYear(latestMs)}</span>);
-  if (recentCount > 0) facts.push(<span key="recent">{recentCount} in the last year</span>);
 
   if (facts.length === 0 && loved.length === 0) return null;
 

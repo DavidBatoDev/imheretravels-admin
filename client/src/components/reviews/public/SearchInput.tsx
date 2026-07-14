@@ -25,7 +25,7 @@ export default function SearchInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder="Search reviews"
         aria-label="Search reviews"
-        className="w-full rounded-full border border-light-grey bg-white py-2 pl-9 pr-9 font-body text-b4-desktop text-midnight outline-none transition-colors placeholder:text-grey focus:border-crimson-red"
+        className="w-full appearance-none rounded-full border border-light-grey bg-white py-2 pl-9 pr-9 font-body text-b4-desktop text-midnight outline-none transition-colors placeholder:text-grey focus:border-crimson-red [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-cancel-button]:hidden"
       />
       {value && (
         <button

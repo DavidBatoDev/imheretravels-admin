@@ -24,6 +24,15 @@ function formatDate(review: PublicReview): string {
   }).format(new Date(review.createdAt));
 }
 
+// Collapsed-card clamp heights, as plain numbers (rem) for the modal's reveal-
+// highlight `clipPath` below. The `ExpandableBody collapsedClassName` calls use
+// the STATIC Tailwind classes `max-h-20`/`max-h-52` instead of building this
+// value into a class string — Tailwind's JIT scanner needs a complete literal
+// class name in source, so these two must be kept numerically in sync by hand:
+// `max-h-20` = 20 × 0.25rem = 5rem, `max-h-52` = 52 × 0.25rem = 13rem.
+const GRID_CLAMP_REM = 13; // ~9 lines — matches `max-h-52`
+const ROW_CLAMP_REM = 5; // compact hub row — matches `max-h-20`
+
 /**
  * A single review card. Used on the tour page testimonials grid and the
  * community hub. Set `showTour` to surface which tour the review is for (hub).
@@ -36,13 +45,17 @@ export default function ReviewCard({
   showTour = false,
   variant = "grid",
   as: Shell = "li",
+  highlightClipRem,
 }: {
   review: PublicReview;
   showTour?: boolean;
-  variant?: "grid" | "modal";
+  variant?: "grid" | "modal" | "row";
   /** Grid-variant shell element. `li` for a plain <ul>; `div` when the caller
    *  supplies its own list item (e.g. to wrap the card in extra chrome). */
   as?: "li" | "div";
+  /** Modal-only: the collapsed card's clamp height (rem), so the reveal
+   *  highlight below can clip to only the text that was actually hidden. */
+  highlightClipRem?: number;
 }) {
   const date = formatDate(review);
   const sourceLabel =
@@ -91,12 +104,41 @@ export default function ReviewCard({
     <p className="-mb-2 font-sans text-h6-desktop font-bold text-midnight">{review.title}</p>
   );
 
-  // In the focus modal, flash-highlight the (now fully visible) body text.
-  const body = (
-    <Markdown className={isModal ? "review-reveal-highlight" : undefined}>
-      {review.bodyMarkdown}
-    </Markdown>
-  );
+  // In the focus modal, flash-highlight only the text that was actually hidden
+  // behind the card's "Read more" truncation — not the part already visible
+  // there. Achieved by stacking an identical, transparent-text copy of the
+  // body on top of the real one, background-highlighted, clipped via
+  // `clip-path` to start exactly at the collapsed card's clamp height. A
+  // single-highlight full-paragraph flash (the old behavior) reads as "this
+  // whole thing is new" even for text the reader already scrolled past on the
+  // card, which is what prompted this.
+  //
+  // `clipPath` is set via inline `style`, not a Tailwind arbitrary-value class:
+  // Tailwind's JIT scanner only generates CSS for class names it finds as a
+  // COMPLETE literal string in source. A template-literal-interpolated class
+  // like `` `[clip-path:inset(${x}rem_0_0_0)]` `` never matches that pattern —
+  // it's syntactically valid JSX, so nothing here would fail a build or a
+  // typecheck, but at runtime the class generates no CSS rule at all and the
+  // clip silently never applies.
+  const body =
+    isModal && highlightClipRem != null ? (
+      <div className="relative">
+        <Markdown>{review.bodyMarkdown}</Markdown>
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 select-none"
+          style={{ clipPath: `inset(${highlightClipRem}rem 0 0 0)` }}
+        >
+          <Markdown className="review-reveal-highlight text-transparent [&_*]:text-transparent">
+            {review.bodyMarkdown}
+          </Markdown>
+        </div>
+      </div>
+    ) : (
+      <Markdown className={isModal ? "review-reveal-highlight" : undefined}>
+        {review.bodyMarkdown}
+      </Markdown>
+    );
 
   const reply = review.externalReply && (
     <div className="rounded-brand-md border-l-2 border-light-grey bg-light-grey/40 py-2 pl-4">
@@ -175,6 +217,119 @@ export default function ReviewCard({
     </div>
   );
 
+  // Compact list-row variant (reviews hub): identity + stars/date on top, a
+  // tightly-clamped body with "Read more", a meta row (source pill + tour link),
+  // and the trip photos as a full-height rail on the far right.
+  if (variant === "row") {
+    const hasMedia =
+      (review.photos?.length ?? 0) > 0 || (review.videos?.length ?? 0) > 0;
+    return (
+      <Shell className="group relative flex min-h-40 overflow-hidden rounded-brand-lg bg-white shadow-small transition-all duration-200 hover:shadow-medium">
+        <div className="flex min-w-0 flex-1 flex-col gap-3 p-5 md:p-6">
+          <div className="flex items-start justify-between gap-3">
+            {/* Compact identity (smaller avatar than the grid card). */}
+            <div className="flex min-w-0 items-center gap-3">
+              {review.reviewerAvatar ? (
+                <div className="relative size-10 shrink-0 overflow-hidden rounded-full bg-light-grey">
+                  <ImageWithSkeleton
+                    src={review.reviewerAvatar}
+                    alt=""
+                    fill
+                    rounded="full"
+                    sizes="40px"
+                    className="object-cover"
+                  />
+                </div>
+              ) : (
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-light-grey font-sans text-b2-desktop font-bold text-midnight">
+                  {review.reviewerFirstName.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5 font-sans text-b2-desktop font-bold text-midnight">
+                  <span className="truncate">{review.reviewerFirstName}</span>
+                  {review.verified && (
+                    <span className="text-spring-green" title="Verified traveler">
+                      <BadgeCheck className="size-4" />
+                    </span>
+                  )}
+                </p>
+                {(countryIso || review.reviewerLocation) && (
+                  <p className="flex items-center gap-1.5 font-body text-b4-desktop text-vivid-orange">
+                    {countryIso && (
+                      <ReactCountryFlag
+                        countryCode={countryIso}
+                        svg
+                        title={review.reviewerLocation || countryIso}
+                        style={{ width: "1.1em", height: "1.1em", borderRadius: "2px" }}
+                        aria-hidden
+                      />
+                    )}
+                    {review.reviewerLocation && (
+                      <span className="truncate">{review.reviewerLocation}</span>
+                    )}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              <Stars count={review.rating} />
+              {date && <span className="font-body text-b4-desktop text-grey">{date}</span>}
+            </div>
+          </div>
+
+          {title}
+
+          <ExpandableBody
+            collapsedClassName="max-h-20"
+            modal={
+              <ReviewCard
+                review={review}
+                showTour={showTour}
+                variant="modal"
+                highlightClipRem={ROW_CLAMP_REM}
+              />
+            }
+          >
+            {body}
+          </ExpandableBody>
+
+          {reply}
+
+          <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
+            {sourceLabel &&
+              (tourRadarUrl ? (
+                <a
+                  href={tourRadarUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`${sourceBadgeCls} transition-colors hover:bg-light-grey/70 hover:text-crimson-red`}
+                >
+                  {sourceLabel}
+                </a>
+              ) : (
+                <span className={sourceBadgeCls}>{sourceLabel}</span>
+              ))}
+            {tourLink && (
+              <span className="font-body text-b4-desktop text-grey">from {tourLink}</span>
+            )}
+          </div>
+        </div>
+
+        {hasMedia && (
+          <div className="relative w-24 shrink-0 self-stretch sm:w-28 md:w-40">
+            <ReviewPhotos
+              photos={review.photos}
+              videos={review.videos}
+              authorAlt={review.reviewerFirstName}
+              rail
+            />
+          </div>
+        )}
+      </Shell>
+    );
+  }
+
   // Modal variant: everything visible, body unclamped, no "Read more".
   if (isModal) {
     return (
@@ -194,7 +349,17 @@ export default function ReviewCard({
     <Shell className="flex flex-col gap-5 rounded-brand-lg bg-white p-8 shadow-small transition-all duration-200 hover:-translate-y-0.5 hover:shadow-medium md:p-10">
       {header}
       {title}
-      <ExpandableBody modal={<ReviewCard review={review} showTour={showTour} variant="modal" />}>
+      <ExpandableBody
+        collapsedClassName="max-h-52"
+        modal={
+          <ReviewCard
+            review={review}
+            showTour={showTour}
+            variant="modal"
+            highlightClipRem={GRID_CLAMP_REM}
+          />
+        }
+      >
         {body}
       </ExpandableBody>
       {reply}

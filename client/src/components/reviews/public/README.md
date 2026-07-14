@@ -36,7 +36,7 @@ www is **Tailwind v4** (CSS `@theme`), plus admin not being the public site.
 | 5 | `ImageWithSkeleton`: `fallbackSrc` defaults to *none* | www falls back to `/figma/tour-philippines-sunrise.png`, which does not exist in admin. On error we simply stop the shimmer. |
 | 6 | imports: `@/app/components/**` → `./`, `@/lib/**` → `./`, `@/types/review` → `@/types/reviews` | different path aliases |
 
-Supporting CSS (`.img-skeleton`, `.no-scrollbar`, `.review-reveal-highlight` and
-their keyframes + reduced-motion overrides) lives in `src/app/globals.css`.
+Supporting CSS (`.img-skeleton`, `.no-scrollbar` and their keyframes +
+reduced-motion overrides) lives in `src/app/globals.css`.
 Brand tokens (`crimson-red`, `midnight`, the `b*`/`h*` type scale, `shadow-small`)
 are already defined in `tailwind.config.js`.

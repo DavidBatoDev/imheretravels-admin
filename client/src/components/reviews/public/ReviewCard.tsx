@@ -24,15 +24,6 @@ function formatDate(review: PublicReview): string {
   }).format(new Date(review.createdAt));
 }
 
-// Collapsed-card clamp heights, as plain numbers (rem) for the modal's reveal-
-// highlight `clipPath` below. The `ExpandableBody collapsedClassName` calls use
-// the STATIC Tailwind classes `max-h-20`/`max-h-52` instead of building this
-// value into a class string — Tailwind's JIT scanner needs a complete literal
-// class name in source, so these two must be kept numerically in sync by hand:
-// `max-h-20` = 20 × 0.25rem = 5rem, `max-h-52` = 52 × 0.25rem = 13rem.
-const GRID_CLAMP_REM = 13; // ~9 lines — matches `max-h-52`
-const ROW_CLAMP_REM = 5; // compact hub row — matches `max-h-20`
-
 /**
  * A single review card. Used on the tour page testimonials grid and the
  * community hub. Set `showTour` to surface which tour the review is for (hub).
@@ -45,7 +36,6 @@ export default function ReviewCard({
   showTour = false,
   variant = "grid",
   as: Shell = "li",
-  highlightClipRem,
 }: {
   review: PublicReview;
   showTour?: boolean;
@@ -53,9 +43,6 @@ export default function ReviewCard({
   /** Grid-variant shell element. `li` for a plain <ul>; `div` when the caller
    *  supplies its own list item (e.g. to wrap the card in extra chrome). */
   as?: "li" | "div";
-  /** Modal-only: the collapsed card's clamp height (rem), so the reveal
-   *  highlight below can clip to only the text that was actually hidden. */
-  highlightClipRem?: number;
 }) {
   const date = formatDate(review);
   const sourceLabel =
@@ -104,41 +91,7 @@ export default function ReviewCard({
     <p className="-mb-2 font-sans text-h6-desktop font-bold text-midnight">{review.title}</p>
   );
 
-  // In the focus modal, flash-highlight only the text that was actually hidden
-  // behind the card's "Read more" truncation — not the part already visible
-  // there. Achieved by stacking an identical, transparent-text copy of the
-  // body on top of the real one, background-highlighted, clipped via
-  // `clip-path` to start exactly at the collapsed card's clamp height. A
-  // single-highlight full-paragraph flash (the old behavior) reads as "this
-  // whole thing is new" even for text the reader already scrolled past on the
-  // card, which is what prompted this.
-  //
-  // `clipPath` is set via inline `style`, not a Tailwind arbitrary-value class:
-  // Tailwind's JIT scanner only generates CSS for class names it finds as a
-  // COMPLETE literal string in source. A template-literal-interpolated class
-  // like `` `[clip-path:inset(${x}rem_0_0_0)]` `` never matches that pattern —
-  // it's syntactically valid JSX, so nothing here would fail a build or a
-  // typecheck, but at runtime the class generates no CSS rule at all and the
-  // clip silently never applies.
-  const body =
-    isModal && highlightClipRem != null ? (
-      <div className="relative">
-        <Markdown>{review.bodyMarkdown}</Markdown>
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 select-none"
-          style={{ clipPath: `inset(${highlightClipRem}rem 0 0 0)` }}
-        >
-          <Markdown className="review-reveal-highlight text-transparent [&_*]:text-transparent">
-            {review.bodyMarkdown}
-          </Markdown>
-        </div>
-      </div>
-    ) : (
-      <Markdown className={isModal ? "review-reveal-highlight" : undefined}>
-        {review.bodyMarkdown}
-      </Markdown>
-    );
+  const body = <Markdown>{review.bodyMarkdown}</Markdown>;
 
   const reply = review.externalReply && (
     <div className="rounded-brand-md border-l-2 border-light-grey bg-light-grey/40 py-2 pl-4">
@@ -282,14 +235,7 @@ export default function ReviewCard({
 
           <ExpandableBody
             collapsedClassName="max-h-20"
-            modal={
-              <ReviewCard
-                review={review}
-                showTour={showTour}
-                variant="modal"
-                highlightClipRem={ROW_CLAMP_REM}
-              />
-            }
+            modal={<ReviewCard review={review} showTour={showTour} variant="modal" />}
           >
             {body}
           </ExpandableBody>
@@ -351,14 +297,7 @@ export default function ReviewCard({
       {title}
       <ExpandableBody
         collapsedClassName="max-h-52"
-        modal={
-          <ReviewCard
-            review={review}
-            showTour={showTour}
-            variant="modal"
-            highlightClipRem={GRID_CLAMP_REM}
-          />
-        }
+        modal={<ReviewCard review={review} showTour={showTour} variant="modal" />}
       >
         {body}
       </ExpandableBody>

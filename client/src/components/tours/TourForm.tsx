@@ -1094,14 +1094,54 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
   // array in place, so a [travelDates]-keyed memo would go stale on edits.
   // `toDateValue` handles ISO strings, Timestamps, and Date objects alike.
   const dateRangeFmt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" });
-  const tourDateValues = (travelDates ?? [])
+  // Effective price/deposit per date, using per-date custom overrides when set so
+  // the admin sees the real price + reservation fee the moment they type a value.
+  const basePrice =
+    pricing?.discounted && Number(pricing.discounted) > 0
+      ? Number(pricing.discounted)
+      : Number(pricing?.original ?? 0);
+  const baseDeposit = Number(pricing?.deposit ?? 0);
+  const fmtMoney = (n: number) => `${sym}${Number(n).toLocaleString()}`;
+  // Drop dates whose tour has already ended so the preview only lists upcoming
+  // departures (mirrors the public site).
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const tourDateRows = (travelDates ?? [])
     .filter((d) => d?.isAvailable !== false)
     .map((d) => {
       const ds = toDateValue(d?.startDate);
       const de = toDateValue(d?.endDate);
-      return ds && de ? `${dateRangeFmt.format(ds)} – ${dateRangeFmt.format(de)}` : null;
+      if (!ds || !de) return null;
+      if (de < startOfToday) return null; // tour already ended → hide
+      const cOrig = Number(d?.customOriginal);
+      const cDisc = Number(d?.customDiscounted);
+      const cDep = Number(d?.customDeposit);
+      const hasCustomPrice =
+        (Number.isFinite(cDisc) && cDisc > 0) ||
+        (Number.isFinite(cOrig) && cOrig > 0);
+      const hasCustomFee = Number.isFinite(cDep) && cDep > 0;
+      const price =
+        Number.isFinite(cDisc) && cDisc > 0
+          ? cDisc
+          : Number.isFinite(cOrig) && cOrig > 0
+            ? cOrig
+            : basePrice;
+      const deposit = hasCustomFee ? cDep : baseDeposit;
+      return {
+        range: `${dateRangeFmt.format(ds)} – ${dateRangeFmt.format(de)}`,
+        price,
+        deposit,
+        hasCustomPrice,
+        hasCustomFee,
+      };
     })
-    .filter(Boolean) as string[];
+    .filter(Boolean) as Array<{
+    range: string;
+    price: number;
+    deposit: number;
+    hasCustomPrice: boolean;
+    hasCustomFee: boolean;
+  }>;
 
   // Auto-slug
   useEffect(() => { if (name && !tour) sv("slug", generateSlug(name)); }, [name]);
@@ -1910,15 +1950,28 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
                             </button>
                           </div>
                           <ul className="mt-1 space-y-0.5">
-                            {tourDateValues.length === 0 ? (
+                            {tourDateRows.length === 0 ? (
                               <li className="flex items-center gap-2 font-body text-b2-mobile md:text-b2-desktop text-dark-gray">
                                 <span className="inline-block size-1.5 shrink-0 rounded-full bg-crimson-red" aria-hidden />
                                 To be announced
                               </li>
-                            ) : tourDateValues.map((v, idx) => (
-                              <li key={idx} className="flex items-center gap-2 font-body text-b2-mobile md:text-b2-desktop text-dark-gray">
+                            ) : tourDateRows.map((row, idx) => (
+                              <li key={idx} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 font-body text-b2-mobile md:text-b2-desktop text-dark-gray">
                                 <span className="inline-block size-1.5 shrink-0 rounded-full bg-crimson-red" aria-hidden />
-                                {v}
+                                <span>{row.range}</span>
+                                {/* Only surface overrides — the default price is
+                                    shown once in the Pricing panel, so repeating it
+                                    on every date is redundant. */}
+                                {row.hasCustomPrice && (
+                                  <span className="inline-flex items-center rounded-full border border-crimson-red/20 bg-crimson-red/5 px-2 py-0.5 text-sm font-bold text-crimson-red">
+                                    {fmtMoney(row.price)}
+                                  </span>
+                                )}
+                                {row.hasCustomFee && (
+                                  <span className="inline-flex items-center rounded-full bg-light-grey px-2 py-0.5 text-[11px] font-medium text-dark-gray">
+                                    Res. fee {fmtMoney(row.deposit)}
+                                  </span>
+                                )}
                               </li>
                             ))}
                           </ul>

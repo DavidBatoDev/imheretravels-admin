@@ -97,6 +97,83 @@ export async function createTour(
   }
 }
 
+/**
+ * Duplicate an existing tour package as a fresh DRAFT.
+ *
+ * Reads the source tour, then POSTs a clean copy through `createTour` — which
+ * reseeds server-managed state (metadata/bookingsCount, pricingHistory,
+ * currentVersion). The copy gets a unique name/slug/tourCode so it never
+ * collides with the original (slug uniqueness also dodges every tour's
+ * `previousSlugs`, which drive www redirects). Unique/stateful fields
+ * (stripePaymentLink, bookingSlug, url, scheduledPublishAt, previousSlugs, seo,
+ * comingSoon) are intentionally NOT carried over.
+ *
+ * @returns the new tour's id.
+ */
+export async function duplicateTour(id: string): Promise<string> {
+  const source = await getTourById(id);
+  if (!source) {
+    throw new Error("Tour to duplicate was not found");
+  }
+
+  const all = await getAllTours();
+  const names = new Set(all.map((t) => t.name));
+  const slugs = new Set(
+    all.flatMap((t) => [
+      t.slug,
+      ...((t.previousSlugs ?? []).map((p) => p.slug) ?? []),
+    ]),
+  );
+  const codes = new Set(all.map((t) => t.tourCode));
+
+  // "{name} (Copy)", then "(Copy 2)", "(Copy 3)"… until unused.
+  let name = `${source.name} (Copy)`;
+  for (let n = 2; names.has(name); n++) {
+    name = `${source.name} (Copy ${n})`;
+  }
+
+  // Derive the slug from the chosen name, then suffix -2, -3… until unused
+  // (also avoiding any tour's previousSlugs).
+  const baseSlug = generateSlug(name);
+  let slug = baseSlug;
+  for (let n = 2; slugs.has(slug); n++) {
+    slug = `${baseSlug}-${n}`;
+  }
+
+  // "{code}-COPY", then "-COPY-2"… until unused.
+  let tourCode = `${source.tourCode}-COPY`;
+  for (let n = 2; codes.has(tourCode); n++) {
+    tourCode = `${source.tourCode}-COPY-${n}`;
+  }
+
+  // Build a clean payload. `travelDates` come back from getTourById as ISO
+  // strings (POST-ready) with any per-date custom pricing preserved.
+  const payload: TourFormDataWithStringDates = {
+    name,
+    slug,
+    tourCode,
+    description: source.description,
+    duration: source.duration,
+    cardHeaderTitle: source.cardHeaderTitle,
+    cardSubHeader: source.cardSubHeader,
+    travelDates: source.travelDates as any,
+    pricing: source.pricing,
+    details: source.details as any,
+    media: source.media,
+    status: "draft",
+  };
+
+  // Carry over optional presentation fields only when present (no collision risk).
+  if (source.destinations) (payload as any).destinations = source.destinations;
+  if (source.isHosted !== undefined) payload.isHosted = source.isHosted;
+  if (source.brochureLink) payload.brochureLink = source.brochureLink;
+  if (source.preDeparturePack) payload.preDeparturePack = source.preDeparturePack;
+  if (source.depositNote) (payload as any).depositNote = source.depositNote;
+  if (source.footnote) (payload as any).footnote = source.footnote;
+
+  return createTour(payload);
+}
+
 // ============================================================================
 // READ OPERATIONS
 // ============================================================================

@@ -57,6 +57,7 @@ import {
   Calendar,
   TrendingUp,
   X,
+  Copy,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -70,6 +71,7 @@ import {
 import {
   deleteTour,
   archiveTour,
+  duplicateTour,
 } from "@/services/tours-service";
 import TourDetails from "./TourDetails";
 
@@ -86,6 +88,7 @@ export default function ToursList() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [tourToDelete, setTourToDelete] = useState<TourPackage | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
 
   const { toast } = useToast();
   const nameCollator = useMemo(
@@ -297,6 +300,32 @@ export default function ToursList() {
         description: "Failed to archive tour. Please try again.",
         variant: "destructive",
       });
+    }
+  };
+
+  // Duplicate tour → creates a fresh DRAFT copy; the onSnapshot list refreshes
+  // itself, so no manual refetch is needed.
+  const handleDuplicateTour = async (tour: TourPackage) => {
+    if (duplicatingId) return; // guard against double-clicks
+    setDuplicatingId(tour.id);
+    try {
+      await duplicateTour(tour.id);
+      toast({
+        title: "Success",
+        description: `Duplicated "${tour.name}" as a draft.`,
+      });
+    } catch (error) {
+      console.error("Error duplicating tour:", error);
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to duplicate tour. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDuplicatingId(null);
     }
   };
 
@@ -697,21 +726,32 @@ export default function ToursList() {
               ? tour.pricing.discounted
               : baseOriginal;
           const baseDeposit = tour.pricing.deposit ?? 0;
-          const dateRows = (tour.travelDates || []).map((date) => ({
-            date: date.startDate,
-            price:
-              typeof date.customDiscounted === "number" &&
-              date.customDiscounted > 0
-                ? date.customDiscounted
-                : typeof date.customOriginal === "number" &&
-                    date.customOriginal > 0
-                  ? date.customOriginal
-                  : basePrice,
-            deposit:
-              typeof date.customDeposit === "number" && date.customDeposit > 0
-                ? date.customDeposit
-                : baseDeposit,
-          }));
+          const dateRows = (tour.travelDates || []).map((date) => {
+            const hasCustomPrice =
+              (typeof date.customDiscounted === "number" &&
+                date.customDiscounted > 0) ||
+              (typeof date.customOriginal === "number" &&
+                date.customOriginal > 0);
+            const hasCustomFee =
+              typeof date.customDeposit === "number" && date.customDeposit > 0;
+            return {
+              date: date.startDate,
+              hasCustomPrice,
+              hasCustomFee,
+              price:
+                typeof date.customDiscounted === "number" &&
+                date.customDiscounted > 0
+                  ? date.customDiscounted
+                  : typeof date.customOriginal === "number" &&
+                      date.customOriginal > 0
+                    ? date.customOriginal
+                    : basePrice,
+              deposit:
+                typeof date.customDeposit === "number" && date.customDeposit > 0
+                  ? date.customDeposit
+                  : baseDeposit,
+            };
+          });
 
           return (
             <Card
@@ -784,6 +824,15 @@ export default function ToursList() {
                           <Edit className="h-4 w-4 mr-2" />
                           Edit
                         </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleDuplicateTour(tour)}
+                          disabled={duplicatingId === tour.id}
+                        >
+                          <Copy className="h-4 w-4 mr-2" />
+                          {duplicatingId === tour.id
+                            ? "Duplicating…"
+                            : "Duplicate"}
+                        </DropdownMenuItem>
                         {tour.status !== "archived" && (
                           <DropdownMenuItem
                             onClick={() => handleArchiveTour(tour)}
@@ -835,8 +884,28 @@ export default function ToursList() {
                             key={`${tour.id}-date-${index}`}
                             className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground"
                           >
-                            <span className="line-clamp-1">
-                              {formatDateValue(date.date)}
+                            <span className="flex min-w-0 items-center gap-1">
+                              <span className="line-clamp-1">
+                                {formatDateValue(date.date)}
+                              </span>
+                              {date.hasCustomPrice && (
+                                <Badge
+                                  variant="outline"
+                                  className="shrink-0 h-4 px-1 py-0 text-[9px] font-medium bg-royal-purple/10 text-royal-purple border-royal-purple/30"
+                                  title="This date has a custom tour price"
+                                >
+                                  Custom price
+                                </Badge>
+                              )}
+                              {date.hasCustomFee && (
+                                <Badge
+                                  variant="outline"
+                                  className="shrink-0 h-4 px-1 py-0 text-[9px] font-medium bg-amber-500/10 text-amber-600 border-amber-500/30"
+                                  title="This date has a custom reservation fee"
+                                >
+                                  Custom fee
+                                </Badge>
+                              )}
                             </span>
                             <span className="flex items-center gap-2 whitespace-nowrap">
                               <span className="text-sm font-bold text-foreground">

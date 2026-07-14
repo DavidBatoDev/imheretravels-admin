@@ -42,6 +42,11 @@ export default function TravelDatesEditor({ form }: TravelDatesEditorProps) {
 
   const sym = CURRENCY_SYM[(w("pricing.currency") as string) ?? "GBP"] ?? "£";
 
+  // Dates whose tour has already ended are auto-hidden everywhere (preview + www),
+  // so the editor reflects them as "Past — hidden" with the toggle off.
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
   const recalcEnd = (i: number, startISO: string, days: number | undefined) => {
     if (startISO && days && days > 0) {
       const end = new Date(startISO);
@@ -62,6 +67,8 @@ export default function TravelDatesEditor({ form }: TravelDatesEditorProps) {
         const isAvailable = w(`travelDates.${index}.isAvailable`) !== false;
         const startDate = (w(`travelDates.${index}.startDate`) as string) || "";
         const endDate = (w(`travelDates.${index}.endDate`) as string) || "";
+        const isPast = !!endDate && new Date(endDate) < startOfToday;
+        const shown = isAvailable && !isPast;
         const days = w(`travelDates.${index}.tourDays`);
         const hasPrice = w(`travelDates.${index}.hasCustomOriginal`) === true;
         const hasFee = w(`travelDates.${index}.hasCustomDeposit`) === true;
@@ -70,12 +77,12 @@ export default function TravelDatesEditor({ form }: TravelDatesEditorProps) {
           <div
             key={field.id}
             className={`group relative overflow-hidden rounded-2xl border bg-white shadow-xsmall transition-all ${
-              isAvailable ? "border-light-grey hover:shadow-small" : "border-light-grey opacity-70"
+              shown ? "border-light-grey hover:shadow-small" : "border-light-grey opacity-70"
             }`}
           >
             {/* Status accent bar */}
             <span
-              className={`absolute inset-y-0 left-0 w-1 ${isAvailable ? "bg-spring-green" : "bg-grey/40"}`}
+              className={`absolute inset-y-0 left-0 w-1 ${shown ? "bg-spring-green" : "bg-grey/40"}`}
               aria-hidden
             />
 
@@ -90,21 +97,28 @@ export default function TravelDatesEditor({ form }: TravelDatesEditorProps) {
                     <p className="font-sans text-sm font-bold text-midnight">Tour Date {index + 1}</p>
                     <span
                       className={`inline-flex items-center gap-1 text-[11px] font-medium ${
-                        isAvailable ? "text-emerald-600" : "text-dark-gray/60"
+                        shown ? "text-emerald-600" : "text-dark-gray/60"
                       }`}
                     >
-                      <span className={`inline-block size-1.5 rounded-full ${isAvailable ? "bg-spring-green" : "bg-grey"}`} />
-                      {isAvailable ? "Available" : "Hidden"}
+                      <span className={`inline-block size-1.5 rounded-full ${shown ? "bg-spring-green" : "bg-grey"}`} />
+                      {isPast ? "Past — hidden" : isAvailable ? "Available" : "Hidden"}
                     </span>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-1">
                   <Switch
-                    checked={isAvailable}
+                    checked={shown}
+                    disabled={isPast}
                     onCheckedChange={(v) => sv(`travelDates.${index}.isAvailable`, v)}
                     className="data-[state=checked]:bg-spring-green"
-                    title={isAvailable ? "Visible on site" : "Hidden"}
+                    title={
+                      isPast
+                        ? "Past date — automatically hidden"
+                        : isAvailable
+                          ? "Visible on site"
+                          : "Hidden"
+                    }
                   />
                   <button
                     type="button"

@@ -27,6 +27,7 @@ import {
   ScrollText,
   Users,
   Star,
+  Globe,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth-store";
 import {
@@ -74,6 +75,12 @@ const navigation = [
     href: "/resident-hosts",
     icon: Users,
     description: "Hosts & hosted tours",
+  },
+  {
+    name: "Destinations",
+    href: "/destinations",
+    icon: Globe,
+    description: "Country landing pages",
   },
   {
     name: "Tour Reviews",

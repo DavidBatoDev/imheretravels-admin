@@ -8,25 +8,32 @@ import { getAuth } from "firebase-admin/auth";
 
 function getFirebaseAdminAuth() {
   if (getApps().length === 0) {
-    const projectId =
-      process.env.FIREBASE_PROJECT_ID ||
-      process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+    // ID tokens must be verified against the project they were ISSUED for —
+    // i.e. the client project the user signed into. If the service-account
+    // cert belongs to a different project (e.g. a dev service account while the
+    // client points at prod), using that cert would reject the token on an
+    // audience mismatch (a 401). Verifying an ID token needs only the project
+    // id plus Google's public keys, not the private key — so when the cert
+    // project doesn't match the client project, initialize with the client
+    // project id alone.
+    const clientProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+    const certProjectId = process.env.FIREBASE_PROJECT_ID;
     const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
     const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
 
-    if (projectId && clientEmail && privateKey) {
+    const verifyProjectId = clientProjectId || certProjectId;
+    const certMatchesClient =
+      !!certProjectId && (!clientProjectId || certProjectId === clientProjectId);
+
+    if (certMatchesClient && certProjectId && clientEmail && privateKey) {
       initializeApp({
-        credential: cert({
-          projectId,
-          clientEmail,
-          privateKey,
-        }),
+        credential: cert({ projectId: certProjectId, clientEmail, privateKey }),
       });
+    } else if (verifyProjectId) {
+      // Verification-only app for the client project (no privileged ops here).
+      initializeApp({ projectId: verifyProjectId });
     } else {
-      initializeApp({
-        credential: applicationDefault(),
-        projectId,
-      });
+      initializeApp({ credential: applicationDefault() });
     }
   }
 

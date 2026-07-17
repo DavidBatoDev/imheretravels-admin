@@ -28,6 +28,8 @@ import {
   Users,
   Star,
   Globe,
+  ShieldAlert,
+  BookOpen,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth-store";
 import {
@@ -63,7 +65,7 @@ const navigation = [
     icon: Banknote,
     description: "View all payments",
   },
-  { type: "separator" },
+  { type: "separator", label: "Catalog & Content" },
   {
     name: "Tour Packages",
     href: "/tours",
@@ -106,7 +108,7 @@ const navigation = [
     icon: User,
     description: "User management",
   },
-  { type: "separator" },
+  { type: "separator", label: "System" },
   {
     name: "Storage",
     href: "/storage",
@@ -130,6 +132,19 @@ const navigation = [
     href: "/patch-notes",
     icon: ScrollText,
     description: "Changes & updates",
+  },
+  { type: "separator", label: "Knowledge Base" },
+  {
+    name: "Incidents",
+    href: "/incidents",
+    icon: ShieldAlert,
+    description: "Issues & root-cause reports",
+  },
+  {
+    name: "Policies",
+    href: "/policies",
+    icon: BookOpen,
+    description: "Processes & guidelines",
   },
 ];
 
@@ -269,7 +284,7 @@ export default function DashboardSidebar({
                       </div>
                       <div className="relative flex justify-center text-xs uppercase">
                         <span className="bg-background px-2 text-muted-foreground font-medium">
-                          Section
+                          {(item as any).label || "Section"}
                         </span>
                       </div>
                     </div>
@@ -442,7 +457,7 @@ export default function DashboardSidebar({
                       </div>
                       <div className="relative flex justify-center text-xs uppercase">
                         <span className="bg-background px-2 text-muted-foreground font-medium">
-                          Section
+                          {(item as any).label || "Section"}
                         </span>
                       </div>
                     </div>

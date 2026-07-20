@@ -18,7 +18,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
   Save, ArrowLeft, Plus, X, Settings, Image as ImageIcon, Camera,
-  Undo2, Redo2, RotateCcw, ChevronDown,
+  Undo2, Redo2, RotateCcw, ChevronDown, Info, Clock,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -26,9 +26,12 @@ import { Form } from "@/components/ui/form";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { useUndoRedo } from "@/hooks/use-undo-redo";
-import { generateSlug } from "@/utils";
+import { dateToManilaLocalInput } from "@/lib/manila-time";
 
 import { Destination, DestinationFormData } from "@/types/destinations";
 import ImagePickerModal from "@/components/shared/ImagePickerModal";
@@ -37,8 +40,10 @@ import ResetChangesModal from "@/components/shared/ResetChangesModal";
 import ConfirmLeaveModal from "@/components/shared/ConfirmLeaveModal";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { QuickFactIcon, QUICK_FACT_ICONS } from "./QuickFactIcon";
+import { buildDestinationSeo, isAutoSeoTitle, isAutoSeoDescription, pendingSeoPatch } from "./seo-template";
+import SeoAutofillModal from "./SeoAutofillModal";
 import { getAllTours } from "@/services/tours-service";
-import { subscribeToReviews } from "@/services/reviews-service";
+import { subscribeToReviews, setReviewStatus } from "@/services/reviews-service";
 import type { TourPackage } from "@/types/tours";
 import type { ReviewDoc } from "@/types/reviews";
 import {
@@ -70,6 +75,7 @@ const schema = z.object({
   name: z.string().min(1),
   region: z.string(),
   status: z.enum(["active", "draft", "archived"]),
+  scheduledPublishAt: z.string().nullish(),
   heroImage: z.string(),
   heroImageAlt: z.string(),
   seo: z.object({ title: z.string().optional(), description: z.string().optional() }).optional(),
@@ -83,7 +89,6 @@ const schema = z.object({
   }),
   tourSlugs: z.array(z.string()),
   hiddenReviewIds: z.array(z.string()),
-  featuredReviewIds: z.array(z.string()),
 });
 
 // ─── Inline editing primitives (local state + debounce, focus-aware sync) ──────
@@ -185,6 +190,10 @@ export default function DestinationForm({ onClose, onSubmit, destination, isLoad
   const [openIconIdx, setOpenIconIdx] = useState<number | null>(null);
   const [hoverIcon, setHoverIcon] = useState<string | null>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const [seoModalOpen, setSeoModalOpen] = useState(false);
+  // The name we've already prompted (or dismissed) the SEO modal for — stops it
+  // re-popping until the name actually changes again.
+  const promptedNameRef = useRef<string>("");
 
   const [picker, setPicker] = useState<{
     field: DestinationPickerField | `highlight-${number}` | `community-${number}`;
@@ -195,6 +204,7 @@ export default function DestinationForm({ onClose, onSubmit, destination, isLoad
     resolver: zodResolver(schema),
     defaultValues: {
       slug: "", name: "", region: "", status: "draft",
+      scheduledPublishAt: "",
       heroImage: "", heroImageAlt: "",
       seo: { title: "", description: "" },
       description: [""],
@@ -204,7 +214,6 @@ export default function DestinationForm({ onClose, onSubmit, destination, isLoad
       community: { heading: "With @Imheretravels", images: [] },
       tourSlugs: [],
       hiddenReviewIds: [],
-      featuredReviewIds: [],
     },
   });
 
@@ -216,6 +225,15 @@ export default function DestinationForm({ onClose, onSubmit, destination, isLoad
   const region = w("region") as string;
   const heroImage = w("heroImage") as string;
   const tourSlugs = (w("tourSlugs") as string[]) ?? [];
+
+  // Pending SEO/URL suggestion from the name (drives the Settings-button cue +
+  // the "Apply suggested" prompt inside the panel).
+  const seoPatch = pendingSeoPatch({
+    name: w("name") as string,
+    slug: w("slug") as string,
+    seo: w("seo") as { title?: string; description?: string } | undefined,
+  });
+  const hasSeoSuggestion = Object.keys(seoPatch).length > 0;
 
   // Live data for the read-only section previews (Top Tours / Highlights / Reviews).
   const [allTours, setAllTours] = useState<TourPackage[]>([]);
@@ -237,19 +255,43 @@ export default function DestinationForm({ onClose, onSubmit, destination, isLoad
     .filter((t): t is TourPackage => Boolean(t));
   const derivedHighlights = deriveHighlights(linkedTours);
 
-  // ── Reviews: linked-tour reviews + per-destination featured/hidden overrides.
+  // ── Reviews: published linked-tour reviews (candidates) + per-destination
+  //    local hidden overrides, plus globally-hidden linked-tour reviews for the
+  //    "Hidden reviews" modal.
   const hiddenReviewIds = (w("hiddenReviewIds") as string[]) ?? [];
-  const featuredReviewIds = (w("featuredReviewIds") as string[]) ?? [];
-  const publishedReviews = allReviews.filter((r) => r.status === "published");
-  const linkedReviews = publishedReviews.filter((r) => tourSlugs.includes(r.tourSlug));
-  const featuredReviews = publishedReviews.filter((r) => featuredReviewIds.includes(r.id));
+  const linkedReviews = allReviews.filter(
+    (r) => r.status === "published" && tourSlugs.includes(r.tourSlug),
+  );
+  const hiddenTourReviews = allReviews.filter(
+    (r) => r.status === "hidden" && tourSlugs.includes(r.tourSlug),
+  );
 
-  const addReviewId = (field: "hiddenReviewIds" | "featuredReviewIds", id: string) => {
-    const cur = (gv(field) as string[]) ?? [];
-    if (!cur.includes(id)) sv(field, [...cur, id]);
+  const addHiddenId = (id: string) => {
+    const cur = (gv("hiddenReviewIds") as string[]) ?? [];
+    if (!cur.includes(id)) sv("hiddenReviewIds", [...cur, id]);
   };
-  const removeReviewId = (field: "hiddenReviewIds" | "featuredReviewIds", id: string) => {
-    sv(field, ((gv(field) as string[]) ?? []).filter((x) => x !== id));
+  const removeHiddenId = (id: string) => {
+    sv("hiddenReviewIds", ((gv("hiddenReviewIds") as string[]) ?? []).filter((x) => x !== id));
+  };
+
+  // Global status writes to `tourReviews` immediately (a different collection —
+  // the destination form save can't carry it). The live review subscription then
+  // reflects the change in the preview.
+  const hideReviewGlobally = async (id: string, tourSlug: string) => {
+    try {
+      await setReviewStatus(id, "hidden", tourSlug);
+      toast({ title: "Review hidden", description: "This review is now hidden everywhere it appears." });
+    } catch {
+      toast({ title: "Error", description: "Failed to hide the review.", variant: "destructive" });
+    }
+  };
+  const publishReviewGlobally = async (id: string, tourSlug: string) => {
+    try {
+      await setReviewStatus(id, "published", tourSlug);
+      toast({ title: "Review restored", description: "This review is published again." });
+    } catch {
+      toast({ title: "Error", description: "Failed to restore the review.", variant: "destructive" });
+    }
   };
 
   const { fields: descFields, append: addDesc, remove: rmDesc } = useFieldArray({ control: form.control, name: "description" as any });
@@ -258,8 +300,21 @@ export default function DestinationForm({ onClose, onSubmit, destination, isLoad
   const { fields: faqFields, append: addFaq, remove: rmFaq } = useFieldArray({ control: form.control, name: "faqs" });
   const { fields: communityFields, append: addCommunity, remove: rmCommunity } = useFieldArray({ control: form.control, name: "community.images" });
 
-  // Auto-slug while creating
-  useEffect(() => { if (name && !destination) sv("slug", generateSlug(name)); }, [name, destination]);
+  // Auto-fill SEO title / description / slug from the name while CREATING.
+  // Editing an existing destination never auto-clobbers — the Settings panel
+  // offers an explicit "Apply suggested SEO & URL" prompt instead. Manual edits
+  // stick: a customized title/description stops re-syncing (auto-markers gone).
+  useEffect(() => {
+    if (destination) return;
+    const n = (name ?? "").trim();
+    if (!n) return;
+    const sug = buildDestinationSeo(n);
+    sv("slug", sug.slug);
+    const curTitle = (gv("seo.title") as string) ?? "";
+    if (!curTitle.trim() || isAutoSeoTitle(curTitle)) sv("seo.title", sug.title);
+    const curDesc = (gv("seo.description") as string) ?? "";
+    if (!curDesc.trim() || isAutoSeoDescription(curDesc)) sv("seo.description", sug.description);
+  }, [name, destination]);
 
   // Populate from existing destination
   useEffect(() => {
@@ -269,6 +324,7 @@ export default function DestinationForm({ onClose, onSubmit, destination, isLoad
         name: destination.name || "",
         region: destination.region || "",
         status: destination.status || "draft",
+        scheduledPublishAt: dateToManilaLocalInput((destination as any).scheduledPublishAt),
         heroImage: destination.heroImage ?? "",
         heroImageAlt: destination.heroImageAlt ?? "",
         seo: destination.seo ?? { title: "", description: "" },
@@ -279,11 +335,31 @@ export default function DestinationForm({ onClose, onSubmit, destination, isLoad
         community: destination.community ?? { heading: "With @Imheretravels", images: [] },
         tourSlugs: destination.tourSlugs ?? [],
         hiddenReviewIds: destination.hiddenReviewIds ?? [],
-        featuredReviewIds: destination.featuredReviewIds ?? [],
       });
+      // Don't prompt for the name it loaded with — only on a real rename.
+      promptedNameRef.current = destination.name || "";
       setEditorKey((k) => k + 1);
     }
   }, [destination, form]);
+
+  // On EDIT: when the name changes, prompt (once, after it settles) to re-sync
+  // SEO & URL. Create mode auto-fills live, so no modal there.
+  useEffect(() => {
+    if (!destination) return;
+    const n = (name ?? "").trim();
+    if (!n || n === promptedNameRef.current) return;
+    const sug = buildDestinationSeo(n);
+    const curTitle = (gv("seo.title") as string) ?? "";
+    const curDesc = (gv("seo.description") as string) ?? "";
+    const curSlug = (gv("slug") as string) ?? "";
+    const differs =
+      (!!sug.title && sug.title !== curTitle) ||
+      (!!sug.slug && sug.slug !== curSlug) ||
+      (!!sug.description && sug.description !== curDesc);
+    if (!differs) return;
+    const t = setTimeout(() => setSeoModalOpen(true), 700);
+    return () => clearTimeout(t);
+  }, [name, destination]);
 
   // ── Picker confirm ──────────────────────────────────────────────────────────
   const handlePickerConfirm = (urls: string[]) => {
@@ -342,6 +418,39 @@ export default function DestinationForm({ onClose, onSubmit, destination, isLoad
 
   // ── Submit ──────────────────────────────────────────────────────────────────
   const handleSubmit = async (data: any) => {
+    // Always send the scheduled-publish value (empty string clears it server-side).
+    const scheduled = (form.getValues("scheduledPublishAt") as string) ?? "";
+    data.scheduledPublishAt = scheduled;
+
+    // ── Publish-readiness gate ────────────────────────────────────────────────
+    // A destination that is being made Active, or given a schedule that will
+    // auto-activate it, must have the content its public page needs. Draft /
+    // Archived saves with no schedule are always allowed (work-in-progress).
+    const wantsPublish = data.status === "active" || !!scheduled.trim();
+    if (wantsPublish) {
+      const missing: string[] = [];
+      if (!(data.name as string)?.trim()) missing.push("Name");
+      if (!(data.slug as string)?.trim()) missing.push("URL slug");
+      if (!(data.heroImage as string)?.trim()) missing.push("Hero image");
+      if (!(data.region as string)?.trim()) missing.push("Region");
+      if (!((data.description as string[]) ?? []).some((p) => p.trim()))
+        missing.push("A welcome paragraph");
+      if (!((data.tourSlugs as string[]) ?? []).length)
+        missing.push("At least one linked tour");
+
+      if (missing.length) {
+        toast({
+          title: scheduled.trim() ? "Can't schedule publish yet" : "Can't publish yet",
+          description: `Fill these in before publishing: ${missing.join(", ")}.`,
+          variant: "destructive",
+        });
+        // Region, hero image and linked tours all live in the Settings panel —
+        // open it so the missing fields are reachable.
+        setPanelOpen(true);
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
       // Drop empty repeated rows so the site renders cleanly.
@@ -400,6 +509,59 @@ export default function DestinationForm({ onClose, onSubmit, destination, isLoad
               </SelectContent>
             </Select>
 
+            {/* Schedule publish */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  title="Schedule publish"
+                  className={`flex items-center gap-1.5 h-8 px-2.5 rounded-md border text-xs transition-colors ${
+                    w("scheduledPublishAt")
+                      ? "border-vivid-orange text-vivid-orange bg-vivid-orange/10"
+                      : "border-border text-dark-gray hover:bg-light-grey"
+                  }`}
+                >
+                  <Clock className="h-3.5 w-3.5" />
+                  <span className="hidden lg:inline">
+                    {w("scheduledPublishAt") ? "Scheduled" : "Schedule"}
+                  </span>
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-72 p-3 space-y-2" align="end">
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-midnight">Schedule publish</p>
+                  <p className="text-[11px] text-dark-gray leading-snug">
+                    The destination automatically switches to{" "}
+                    <span className="font-medium">Active</span> at this date &amp; time
+                    (<span className="font-medium">Manila / PHT</span>). Leave it as Draft
+                    or Archived until then.
+                  </p>
+                </div>
+                <input
+                  type="datetime-local"
+                  value={w("scheduledPublishAt") ?? ""}
+                  onChange={(e) => sv("scheduledPublishAt", e.target.value)}
+                  className="w-full h-9 rounded-md border border-border bg-white px-2 text-xs text-midnight focus:outline-none focus:ring-2 focus:ring-crimson-red/30"
+                />
+                {w("scheduledPublishAt") && (
+                  <div className="flex items-center justify-between pt-0.5">
+                    {w("status") === "active" && (
+                      <span className="text-[11px] text-amber-600">
+                        Already Active — schedule has no effect.
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => sv("scheduledPublishAt", "")}
+                      className="ml-auto text-[11px] text-crimson-red hover:underline"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
+              </PopoverContent>
+            </Popover>
+
             {/* Undo / redo / reset */}
             <div className="flex items-center gap-1">
               <button type="button" onClick={() => history.undo()} disabled={!history.canUndo}
@@ -420,9 +582,15 @@ export default function DestinationForm({ onClose, onSubmit, destination, isLoad
             </div>
 
             <button type="button" onClick={() => setPanelOpen((p) => !p)}
-              className={`flex items-center gap-1.5 h-9 px-4 rounded-full border font-body text-sm transition-colors ${panelOpen ? "border-crimson-red bg-crimson-red/5 text-crimson-red" : "border-border text-midnight hover:bg-light-grey"}`}>
+              className={`relative flex items-center gap-1.5 h-9 px-4 rounded-full border font-body text-sm transition-colors ${panelOpen ? "border-crimson-red bg-crimson-red/5 text-crimson-red" : "border-border text-midnight hover:bg-light-grey"}`}>
               <Settings className="h-4 w-4" />
               Settings
+              {hasSeoSuggestion && !panelOpen && (
+                <span
+                  className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-crimson-red ring-2 ring-white"
+                  title="Suggested SEO & URL available"
+                />
+              )}
             </button>
 
             <Button type="button" disabled={isSubmitting}
@@ -435,6 +603,19 @@ export default function DestinationForm({ onClose, onSubmit, destination, isLoad
               {isSubmitting ? "Saving…" : destination ? "Save Changes" : "Create Destination"}
             </Button>
           </div>
+        </div>
+      </div>
+
+      {/* Preview-approximation notice */}
+      <div className="border-b border-royal-purple/10 bg-royal-purple/5">
+        <div className="max-w-7xl mx-auto px-4 md:px-8 py-2.5 flex items-start gap-2.5">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-royal-purple" />
+          <p className="font-body text-xs text-dark-gray">
+            <span className="font-semibold text-midnight">Preview approximation.</span>{" "}
+            The sections below are a lighter in-CMS rendering to help you edit content — they
+            won&apos;t match the live website pixel-for-pixel (fonts, spacing, and some interactive
+            elements differ). Use <span className="font-semibold">View on site</span> to see the real page.
+          </p>
         </div>
       </div>
 
@@ -650,14 +831,16 @@ export default function DestinationForm({ onClose, onSubmit, destination, isLoad
             <ReviewsPreview
               name={name}
               linkedReviews={linkedReviews}
-              featuredReviews={featuredReviews}
-              allReviews={publishedReviews}
+              hiddenTourReviews={hiddenTourReviews}
               hiddenIds={hiddenReviewIds}
-              featuredIds={featuredReviewIds}
-              onHide={(id) => addReviewId("hiddenReviewIds", id)}
-              onUnhide={(id) => removeReviewId("hiddenReviewIds", id)}
-              onFeature={(id) => addReviewId("featuredReviewIds", id)}
-              onUnfeature={(id) => { removeReviewId("featuredReviewIds", id); removeReviewId("hiddenReviewIds", id); }}
+              manageReviewsHref="/reviews"
+              onHideDestination={(id) => addHiddenId(id)}
+              onHideTour={(id, tourSlug) => hideReviewGlobally(id, tourSlug)}
+              onHideBoth={(id, tourSlug) => { addHiddenId(id); hideReviewGlobally(id, tourSlug); }}
+              onUnhide={(id, tourSlug, wasGlobal) => {
+                if (wasGlobal) publishReviewGlobally(id, tourSlug);
+                removeHiddenId(id);
+              }}
             />
           </section>
 
@@ -806,6 +989,31 @@ export default function DestinationForm({ onClose, onSubmit, destination, isLoad
         open={leaveGuard.isPending}
         onClose={leaveGuard.cancel}
         onConfirm={leaveGuard.confirm}
+      />
+
+      {/* Rename → offer to re-sync SEO & URL */}
+      <SeoAutofillModal
+        open={seoModalOpen}
+        name={name}
+        current={{
+          title: (w("seo.title") as string) || "",
+          description: (w("seo.description") as string) || "",
+          slug: (w("slug") as string) || "",
+        }}
+        suggestion={buildDestinationSeo(name)}
+        isAutoTitle={isAutoSeoTitle((w("seo.title") as string) || "")}
+        isAutoDescription={isAutoSeoDescription((w("seo.description") as string) || "")}
+        onApply={(patch) => {
+          if (patch.title !== undefined) sv("seo.title", patch.title);
+          if (patch.description !== undefined) sv("seo.description", patch.description);
+          if (patch.slug !== undefined) sv("slug", patch.slug);
+          promptedNameRef.current = (name ?? "").trim();
+          setSeoModalOpen(false);
+        }}
+        onClose={() => {
+          promptedNameRef.current = (name ?? "").trim();
+          setSeoModalOpen(false);
+        }}
       />
     </div>
   );

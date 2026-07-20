@@ -1,12 +1,13 @@
 "use client";
 
 import type { UseFormReturn } from "react-hook-form";
-import { X, Settings, Camera, Image as ImageIcon } from "lucide-react";
+import { X, Settings, Camera, Image as ImageIcon, Sparkles } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Destination } from "@/types/destinations";
+import { Destination, DESTINATION_REGIONS } from "@/types/destinations";
 import LinkedToursEditor from "./LinkedToursEditor";
+import { pendingSeoPatch } from "./seo-template";
 
 const WWW_BASE = "https://www.imheretravels.com";
 const resolveImg = (url: string | null | undefined): string => {
@@ -75,6 +76,24 @@ export default function DestinationSettingsPanel({
 
   const heroImage = (w("heroImage") as string | null) || "";
   const meta = destination?.metadata as any;
+
+  // Suggested SEO/URL from the destination name (title always, slug/description
+  // only when empty or still auto — never clobbers hand-written copy or a live URL).
+  const seoPatch = pendingSeoPatch({
+    name: w("name") as string,
+    slug: w("slug") as string,
+    seo: w("seo") as { title?: string; description?: string } | undefined,
+  });
+  const applySeoAutofill = () => {
+    const patch = pendingSeoPatch({
+      name: form.getValues("name") as string,
+      slug: form.getValues("slug") as string,
+      seo: form.getValues("seo") as { title?: string; description?: string } | undefined,
+    });
+    if (patch.title !== undefined) sv("seo.title", patch.title);
+    if (patch.description !== undefined) sv("seo.description", patch.description);
+    if (patch.slug !== undefined) sv("slug", patch.slug);
+  };
 
   return (
     <>
@@ -161,11 +180,25 @@ export default function DestinationSettingsPanel({
             <section>
               <SectionHead>Region</SectionHead>
               <FieldLabel>Region / Continent</FieldLabel>
-              <TextInput
-                value={w("region") ?? ""}
-                onChange={(v) => sv("region", v)}
-                placeholder="e.g. Southeast Asia"
-              />
+              {(() => {
+                const current = (w("region") as string) || "";
+                // Keep any existing off-list value selectable so it never blanks out.
+                const options = DESTINATION_REGIONS.includes(current as (typeof DESTINATION_REGIONS)[number]) || !current
+                  ? [...DESTINATION_REGIONS]
+                  : [current, ...DESTINATION_REGIONS];
+                return (
+                  <Select value={current || undefined} onValueChange={(v) => sv("region", v)}>
+                    <SelectTrigger className="h-9 text-sm border-border w-full">
+                      <SelectValue placeholder="Select a region" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {options.map((r) => (
+                        <SelectItem key={r} value={r}>{r}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                );
+              })()}
             </section>
 
             {/* ── Publish ── */}
@@ -196,6 +229,36 @@ export default function DestinationSettingsPanel({
             {/* ── SEO & URL ── */}
             <section>
               <SectionHead>SEO &amp; URL</SectionHead>
+
+              {/* Auto-fill prompt (from the destination name) */}
+              {Object.keys(seoPatch).length > 0 && (
+                <div className="mb-4 rounded-xl border border-crimson-red/30 bg-crimson-red/5 p-3">
+                  <div className="flex items-start gap-2">
+                    <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-crimson-red" />
+                    <div className="flex-1">
+                      <p className="text-xs font-semibold text-midnight">Auto-fill from name</p>
+                      <p className="text-[11px] leading-snug text-dark-gray">
+                        Set{" "}
+                        {[
+                          seoPatch.title !== undefined && "title",
+                          seoPatch.description !== undefined && "description",
+                          seoPatch.slug !== undefined && "URL slug",
+                        ]
+                          .filter(Boolean)
+                          .join(", ")}{" "}
+                        from &ldquo;{(w("name") as string) || "the destination name"}&rdquo;. You can still edit after.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={applySeoAutofill}
+                      className="shrink-0 rounded-full bg-crimson-red px-3 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-light-red"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Live preview */}
               {(() => {

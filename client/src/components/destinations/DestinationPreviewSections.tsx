@@ -13,9 +13,19 @@
  */
 
 import { useMemo, useState } from "react";
-import { Star, ImageIcon, EyeOff, Eye, Plus, X, Search } from "lucide-react";
+import {
+  Star, ImageIcon, EyeOff, Eye, X, ExternalLink,
+  ChevronLeft, ChevronRight, MapPin, Globe, Layers,
+} from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { TourPackage, Highlight } from "@/types/tours";
 import type { ReviewDoc } from "@/types/reviews";
+
+/** How a review is hidden for a destination page. */
+export type HiddenScope = "destination" | "tour" | "both";
+const REVIEWS_PAGE_SIZE = 6;
 
 const WWW_BASE = "https://www.imheretravels.com";
 export const resolveImg = (url: string | null | undefined): string => {
@@ -192,50 +202,46 @@ function sourceLabel(r: ReviewDoc): string | null {
 /** A single review card matching the public ReviewCard look (lighter — plain body). */
 function EditorReviewCard({
   review,
-  featured,
-  hidden,
-  onHide,
-  onUnhide,
-  onUnfeature,
+  onHideDestination,
+  onHideTour,
+  onHideBoth,
 }: {
   review: ReviewDoc;
-  featured: boolean;
-  hidden: boolean;
-  onHide: () => void;
-  onUnhide: () => void;
-  onUnfeature: () => void;
+  onHideDestination: () => void;
+  onHideTour: () => void;
+  onHideBoth: () => void;
 }) {
   const label = sourceLabel(review);
   const date = reviewDate(review);
   return (
-    <div className={`relative flex flex-col gap-4 rounded-lg bg-white p-6 shadow-small transition-opacity ${hidden ? "opacity-45" : ""}`}>
-      {/* Editor controls */}
-      <div className="absolute right-3 top-3 z-10 flex items-center gap-1">
-        {featured && (
-          <span className="rounded-full bg-vivid-orange/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-vivid-orange">
-            Added
-          </span>
-        )}
-        {hidden ? (
-          <button type="button" onClick={onUnhide} title="Show on this destination"
-            className="grid size-7 place-items-center rounded-full bg-light-grey text-dark-gray hover:text-spring-green">
-            <Eye className="size-3.5" />
-          </button>
-        ) : (
-          <button type="button" onClick={onHide} title="Hide on this destination"
-            className="grid size-7 place-items-center rounded-full bg-light-grey text-dark-gray hover:text-crimson-red">
-            <EyeOff className="size-3.5" />
-          </button>
-        )}
-        {featured && (
-          <button type="button" onClick={onUnfeature} title="Remove from this destination"
-            className="grid size-7 place-items-center rounded-full bg-light-grey text-dark-gray hover:text-crimson-red">
-            <X className="size-3.5" />
-          </button>
-        )}
+    <div className="relative flex flex-col gap-4 rounded-lg bg-white p-6 shadow-small">
+      {/* Hide-scope menu */}
+      <div className="absolute right-3 top-3 z-10">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" title="Hide this review"
+              className="grid size-7 place-items-center rounded-full bg-light-grey text-dark-gray transition-colors hover:text-crimson-red">
+              <EyeOff className="size-3.5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuItem onClick={onHideDestination}>
+              <MapPin className="mr-2 h-4 w-4" />
+              Hide on this destination
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onHideTour}>
+              <Globe className="mr-2 h-4 w-4" />
+              Hide on the tour (global)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onHideBoth}>
+              <Layers className="mr-2 h-4 w-4" />
+              Hide on both
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
-      <div className="flex flex-col gap-1.5 pr-16">
+      <div className="flex flex-col gap-1.5 pr-10">
         <div className="flex items-center gap-3">
           <Stars rating={review.rating} />
           {label && (
@@ -283,43 +289,107 @@ function EditorReviewCard({
   );
 }
 
+const SCOPE_LABEL: Record<HiddenScope, string> = {
+  destination: "Destination",
+  tour: "Tour",
+  both: "Both",
+};
+
+/** A compact row in the "Hidden reviews" modal, with its scope + an unhide action. */
+function HiddenReviewRow({
+  review,
+  scope,
+  onUnhide,
+}: {
+  review: ReviewDoc;
+  scope: HiddenScope;
+  onUnhide: () => void;
+}) {
+  return (
+    <div className="flex items-start gap-3 rounded-xl border border-light-grey p-3">
+      <div className="grid size-9 shrink-0 place-items-center rounded-full bg-light-grey text-xs font-bold text-midnight">
+        {(review.reviewerFirstName?.[0] ?? "?").toUpperCase()}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="font-sans text-b4-desktop font-bold text-midnight">
+            {review.reviewerFirstName} {review.reviewerLastName ?? ""}
+          </span>
+          <Stars rating={review.rating} className="size-3" />
+          <span className="rounded-full bg-royal-purple/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-royal-purple">
+            {SCOPE_LABEL[scope]}
+          </span>
+        </div>
+        <p className="line-clamp-2 font-body text-xs text-dark-gray">
+          {(review.bodyMarkdown || "").replace(/[#*_>`]/g, "")}
+        </p>
+        {review.tourName && <p className="mt-0.5 text-[11px] text-grey">{review.tourName}</p>}
+      </div>
+      <button
+        type="button"
+        onClick={onUnhide}
+        title="Unhide"
+        className="flex shrink-0 items-center gap-1 rounded-full border border-light-grey px-3 py-1.5 text-xs font-medium text-dark-gray transition-colors hover:border-spring-green hover:text-spring-green"
+      >
+        <Eye className="size-3.5" /> Unhide
+      </button>
+    </div>
+  );
+}
+
 export function ReviewsPreview({
   name,
   linkedReviews,
-  featuredReviews,
-  allReviews,
+  hiddenTourReviews,
   hiddenIds,
-  featuredIds,
-  onHide,
+  manageReviewsHref,
+  onHideDestination,
+  onHideTour,
+  onHideBoth,
   onUnhide,
-  onFeature,
-  onUnfeature,
 }: {
   name: string;
+  /** Published reviews of this destination's linked tours (candidate set). */
   linkedReviews: ReviewDoc[];
-  featuredReviews: ReviewDoc[];
-  allReviews: ReviewDoc[];
+  /** Globally-hidden (status="hidden") reviews among this destination's linked tours. */
+  hiddenTourReviews: ReviewDoc[];
+  /** Destination-local hidden review ids. */
   hiddenIds: string[];
-  featuredIds: string[];
-  onHide: (id: string) => void;
-  onUnhide: (id: string) => void;
-  onFeature: (id: string) => void;
-  onUnfeature: (id: string) => void;
+  /** Admin route to the Tour Reviews moderation page. */
+  manageReviewsHref: string;
+  onHideDestination: (id: string) => void;
+  onHideTour: (id: string, tourSlug: string) => void;
+  onHideBoth: (id: string, tourSlug: string) => void;
+  onUnhide: (id: string, tourSlug: string, wasGlobal: boolean) => void;
 }) {
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [search, setSearch] = useState("");
+  const [hiddenModalOpen, setHiddenModalOpen] = useState(false);
+  const [page, setPage] = useState(0);
 
-  // Candidate set = linked-tour reviews ∪ featured, de-duped by id.
-  const candidates = useMemo(() => {
-    const map = new Map<string, ReviewDoc>();
-    [...linkedReviews, ...featuredReviews].forEach((r) => map.set(r.id, r));
-    return Array.from(map.values()).sort((a, b) => b.createdAt - a.createdAt);
-  }, [linkedReviews, featuredReviews]);
+  const hiddenSet = useMemo(() => new Set(hiddenIds), [hiddenIds]);
 
-  const featuredSet = new Set(featuredIds);
-  const visible = candidates.filter((r) => !hiddenIds.includes(r.id));
-  const hidden = candidates.filter((r) => hiddenIds.includes(r.id));
+  // Visible = published linked-tour reviews minus destination-local hidden, newest-first.
+  const visible = useMemo(
+    () =>
+      [...linkedReviews]
+        .filter((r) => !hiddenSet.has(r.id))
+        .sort((a, b) => b.createdAt - a.createdAt),
+    [linkedReviews, hiddenSet],
+  );
 
+  // Hidden rows for the modal: destination-local (published but locally hidden) +
+  // globally-hidden linked-tour reviews. Scope "both" when a review is in both sets.
+  const hiddenRows = useMemo(() => {
+    const rows = new Map<string, { review: ReviewDoc; scope: HiddenScope }>();
+    linkedReviews
+      .filter((r) => hiddenSet.has(r.id))
+      .forEach((r) => rows.set(r.id, { review: r, scope: "destination" }));
+    hiddenTourReviews.forEach((r) =>
+      rows.set(r.id, { review: r, scope: hiddenSet.has(r.id) ? "both" : "tour" }),
+    );
+    return Array.from(rows.values()).sort((a, b) => b.review.createdAt - a.review.createdAt);
+  }, [linkedReviews, hiddenTourReviews, hiddenSet]);
+
+  // Summary computed over the full visible set (not just the current page).
   const avg = visible.length > 0 ? visible.reduce((s, r) => s + (r.rating || 0), 0) / visible.length : 0;
   const buckets = [5, 4, 3, 2, 1].map((star) => ({
     star,
@@ -327,34 +397,35 @@ export function ReviewsPreview({
   }));
   const maxBucket = Math.max(1, ...buckets.map((b) => b.count));
 
-  const candidateIds = new Set(candidates.map((r) => r.id));
-  const addable = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return allReviews
-      .filter((r) => !candidateIds.has(r.id))
-      .filter((r) =>
-        term
-          ? `${r.reviewerFirstName} ${r.reviewerLastName ?? ""} ${r.tourName} ${r.title ?? ""} ${r.bodyMarkdown}`
-              .toLowerCase()
-              .includes(term)
-          : true,
-      )
-      .slice(0, 40);
-  }, [allReviews, candidateIds, search]);
+  // Pagination (mirrors www ReviewsPager: clamp page, slice, Prev/Next).
+  const pageCount = Math.max(1, Math.ceil(visible.length / REVIEWS_PAGE_SIZE));
+  const current = Math.min(page, pageCount - 1);
+  const start = current * REVIEWS_PAGE_SIZE;
+  const pageItems = visible.slice(start, start + REVIEWS_PAGE_SIZE);
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-12 md:px-8 md:py-16">
-      <div className="mb-6 flex items-center justify-between gap-4">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-sans text-h3-mobile md:text-h3-desktop text-midnight">
           {name || "Destination"} Tour Reviews
         </h2>
-        <button
-          type="button"
-          onClick={() => setPickerOpen(true)}
-          className="flex items-center gap-1.5 rounded-full border border-crimson-red bg-crimson-red/5 px-4 py-2 font-body text-sm font-medium text-crimson-red transition-colors hover:bg-crimson-red/10"
-        >
-          <Plus className="size-4" /> Add review
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setHiddenModalOpen(true)}
+            className="flex items-center gap-1.5 rounded-full border border-border px-4 py-2 font-body text-sm font-medium text-midnight transition-colors hover:bg-light-grey"
+          >
+            <EyeOff className="size-4" /> Hidden reviews ({hiddenRows.length})
+          </button>
+          <a
+            href={manageReviewsHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 rounded-full border border-crimson-red bg-crimson-red/5 px-4 py-2 font-body text-sm font-medium text-crimson-red transition-colors hover:bg-crimson-red/10"
+          >
+            Manage reviews <ExternalLink className="size-4" />
+          </a>
+        </div>
       </div>
 
       {/* Summary card — mirrors the public RatingBreakdown + "Ready to book" CTA */}
@@ -401,108 +472,87 @@ export function ReviewsPreview({
         </div>
       </div>
 
-      {/* Review cards */}
+      {/* Review cards (paginated) */}
       {visible.length > 0 ? (
-        <ul className="mt-8 grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
-          {visible.map((r) => (
-            <li key={r.id}>
-              <EditorReviewCard
-                review={r}
-                featured={featuredSet.has(r.id)}
-                hidden={false}
-                onHide={() => onHide(r.id)}
-                onUnhide={() => onUnhide(r.id)}
-                onUnfeature={() => onUnfeature(r.id)}
-              />
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="mt-8 rounded-2xl border-2 border-dashed border-grey/40 bg-white/60 py-10 text-center font-body text-b4-desktop text-dark-gray">
-          No reviews will show here. Link tours with reviews, or add specific reviews above.
-        </p>
-      )}
-
-      {/* Hidden reviews (collapsed, editor-only) */}
-      {hidden.length > 0 && (
-        <div className="mt-8">
-          <p className="mb-3 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-dark-gray/60">
-            <EyeOff className="size-3.5" /> Hidden on this destination ({hidden.length})
-          </p>
-          <ul className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {hidden.map((r) => (
+        <>
+          <ul className="mt-8 grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+            {pageItems.map((r) => (
               <li key={r.id}>
                 <EditorReviewCard
                   review={r}
-                  featured={featuredSet.has(r.id)}
-                  hidden
-                  onHide={() => onHide(r.id)}
-                  onUnhide={() => onUnhide(r.id)}
-                  onUnfeature={() => onUnfeature(r.id)}
+                  onHideDestination={() => onHideDestination(r.id)}
+                  onHideTour={() => onHideTour(r.id, r.tourSlug)}
+                  onHideBoth={() => onHideBoth(r.id, r.tourSlug)}
                 />
               </li>
             ))}
           </ul>
-        </div>
+
+          {pageCount > 1 && (
+            <div className="mt-8 flex items-center justify-center gap-4">
+              <button
+                type="button"
+                onClick={() => setPage(Math.max(0, current - 1))}
+                disabled={current === 0}
+                className="grid size-10 place-items-center rounded-full border border-border text-midnight transition-colors hover:bg-light-grey disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Previous page"
+              >
+                <ChevronLeft className="size-4" />
+              </button>
+              <span className="font-body text-b4-desktop text-dark-gray">
+                Page {current + 1} of {pageCount}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage(Math.min(pageCount - 1, current + 1))}
+                disabled={current >= pageCount - 1}
+                className="grid size-10 place-items-center rounded-full border border-border text-midnight transition-colors hover:bg-light-grey disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Next page"
+              >
+                <ChevronRight className="size-4" />
+              </button>
+            </div>
+          )}
+        </>
+      ) : (
+        <p className="mt-8 rounded-2xl border-2 border-dashed border-grey/40 bg-white/60 py-10 text-center font-body text-b4-desktop text-dark-gray">
+          No reviews will show here. Link tours that have reviews in Settings → Linked Tours.
+        </p>
       )}
 
-      {/* Add-review picker */}
-      {pickerOpen && (
+      {/* Hidden-reviews modal */}
+      {hiddenModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setPickerOpen(false)} aria-hidden />
+          <div className="absolute inset-0 bg-black/40" onClick={() => setHiddenModalOpen(false)} aria-hidden />
           <div className="relative z-10 flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-light-grey px-6 py-4">
-              <span className="font-sans font-bold text-midnight">Add a review to {name || "this destination"}</span>
-              <button type="button" onClick={() => setPickerOpen(false)}
+              <span className="font-sans font-bold text-midnight">
+                Hidden reviews on {name || "this destination"}
+              </span>
+              <button type="button" onClick={() => setHiddenModalOpen(false)}
                 className="grid size-7 place-items-center rounded-full text-dark-gray hover:bg-light-grey hover:text-midnight">
                 <X className="size-4" />
               </button>
             </div>
-            <div className="border-b border-light-grey p-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-dark-gray/50" />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search reviews by name, tour, or text…"
-                  className="w-full rounded-md border border-border py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-crimson-red/40"
-                />
-              </div>
+            <div className="border-b border-light-grey px-6 py-3">
+              <p className="font-body text-xs text-dark-gray">
+                <span className="font-semibold">Destination</span> = hidden on this page only ·{" "}
+                <span className="font-semibold">Tour</span> = hidden globally (everywhere) ·{" "}
+                <span className="font-semibold">Both</span> = both. Unhiding reverses the hide.
+              </p>
             </div>
             <div className="flex-1 overflow-y-auto p-3 scrollbar-hide">
-              {addable.length === 0 ? (
-                <p className="py-8 text-center text-sm text-dark-gray/60">
-                  {search ? "No matching reviews." : "No other published reviews to add."}
-                </p>
+              {hiddenRows.length === 0 ? (
+                <p className="py-8 text-center text-sm text-dark-gray/60">No hidden reviews.</p>
               ) : (
                 <ul className="space-y-2">
-                  {addable.map((r) => (
-                    <li key={r.id}>
-                      <button
-                        type="button"
-                        onClick={() => { onFeature(r.id); setPickerOpen(false); setSearch(""); }}
-                        className="group flex w-full items-start gap-3 rounded-xl border border-light-grey p-3 text-left transition-colors hover:border-crimson-red/40 hover:bg-crimson-red/5"
-                      >
-                        <div className="grid size-9 shrink-0 place-items-center rounded-full bg-light-grey text-xs font-bold text-midnight">
-                          {(r.reviewerFirstName?.[0] ?? "?").toUpperCase()}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-sans text-b4-desktop font-bold text-midnight">
-                              {r.reviewerFirstName} {r.reviewerLastName ?? ""}
-                            </span>
-                            <Stars rating={r.rating} className="size-3" />
-                          </div>
-                          <p className="line-clamp-2 font-body text-xs text-dark-gray">
-                            {(r.bodyMarkdown || "").replace(/[#*_>`]/g, "")}
-                          </p>
-                          {r.tourName && <p className="mt-0.5 text-[11px] text-grey">{r.tourName}</p>}
-                        </div>
-                        <span className="mt-1 grid size-6 shrink-0 place-items-center rounded-full bg-crimson-red/10 text-crimson-red opacity-0 transition-opacity group-hover:opacity-100">
-                          <Plus className="size-3.5" />
-                        </span>
-                      </button>
+                  {hiddenRows.map(({ review, scope }) => (
+                    <li key={review.id}>
+                      <HiddenReviewRow
+                        review={review}
+                        scope={scope}
+                        onUnhide={() => onUnhide(review.id, review.tourSlug, scope !== "destination")}
+                      />
                     </li>
                   ))}
                 </ul>

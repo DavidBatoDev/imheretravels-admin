@@ -26,7 +26,7 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Destination } from "@/types/destinations";
+import { Destination, DESTINATION_REGIONS } from "@/types/destinations";
 import { archiveDestination, deleteDestination } from "@/services/destinations-service";
 
 const WWW_BASE = "https://www.imheretravels.com";
@@ -45,6 +45,7 @@ export default function DestinationsList() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [regionFilter, setRegionFilter] = useState<string>("all");
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [destinationToDelete, setDestinationToDelete] = useState<Destination | null>(null);
 
@@ -67,6 +68,15 @@ export default function DestinationsList() {
     });
   }, [allDestinations]);
 
+  // Regions offered in the filter: the canonical list ∪ any region actually
+  // present on a destination (so off-list legacy values remain reachable).
+  const regionOptions = useMemo(() => {
+    const present = allDestinations.map((d) => (d.region || "").trim()).filter(Boolean);
+    return Array.from(new Set([...DESTINATION_REGIONS, ...present])).sort((a, b) =>
+      nameCollator.compare(a, b),
+    );
+  }, [allDestinations, nameCollator]);
+
   const filteredDestinations = useMemo(() => {
     let results = allDestinations;
     if (fuse && searchTerm) {
@@ -75,10 +85,13 @@ export default function DestinationsList() {
     if (statusFilter !== "all") {
       results = results.filter((d) => d.status === statusFilter);
     }
+    if (regionFilter !== "all") {
+      results = results.filter((d) => (d.region || "").trim() === regionFilter);
+    }
     return [...results].sort((a, b) =>
       nameCollator.compare((a?.name || "").trim(), (b?.name || "").trim()),
     );
-  }, [fuse, searchTerm, statusFilter, allDestinations, nameCollator]);
+  }, [fuse, searchTerm, statusFilter, regionFilter, allDestinations, nameCollator]);
 
   const loadDestinations = () => {
     try {
@@ -268,7 +281,7 @@ export default function DestinationsList() {
               </div>
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full md:w-48 border-royal-purple/20 focus:border-royal-purple focus:ring-royal-purple/20">
+              <SelectTrigger className="w-full md:w-44 border-royal-purple/20 focus:border-royal-purple focus:ring-royal-purple/20">
                 <Filter className="mr-2 h-4 w-4 text-royal-purple" />
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
@@ -277,6 +290,18 @@ export default function DestinationsList() {
                 <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="draft">Draft</SelectItem>
                 <SelectItem value="archived">Archived</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={regionFilter} onValueChange={setRegionFilter}>
+              <SelectTrigger className="w-full md:w-48 border-royal-purple/20 focus:border-royal-purple focus:ring-royal-purple/20">
+                <Globe className="mr-2 h-4 w-4 text-royal-purple" />
+                <SelectValue placeholder="Filter by region" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Regions</SelectItem>
+                {regionOptions.map((r) => (
+                  <SelectItem key={r} value={r}>{r}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Button
@@ -340,12 +365,6 @@ export default function DestinationsList() {
                         <Edit className="h-4 w-4 mr-2" />
                         Edit
                       </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <a href={`${WWW_BASE}/all-destinations/${destination.slug}`} target="_blank" rel="noopener noreferrer">
-                          <ExternalLink className="h-4 w-4 mr-2" />
-                          View on site
-                        </a>
-                      </DropdownMenuItem>
                       {destination.status !== "archived" && (
                         <DropdownMenuItem onClick={() => handleArchive(destination)}>
                           <Archive className="h-4 w-4 mr-2" />
@@ -388,6 +407,17 @@ export default function DestinationsList() {
                     <Edit className="h-4 w-4 mr-1" />
                     Edit
                   </Button>
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 border-royal-purple/20 text-royal-purple hover:bg-royal-purple/10 hover:border-royal-purple transition-all duration-200"
+                  >
+                    <a href={`${WWW_BASE}/all-destinations/${destination.slug}`} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="h-4 w-4 mr-1" />
+                      View on site
+                    </a>
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -404,7 +434,7 @@ export default function DestinationsList() {
             </div>
             <h3 className="text-lg font-semibold text-foreground mb-2">No destinations found</h3>
             <p className="text-muted-foreground mb-4">
-              {searchTerm || statusFilter !== "all"
+              {searchTerm || statusFilter !== "all" || regionFilter !== "all"
                 ? "Try adjusting your search or filters"
                 : "Get started by creating your first destination"}
             </p>

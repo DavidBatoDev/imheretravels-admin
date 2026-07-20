@@ -3,6 +3,7 @@ import { db } from "@/lib/firebase";
 import { collection, getDocs, addDoc, Timestamp } from "firebase/firestore";
 import { verifyRequestUserId } from "@/lib/firebase-admin-auth";
 import { revalidateWww } from "@/lib/revalidate-www";
+import { manilaLocalToDate } from "@/lib/manila-time";
 
 const DESTINATIONS_COLLECTION = "destinations";
 
@@ -26,8 +27,18 @@ export async function POST(request: NextRequest) {
 
     const now = Timestamp.now();
 
+    // Normalize scheduled publish time: the form's wall-clock value is Asia/
+    // Manila time. Store a Timestamp or drop it entirely (never persist an empty
+    // string). The publishScheduledDestinations cron relies on this being a Timestamp.
+    const parsedScheduledPublish = manilaLocalToDate(destinationData.scheduledPublishAt);
+    const scheduledPublishAt = parsedScheduledPublish
+      ? Timestamp.fromDate(parsedScheduledPublish)
+      : undefined;
+    delete destinationData.scheduledPublishAt;
+
     const destination: any = {
       ...destinationData,
+      ...(scheduledPublishAt ? { scheduledPublishAt } : {}),
       // Default the relational classification field so it always exists.
       tourSlugs: Array.isArray(destinationData.tourSlugs)
         ? destinationData.tourSlugs

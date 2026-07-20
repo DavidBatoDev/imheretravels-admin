@@ -3,6 +3,7 @@ import { db } from "@/lib/firebase";
 import { doc, getDoc, updateDoc, deleteDoc, Timestamp } from "firebase/firestore";
 import { verifyRequestUserId } from "@/lib/firebase-admin-auth";
 import { revalidateWww } from "@/lib/revalidate-www";
+import { manilaLocalToDate } from "@/lib/manila-time";
 
 const DESTINATIONS_COLLECTION = "destinations";
 
@@ -80,6 +81,14 @@ export async function PATCH(
 
     // Never let the client overwrite server-managed metadata wholesale.
     delete updateData.metadata;
+
+    // Scheduled publish: the form's wall-clock value is interpreted as Asia/
+    // Manila time, then persisted as a Timestamp (or cleared). The
+    // publishScheduledDestinations cron flips status→"active" once it passes.
+    if ("scheduledPublishAt" in updates) {
+      const parsed = manilaLocalToDate(updates.scheduledPublishAt);
+      updateData.scheduledPublishAt = parsed ? Timestamp.fromDate(parsed) : null;
+    }
 
     await updateDoc(docRef, updateData);
 

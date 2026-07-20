@@ -21,6 +21,10 @@ export interface Destination {
   region: string; // e.g. "Southeast Asia"
   status: "active" | "draft" | "archived"; // Controls www visibility
 
+  // When set & in the future, the publishScheduledDestinations cron flips
+  // status→"active" at this time (interpreted as Asia/Manila on the client).
+  scheduledPublishAt?: Timestamp | null;
+
   // Hero
   heroImage: string;
   heroImageAlt: string;
@@ -91,6 +95,7 @@ export interface DestinationFormData {
   name: string;
   region: string;
   status: "active" | "draft" | "archived";
+  scheduledPublishAt?: string | null; // ISO/wall-clock (Asia/Manila) datetime string
   heroImage: string;
   heroImageAlt: string;
   seo?: { title?: string; description?: string };
@@ -112,5 +117,30 @@ export type DestinationStatus = "active" | "draft" | "archived";
 
 export interface DestinationFilters {
   status?: DestinationStatus;
+  region?: string;
   search?: string;
 }
+
+// ============================================================================
+// REGIONS (controlled vocabulary)
+// ============================================================================
+//
+// Single source of truth for the region a destination belongs to. Used by the
+// editor's region dropdown (DestinationSettingsPanel) and the list-view region
+// filter (DestinationsList) so values stay consistent instead of drifting from
+// free-text entry. Edit this list to add/rename a region.
+
+export const DESTINATION_REGIONS = [
+  "Southeast Asia",
+  "South Asia",
+  "East Asia",
+  "Central Asia",
+  "Middle East",
+  "Europe",
+  "Africa",
+  "North America",
+  "Central America",
+  "Caribbean",
+  "South America",
+  "Oceania",
+] as const;

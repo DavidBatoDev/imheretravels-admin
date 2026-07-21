@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useFieldArray } from "react-hook-form";
 import type { UseFormReturn } from "react-hook-form";
 import {
-  X, Settings, Plus, AlertCircle,
+  X, Settings, Plus, AlertCircle, Copy, Check,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -80,6 +80,51 @@ function SectionHead({ children }: { children: React.ReactNode }) {
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return <label className="block text-xs font-body text-dark-gray mb-0.5">{children}</label>;
+}
+
+/**
+ * Read-only identifier row. The tour's document id is the key bookings,
+ * reviews and reports join on, so it's worth surfacing for support and
+ * scripting — but it is assigned by Firestore and must never be edited.
+ */
+function ReadOnlyId({ value }: { value: string | null }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard can be blocked (insecure origin / permissions); the value is
+      // selectable in the field either way.
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="text"
+        value={value ?? "Assigned when you save"}
+        readOnly
+        disabled={!value}
+        onFocus={e => e.currentTarget.select()}
+        title={value ?? undefined}
+        aria-label="Tour ID (read-only)"
+        className="w-full cursor-text rounded-md border border-light-grey bg-light-grey/50 px-3 py-1.5 font-mono text-xs text-dark-gray outline-none select-all disabled:text-dark-gray/50"
+      />
+      <button
+        type="button"
+        onClick={copy}
+        disabled={!value}
+        title={copied ? "Copied" : "Copy tour ID"}
+        className="grid size-8 shrink-0 place-items-center rounded-md border border-light-grey text-dark-gray transition-colors hover:border-crimson-red hover:text-crimson-red disabled:opacity-40 disabled:hover:border-light-grey disabled:hover:text-dark-gray"
+      >
+        {copied ? <Check className="size-3.5 text-spring-green" /> : <Copy className="size-3.5" />}
+      </button>
+    </div>
+  );
 }
 
 function TextInput({
@@ -468,6 +513,13 @@ export default function TourSettingsPanel({ open, onClose, form, tour, issues = 
                     className="w-full resize-y min-h-[64px] border border-border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-crimson-red/40"
                   />
                 </div>
+                {/* Firestore document id — the stable key bookings, reviews and
+                    reports join on. Displayed for support/scripting; never editable. */}
+                <div>
+                  <FieldLabel>Tour ID (read-only)</FieldLabel>
+                  <ReadOnlyId value={tour?.id ?? null} />
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div data-field="tourCode">
                     <FieldLabel>Tour Code</FieldLabel>

@@ -1175,6 +1175,13 @@ export interface BookingCreationInput {
   bookingType: string;
   tourPackageName: string;
   tourCode: string;
+  /**
+   * tourPackages document id. `tourCode` and `tourPackageName` above are
+   * snapshots of what the trip was called when sold and go stale the moment a
+   * tour is renamed or recoded — every report and the www review flow join on
+   * this instead. Always pass it; the fallbacks exist only for legacy rows.
+   */
+  tourId?: string;
   tourDate: unknown;
   returnDate?: unknown;
   tourDuration?: number;
@@ -1202,6 +1209,8 @@ export interface CreatedBookingData {
   bookingId: string;
   bookingCode: string;
   tourCode: string;
+  /** Stable tourPackages doc id — the durable link back to the tour. */
+  tourId: string;
   travellerInitials: string;
   tourPackageNameUniqueCounter: string;
   formattedDate: string;
@@ -1364,6 +1373,7 @@ export async function createBookingData(
     bookingId,
     bookingCode,
     tourCode: input.tourCode,
+    tourId: input.tourId ?? "",
     travellerInitials,
     tourPackageNameUniqueCounter: uniqueCounter,
     formattedDate,

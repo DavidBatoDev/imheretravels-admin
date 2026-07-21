@@ -361,6 +361,11 @@ export async function createBookingsForReservationPayment(opts: {
     bookingType,
     tourPackageName,
     tourCode,
+    // Durable link to the tour. Name and code are snapshots that go stale on a
+    // rename; this does not.
+    // Durable link to the tour. Name and code are snapshots that go stale on a
+    // rename; this does not.
+    tourId: (tourPackage as any)?.id ?? paymentData.tour?.packageId ?? "",
     tourDate: normalizedTourDate || paymentData.tour?.date || "",
     returnDate: paymentData.tour?.returnDate || calculatedReturnDate || "",
     tourDuration,
@@ -424,6 +429,8 @@ export async function createBookingsForReservationPayment(opts: {
       bookingType,
       tourPackageName,
       tourCode,
+      // Same durable link as the main booker.
+      tourId: (tourPackage as any)?.id ?? paymentData.tour?.packageId ?? "",
       tourDate: normalizedTourDate || paymentData.tour?.date || "",
       returnDate: paymentData.tour?.returnDate || calculatedReturnDate || "",
       tourDuration,

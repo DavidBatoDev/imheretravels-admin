@@ -450,6 +450,9 @@ export async function POST(req: NextRequest) {
       tourPackageName:
         paymentData.tour?.packageName || (tourPackage as any)?.name || "",
       tourCode,
+      // Durable link to the tour; name and code are snapshots that go stale on
+      // a rename.
+      tourId: (tourPackage as any)?.id ?? paymentData.tour?.packageId ?? "",
       tourDate: normalizedTourDate || "", // Use inherited tour date from parent
       returnDate: calculatedReturnDate || "", // Use inherited or calculated return date
       tourDuration,

@@ -203,6 +203,12 @@ describe("createBookingsForReservationPayment - Tanzania Exploration custom pric
     expect(booking.lastName).toBe("Doe");
     expect(booking.tourPackageName).toBe("Tanzania Exploration");
     expect(booking.tourCode).toBe("TZE");
+
+    // The durable link back to the tour. `tourCode` and `tourPackageName` above
+    // are snapshots that go stale when a tour is renamed or recoded — a booking
+    // written without a tourId silently falls back to matching on those, which
+    // is what cost 45 bookings their review eligibility. Must never regress.
+    expect(booking.tourId).toBe(TANZANIA_PACKAGE_ID);
   });
 
   it("falls back to the package default (£2049) when no custom price is set on the payment doc", async () => {

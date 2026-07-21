@@ -37,7 +37,12 @@ import {
 } from "@/utils/blob-image";
 import { generateSlug } from "@/utils";
 import { dateToManilaLocalInput } from "@/lib/manila-time";
-import { updateTourMedia, cleanupRemovedGalleryImages } from "@/services/tours-service";
+import { updateTourMedia, cleanupRemovedGalleryImages, getAllTours } from "@/services/tours-service";
+import {
+  validateTourForPublish,
+  hasBlockingIssue,
+  type PublishIssue,
+} from "@/lib/tour-publish-validation";
 import {
   SortableList,
   SortableItem,
@@ -50,6 +55,7 @@ import TourDatePicker from "./TourDatePicker";
 import ImagePickerModal from "@/components/shared/ImagePickerModal";
 import TourSettingsPanel from "./TourSettingsPanel";
 import SlugChangeModal from "./SlugChangeModal";
+import PublishBlockedModal from "./PublishBlockedModal";
 import HeroSetupPanel from "./HeroSetupPanel";
 import TravelDatesModal from "./TravelDatesModal";
 import ResetChangesModal from "@/components/shared/ResetChangesModal";
@@ -191,6 +197,7 @@ const URL_FIELDS = new Set(["url", "stripePaymentLink", "brochureLink", "preDepa
 // Fields edited inside the Settings panel — it must be opened before we scroll there.
 const PANEL_FIELDS = new Set([
   "status", "slug", "tourCode", "url", "brochureLink", "preDeparturePack",
+  "bookingSlug", "previousSlugs", "seo.title",
   "pricing.original", "pricing.discounted", "pricing.deposit", "pricing.currency",
 ]);
 // Friendly names for the repeatable `details.*` / `travelDates` array sections.
@@ -823,6 +830,15 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
   const [galleryBlobs, setGalleryBlobs] = useState<File[]>([]);
   const [originalGallery, setOriginalGallery] = useState<string[]>([]);
   const [panelOpen, setPanelOpen] = useState(false);
+  // Pre-publish safeguards. `blockedIssues` is the snapshot shown in the modal
+  // after a refused save; `liveIssues` (below) drives the inline field errors
+  // that appear as the admin types.
+  const [blockedIssues, setBlockedIssues] = useState<PublishIssue[]>([]);
+  const [publishModalOpen, setPublishModalOpen] = useState(false);
+  const pendingPublishData = useRef<any>(null);
+  // Every other tour, for the cross-tour uniqueness checks. Null while loading
+  // or if the fetch failed — the copy-marker checks still run without it.
+  const [allTours, setAllTours] = useState<TourPackage[] | null>(null);
   const [heroPanelOpen, setHeroPanelOpen] = useState(false);
   const [datesModalOpen, setDatesModalOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
@@ -896,6 +912,54 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
     setTimeout(() => el.classList.remove("ring-2", "ring-crimson-red", "rounded-md"), 1500);
   };
 
+  useEffect(() => {
+    let active = true;
+    getAllTours()
+      .then((t) => { if (active) setAllTours(t); })
+      .catch((err) => {
+        console.error("Uniqueness checks unavailable — could not load tours:", err);
+        if (active) setAllTours(null);
+      });
+    return () => { active = false; };
+  }, []);
+
+  // On-the-spot publish validation: recomputed as the identity fields change, so
+  // problems surface while typing rather than only on save. Rendered inline next
+  // to each field and cleared automatically once the value is fixed.
+  const wName = w("name");
+  const wCode = w("tourCode");
+  const wSlug = w("slug");
+  const wBookingSlug = w("bookingSlug");
+  const wUrl = w("url");
+  const wSeoTitle = w("seo.title");
+  const wPrevSlugs = w("previousSlugs");
+
+  const liveIssues = useMemo(
+    () =>
+      validateTourForPublish(
+        {
+          name: wName,
+          tourCode: wCode,
+          slug: wSlug,
+          bookingSlug: wBookingSlug,
+          url: wUrl,
+          seo: { title: wSeoTitle },
+          previousSlugs: wPrevSlugs ?? [],
+        },
+        allTours,
+        tour?.id,
+      ),
+    [wName, wCode, wSlug, wBookingSlug, wUrl, wSeoTitle, wPrevSlugs, allTours, tour?.id],
+  );
+
+  // Send the admin straight to a flagged field, opening the Settings panel first
+  // when that's where the field lives.
+  const focusField = (path: string) => {
+    if (PANEL_FIELDS.has(path)) setPanelOpen(true);
+    // Two frames: let the panel mount (when just opened) before scrolling.
+    requestAnimationFrame(() => requestAnimationFrame(() => scrollToField(path)));
+  };
+
   // Shared invalid-submit handler for both Save buttons — names each failing
   // field instead of the old generic "check required fields" message.
   const onInvalid = (errs: any) => {
@@ -916,11 +980,7 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
       variant: "destructive",
     });
     const first = items[0]?.path;
-    if (first) {
-      if (PANEL_FIELDS.has(first)) setPanelOpen(true);
-      // Two frames: let the panel mount (when just opened) before scrolling.
-      requestAnimationFrame(() => requestAnimationFrame(() => scrollToField(first)));
-    }
+    if (first) focusField(first);
   };
 
   // Field arrays
@@ -1246,7 +1306,71 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
   };
 
   // ── Submit ──────────────────────────────────────────────────────────────────
+  /**
+   * Publishing is gated: a live tour must not carry duplicate artifacts
+   * ("(Copy)", "-COPY") and its identity fields must be unique. Drafts skip the
+   * check so a freshly duplicated tour can still be saved and worked on.
+   */
   const handleSubmit = async (data: any) => {
+    const willPublish =
+      data.status === "active" || !!form.getValues("scheduledPublishAt");
+
+    if (willPublish) {
+      // Normally `liveIssues` is already current; only re-fetch when the tour
+      // list never loaded, so uniqueness isn't silently skipped.
+      let tours = allTours;
+      if (!tours) {
+        setIsSubmitting(true);
+        try {
+          tours = await getAllTours();
+          setAllTours(tours);
+        } catch (err) {
+          console.error("Pre-publish uniqueness check unavailable:", err);
+          toast({
+            title: "Couldn't check other tours",
+            description:
+              "Uniqueness couldn't be verified — publishing with only the local checks applied.",
+            variant: "destructive",
+          });
+        }
+        setIsSubmitting(false);
+      }
+
+      const issues =
+        tours === allTours
+          ? liveIssues
+          : validateTourForPublish(
+              {
+                name: data.name,
+                tourCode: data.tourCode,
+                slug: data.slug,
+                bookingSlug: data.bookingSlug,
+                url: data.url,
+                seo: data.seo,
+                previousSlugs: form.getValues("previousSlugs") ?? [],
+              },
+              tours,
+              tour?.id,
+            );
+
+      if (issues.length) {
+        // The publish was refused, so the editor must not keep claiming
+        // "Active" — drop it back to draft to match what's actually saved.
+        if (hasBlockingIssue(issues) && data.status === "active") {
+          sv("status", "draft");
+          data.status = "draft";
+        }
+        pendingPublishData.current = data;
+        setBlockedIssues(issues);
+        setPublishModalOpen(true);
+        return;
+      }
+    }
+
+    await saveTour(data);
+  };
+
+  const saveTour = async (data: any) => {
     setIsSubmitting(true);
     // Force the scheduled-publish value into the payload. It's an unregistered
     // `.nullish()` field, so RHF + the zod resolver can drop it from `data`
@@ -1775,6 +1899,26 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
                               className={hClass} />
                           </div>
                         </div>
+                        {/* Live publish-validation errors for the name; persist until fixed. */}
+                        {liveIssues.filter((i) => i.field === "name").map((issue, idx) => (
+                          <p
+                            key={idx}
+                            className={`mt-1 flex items-start gap-1.5 text-xs ${
+                              issue.severity === "blocking" ? "text-crimson-red" : "text-vivid-orange"
+                            }`}
+                          >
+                            <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+                            <span>
+                              {issue.message}
+                              {issue.conflictsWith && (
+                                <> Conflicts with <span className="font-semibold">{issue.conflictsWith}</span>.</>
+                              )}
+                              {issue.suggestion && (
+                                <> Suggested: <span className="font-mono">{issue.suggestion}</span></>
+                              )}
+                            </span>
+                          </p>
+                        ))}
                       </EditZone>
                     );
                   })()}
@@ -2588,6 +2732,7 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
           onClose={() => setPanelOpen(false)}
           form={form}
           tour={tour ?? null}
+          issues={liveIssues}
         />
 
         <SlugChangeModal
@@ -2659,6 +2804,28 @@ export default function TourForm({ onClose, onSubmit, tour, isLoading = false }:
         open={resetOpen}
         onClose={() => setResetOpen(false)}
         onConfirm={handleResetConfirm}
+      />
+
+      {/* ── Pre-publish safeguards ─────────────────────────────────────── */}
+      <PublishBlockedModal
+        open={publishModalOpen}
+        issues={blockedIssues}
+        isSubmitting={isSubmitting}
+        onClose={() => {
+          setPublishModalOpen(false);
+          pendingPublishData.current = null;
+        }}
+        onFix={(field) => {
+          setPublishModalOpen(false);
+          pendingPublishData.current = null;
+          focusField(field);
+        }}
+        onPublishAnyway={() => {
+          const data = pendingPublishData.current;
+          setPublishModalOpen(false);
+          pendingPublishData.current = null;
+          if (data) void saveTour(data);
+        }}
       />
 
       {/* ── Leave-with-unsaved-changes confirmation ────────────────────── */}

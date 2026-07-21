@@ -118,6 +118,7 @@ export const useReservationCatalogSubscriptions = ({
             travelDateDetails: travelDateDetails as ReservationTourPackage["travelDateDetails"],
             stripePaymentLink: payload.stripePaymentLink,
             status: payload.status || "active",
+            isHosted: payload.isHosted === true,
             deposit: payload.pricing?.deposit ?? 250,
             price: payload.pricing?.original ?? 2050,
             coverImage,

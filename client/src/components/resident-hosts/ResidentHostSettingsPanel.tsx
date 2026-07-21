@@ -304,7 +304,8 @@ export default function ResidentHostSettingsPanel({
             <section>
               <SectionHead>Attached Tours</SectionHead>
               <p className="mb-3 text-[11px] text-dark-gray/70">
-                Tours attached here are classified as hosted by this host.
+                Only tours marked as “Hosted” can be attached. Tours attached
+                here are hosted by this host.
               </p>
               <AttachedToursEditor form={form} />
             </section>

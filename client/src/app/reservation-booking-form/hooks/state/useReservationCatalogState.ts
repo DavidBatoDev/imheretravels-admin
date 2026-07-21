@@ -7,6 +7,7 @@ export type ReservationTourPackage = {
   name: string;
   travelDates: string[];
   status?: "active" | "inactive";
+  isHosted?: boolean;
   stripePaymentLink?: string;
   deposit?: number;
   price: number;

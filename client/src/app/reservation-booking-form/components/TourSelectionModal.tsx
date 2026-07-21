@@ -16,6 +16,7 @@ interface TourPackage {
     customOriginal?: number;
   }>;
   status?: "active" | "inactive";
+  isHosted?: boolean;
   stripePaymentLink?: string;
   deposit?: number;
   price: number;
@@ -53,6 +54,15 @@ export default function TourSelectionModal({
   const [modalImagesLoaded, setModalImagesLoaded] = useState<Set<string>>(
     new Set(),
   );
+  const [activeFilter, setActiveFilter] = useState<
+    "all" | "tours" | "hosted"
+  >("all");
+
+  // Reset to "All" each time the modal is reopened so a stale filter from a
+  // previous visit doesn't hide tours the admin expects to see.
+  useEffect(() => {
+    if (isOpen) setActiveFilter("all");
+  }, [isOpen]);
 
   // Keep image cache for this page session, but prune stale ids when package list changes.
   useEffect(() => {
@@ -109,6 +119,45 @@ export default function TourSelectionModal({
 
   if (!isOpen) return null;
 
+  const bookablePackages = tourPackages.filter(
+    (pkg) => pkg.status === "active" && !isTourAllDatesTooSoon(pkg),
+  );
+  const matchesFilter = (pkg: TourPackage) => {
+    if (activeFilter === "tours") return !pkg.isHosted;
+    if (activeFilter === "hosted") return !!pkg.isHosted;
+    return true;
+  };
+  const displayedPackages = bookablePackages.filter(matchesFilter);
+  const filterTabs: {
+    key: "all" | "tours" | "hosted";
+    label: string;
+    count: number;
+    description: string;
+  }[] = [
+    {
+      key: "all",
+      label: "All Tours",
+      count: bookablePackages.length,
+      description:
+        "Every available adventure, small-group and hosted alike — browse the full collection.",
+    },
+    {
+      key: "tours",
+      label: "Tours",
+      count: bookablePackages.filter((pkg) => !pkg.isHosted).length,
+      description:
+        "Small-group adventures run independently by our itinerary team — open to solo travelers and groups alike.",
+    },
+    {
+      key: "hosted",
+      label: "Hosted Tours",
+      count: bookablePackages.filter((pkg) => pkg.isHosted).length,
+      description:
+        "Exclusive group trips led by one of our resident hosts — community-first adventures with an expert guide who knows the guests by name.",
+    },
+  ];
+  const activeTab = filterTabs.find((tab) => tab.key === activeFilter);
+
   return (
     <div
       className="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-300"
@@ -149,10 +198,46 @@ export default function TourSelectionModal({
               </svg>
             </button>
           </div>
+
+          {/* Tour Type Filter Tabs */}
+          <div className="flex gap-2 overflow-x-auto px-6 pb-4 scrollbar-hide">
+            {filterTabs.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveFilter(tab.key)}
+                className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-all duration-300 ease-in-out flex items-center gap-2 ${
+                  activeFilter === tab.key
+                    ? "bg-crimson-red text-white shadow-md"
+                    : "bg-card border border-border text-foreground hover:border-crimson-red/50"
+                }`}
+              >
+                {tab.label}
+                <span
+                  className={`text-xs rounded-full px-1.5 py-0.5 ${
+                    activeFilter === tab.key
+                      ? "bg-white/20 text-white"
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {activeTab && (
+            <p
+              key={activeTab.key}
+              className="px-6 pb-4 -mt-1 text-xs text-muted-foreground animate-in fade-in slide-in-from-top-1 duration-200"
+            >
+              {activeTab.description}
+            </p>
+          )}
         </div>
 
         {/* Modal Body */}
-        <div className="p-8 h-[calc(85vh-120px)] overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
+        <div className="p-8 h-[calc(85vh-160px)] overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
           {isLoadingPackages ? (
             <div className="flex flex-col items-center justify-center py-20">
               <div className="relative">
@@ -203,9 +288,7 @@ export default function TourSelectionModal({
             </div>
           ) : (
             <>
-              {tourPackages.filter(
-                (pkg) => pkg.status === "active" && !isTourAllDatesTooSoon(pkg),
-              ).length === 0 ? (
+              {bookablePackages.length === 0 ? (
                 <div className="text-center py-20">
                   <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-muted/50 mb-4">
                     <svg
@@ -232,14 +315,41 @@ export default function TourSelectionModal({
                     Check back soon for new adventure dates!
                   </p>
                 </div>
+              ) : displayedPackages.length === 0 ? (
+                <div className="text-center py-20">
+                  <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-muted/50 mb-4">
+                    <svg
+                      className="w-10 h-10 text-muted-foreground/40"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={1.5}
+                        d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-semibold text-foreground mb-2">
+                    No {activeFilter === "hosted" ? "Hosted Tours" : "Tours"}{" "}
+                    Available Right Now
+                  </h3>
+                  <p className="text-muted-foreground mb-4">
+                    Try a different tab to see what's available.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveFilter("all")}
+                    className="px-4 py-2 rounded-lg font-medium text-sm bg-crimson-red text-white shadow-md hover:opacity-90 transition-opacity"
+                  >
+                    Show All Tours
+                  </button>
+                </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                      {tourPackages
-                        .filter(
-                          (pkg) =>
-                            pkg.status === "active" &&
-                            !isTourAllDatesTooSoon(pkg),
-                        )
+                      {displayedPackages
                         .map((pkg) => {
                           const isSelected = selectedTourId === pkg.id;
                           const isDisabled = false; // Already filtered out tours with all dates too soon

@@ -457,6 +457,11 @@ class FunctionExecutionService {
         priceSource: row.priceSource,
         tourPackagePricingVersion: row.tourPackagePricingVersion,
         priceSnapshotDate: row.priceSnapshotDate,
+        // Identity keys so the price functions can resolve the tour without
+        // relying on `tourPackageName`, which is a snapshot that goes stale the
+        // moment a tour is renamed.
+        tourId: row.tourId,
+        tourCode: row.tourCode,
       };
       args.push(bookingContext);
     }

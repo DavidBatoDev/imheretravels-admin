@@ -10,6 +10,8 @@ const urlToInternalTab = (urlTab: string | null): string => {
   switch (urlTab) {
     case "packages":
       return "packages";
+    case "hosted":
+      return "hosted";
     case "discounted":
       return "discounted";
     default:
@@ -21,6 +23,8 @@ const internalTabToUrl = (internalTab: string): string => {
   switch (internalTab) {
     case "packages":
       return "packages";
+    case "hosted":
+      return "hosted";
     case "discounted":
       return "discounted";
     default:
@@ -59,12 +63,18 @@ export default function ToursTabs() {
       </div>
 
       <Tabs value={activeTab} onValueChange={onChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 bg-muted border border-border">
+        <TabsList className="grid w-full grid-cols-3 bg-muted border border-border">
           <TabsTrigger
             value="packages"
             className="data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow transition-all duration-200"
           >
-            Tour Packages
+            Tours
+          </TabsTrigger>
+          <TabsTrigger
+            value="hosted"
+            className="data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow transition-all duration-200"
+          >
+            Hosted Tours
           </TabsTrigger>
           <TabsTrigger
             value="discounted"
@@ -75,7 +85,11 @@ export default function ToursTabs() {
         </TabsList>
 
         <TabsContent value="packages" className="mt-6">
-          <ToursList />
+          <ToursList view="regular" />
+        </TabsContent>
+
+        <TabsContent value="hosted" className="mt-6">
+          <ToursList view="hosted" />
         </TabsContent>
 
         <TabsContent value="discounted" className="mt-6">

@@ -20,8 +20,10 @@ interface AttachedToursEditorProps {
 
 /**
  * Searchable multi-select for attaching existing tourPackages to a resident
- * host. Writes the selected doc IDs into the `attachedTourIds` form field —
- * this attachment is the basis for separating hosted tours from normal tours.
+ * host. Writes the selected doc IDs into the `attachedTourIds` form field.
+ *
+ * Only tours flagged `isHosted` are attachable — normal tours are never
+ * offered here, since a resident host by definition hosts hosted tours.
  */
 export default function AttachedToursEditor({ form }: AttachedToursEditorProps) {
   const w = (n: string) => form.watch(n as any);
@@ -62,9 +64,12 @@ export default function AttachedToursEditor({ form }: AttachedToursEditorProps) 
     .map((id) => tourById[id])
     .filter(Boolean) as TourPackage[];
 
+  // Only hosted tours are offered. Already-attached tours are still resolved
+  // from the full list above so legacy/normal attachments stay removable.
   const availableTours = useMemo(() => {
     const term = search.trim().toLowerCase();
     return tours
+      .filter((t) => t.isHosted === true)
       .filter((t) => !attachedIds.includes(t.id))
       .filter((t) =>
         term
@@ -112,7 +117,12 @@ export default function AttachedToursEditor({ form }: AttachedToursEditorProps) 
               </div>
               <div className="min-w-0 flex-1 leading-tight">
                 <p className="truncate text-sm font-semibold text-midnight">{t.name}</p>
-                <p className="truncate text-xs text-dark-gray">/{t.slug}</p>
+                <p className="truncate text-xs text-dark-gray">
+                  /{t.slug}
+                  {t.isHosted !== true && (
+                    <span className="ml-1 text-crimson-red">· not a hosted tour</span>
+                  )}
+                </p>
               </div>
               <button
                 type="button"
@@ -138,7 +148,7 @@ export default function AttachedToursEditor({ form }: AttachedToursEditorProps) 
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search tours to attach…"
+          placeholder="Search hosted tours to attach…"
           className="w-full rounded-md border border-border py-1.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-crimson-red/40"
         />
       </div>
@@ -185,7 +195,9 @@ export default function AttachedToursEditor({ form }: AttachedToursEditorProps) 
         </div>
       ) : (
         <p className="px-1 py-2 text-center text-xs text-dark-gray/60">
-          {search ? "No matching tours." : "All tours are attached."}
+          {search
+            ? "No matching hosted tours."
+            : "No hosted tours available to attach."}
         </p>
       )}
 

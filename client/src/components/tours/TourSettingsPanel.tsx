@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/select";
 import { TourPackage } from "@/types/tours";
 import TravelDatesEditor from "./TravelDatesEditor";
+import type { PublishIssue } from "@/lib/tour-publish-validation";
+import { deriveHostedTourCode } from "@/lib/hosted-tour-code";
 
 const CURRENCY_SYM: Record<string, string> = { USD: "$", EUR: "£", GBP: "£" };
 
@@ -20,6 +22,50 @@ interface TourSettingsPanelProps {
   onClose: () => void;
   form: UseFormReturn<any>;
   tour: TourPackage | null;
+  /** Live publish-validation results, keyed to fields by `issue.field`. */
+  issues?: PublishIssue[];
+}
+
+/**
+ * Persistent inline error for a field flagged by the publish validator. Unlike
+ * the transient scroll-to highlight, this stays until the value is corrected.
+ */
+function FieldIssues({ issues }: { issues: PublishIssue[] }) {
+  if (!issues.length) return null;
+  return (
+    <div className="mt-1 space-y-1">
+      {issues.map((issue, i) => {
+        const blocking = issue.severity === "blocking";
+        return (
+          <p
+            key={`${issue.value}-${i}`}
+            className={`flex items-start gap-1.5 text-[11px] leading-snug ${
+              blocking ? "text-crimson-red" : "text-vivid-orange"
+            }`}
+          >
+            <AlertCircle className="mt-px size-3 shrink-0" />
+            <span>
+              {issue.message}
+              {issue.conflictsWith && (
+                <> Conflicts with <span className="font-semibold">{issue.conflictsWith}</span>.</>
+              )}
+              {issue.suggestion && (
+                <> Suggested: <span className="font-mono">{issue.suggestion}</span></>
+              )}
+            </span>
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Red/amber ring on the input itself, so the problem is visible at a glance. */
+function issueRing(issues: PublishIssue[]): string {
+  if (!issues.length) return "";
+  return issues.some((i) => i.severity === "blocking")
+    ? "border-crimson-red ring-1 ring-crimson-red/40"
+    : "border-vivid-orange ring-1 ring-vivid-orange/40";
 }
 
 function SectionHead({ children }: { children: React.ReactNode }) {
@@ -37,15 +83,15 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 }
 
 function TextInput({
-  value, onChange, placeholder, type = "text",
-}: { value: string; onChange: (v: string) => void; placeholder?: string; type?: string }) {
+  value, onChange, placeholder, type = "text", className = "",
+}: { value: string; onChange: (v: string) => void; placeholder?: string; type?: string; className?: string }) {
   return (
     <input
       type={type}
       value={value}
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-full border border-border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-crimson-red/40"
+      className={`w-full border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-crimson-red/40 ${className || "border-border"}`}
     />
   );
 }
@@ -62,9 +108,23 @@ function formatMeta(ts: any): string {
   } catch { return "—"; }
 }
 
-export default function TourSettingsPanel({ open, onClose, form, tour }: TourSettingsPanelProps) {
+export default function TourSettingsPanel({ open, onClose, form, tour, issues = [] }: TourSettingsPanelProps) {
   const w = (n: string) => form.watch(n as any);
   const sv = (n: string, v: any) => form.setValue(n as any, v);
+
+  const issuesFor = (field: string) => issues.filter(i => i.field === field);
+
+  /**
+   * Toggling "Hosted Tour" on fills the code to the `{BASE}-{INITIALS}`
+   * convention (IHF → IHF-D) derived from the "with <host>" part of the name.
+   * It's a prefill, not a lock — the admin can still type anything.
+   */
+  const onHostedToggle = (hosted: boolean) => {
+    sv("isHosted", hosted);
+    if (!hosted) return;
+    const next = deriveHostedTourCode(w("name"), w("tourCode"));
+    if (next && next !== w("tourCode")) sv("tourCode", next);
+  };
 
   const [destInput, setDestInput] = useState("");
   const [prevSlugInput, setPrevSlugInput] = useState("");
@@ -188,7 +248,7 @@ export default function TourSettingsPanel({ open, onClose, form, tour }: TourSet
                 </div>
                 <Switch
                   checked={w("isHosted") ?? false}
-                  onCheckedChange={v => sv("isHosted", v)}
+                  onCheckedChange={onHostedToggle}
                   className="data-[state=checked]:bg-crimson-red"
                 />
               </div>
@@ -376,7 +436,7 @@ export default function TourSettingsPanel({ open, onClose, form, tour }: TourSet
 
               {/* Editable fields */}
               <div className="space-y-3">
-                <div>
+                <div data-field="seo.title">
                   <div className="flex items-center justify-between">
                     <FieldLabel>SEO Title</FieldLabel>
                     {(() => {
@@ -384,7 +444,13 @@ export default function TourSettingsPanel({ open, onClose, form, tour }: TourSet
                       return <span className={`text-[10px] font-medium ${len > 60 ? "text-crimson-red" : "text-dark-gray/50"}`}>{len}/60</span>;
                     })()}
                   </div>
-                  <TextInput value={w("seo.title") ?? ""} onChange={v => sv("seo.title", v)} placeholder="Page title for search engines" />
+                  <TextInput
+                    value={w("seo.title") ?? ""}
+                    onChange={v => sv("seo.title", v)}
+                    placeholder="Page title for search engines"
+                    className={issueRing(issuesFor("seo.title"))}
+                  />
+                  <FieldIssues issues={issuesFor("seo.title")} />
                 </div>
                 <div>
                   <div className="flex items-center justify-between">
@@ -405,33 +471,63 @@ export default function TourSettingsPanel({ open, onClose, form, tour }: TourSet
                 <div className="grid grid-cols-2 gap-3">
                   <div data-field="tourCode">
                     <FieldLabel>Tour Code</FieldLabel>
-                    <TextInput value={w("tourCode") ?? ""} onChange={v => sv("tourCode", v)} placeholder="e.g. ARW" />
+                    <TextInput
+                      value={w("tourCode") ?? ""}
+                      onChange={v => sv("tourCode", v)}
+                      placeholder="e.g. ARW"
+                      className={issueRing(issuesFor("tourCode"))}
+                    />
+                    <FieldIssues issues={issuesFor("tourCode")} />
                   </div>
                   <div data-field="slug">
                     <FieldLabel>URL Slug</FieldLabel>
-                    <TextInput value={w("slug") ?? ""} onChange={v => sv("slug", v)} placeholder="argentina-wonders" />
+                    <TextInput
+                      value={w("slug") ?? ""}
+                      onChange={v => sv("slug", v)}
+                      placeholder="argentina-wonders"
+                      className={issueRing(issuesFor("slug"))}
+                    />
+                    <FieldIssues issues={issuesFor("slug")} />
                   </div>
                 </div>
                 <div data-field="url">
                   <FieldLabel>Direct URL</FieldLabel>
-                  <TextInput value={w("url") ?? ""} onChange={v => sv("url", v)} placeholder="https://…" type="url" />
+                  <TextInput
+                    value={w("url") ?? ""}
+                    onChange={v => sv("url", v)}
+                    placeholder="https://…"
+                    type="url"
+                    className={issueRing(issuesFor("url"))}
+                  />
+                  <FieldIssues issues={issuesFor("url")} />
                 </div>
-                <div>
+                <div data-field="bookingSlug">
                   <FieldLabel>Booking Slug Override</FieldLabel>
-                  <TextInput value={w("bookingSlug") ?? ""} onChange={v => sv("bookingSlug", v)} placeholder="Overrides slug in reservation URLs" />
+                  <TextInput
+                    value={w("bookingSlug") ?? ""}
+                    onChange={v => sv("bookingSlug", v)}
+                    placeholder="Overrides slug in reservation URLs"
+                    className={issueRing(issuesFor("bookingSlug"))}
+                  />
+                  <FieldIssues issues={issuesFor("bookingSlug")} />
                 </div>
 
                 {/* Previous slugs — old URLs that redirect to this tour. The slug
                     field above is auto-recorded here on rename; toggle redirect
                     off to keep the record but stop redirecting (the old URL 404s). */}
-                <div>
+                <div data-field="previousSlugs">
                   <FieldLabel>Previous Slugs (redirect to this tour)</FieldLabel>
                   {previousSlugs.length > 0 && (
                     <div className="mb-2 space-y-1.5">
-                      {previousSlugs.map(p => (
+                      {previousSlugs.map(p => {
+                        // Issues carry the slug as "/<slug>" so rows can be matched individually.
+                        const rowIssues = issuesFor("previousSlugs").filter(i => i.value === `/${p.slug}`);
+                        return (
                         <div
                           key={p.slug}
-                          className={`flex items-center gap-2 rounded-md border border-light-grey px-2.5 py-1.5 ${p.redirect ? "" : "opacity-60"}`}
+                          className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 ${
+                            rowIssues.length ? issueRing(rowIssues) : "border-light-grey"
+                          } ${p.redirect ? "" : "opacity-60"}`}
                         >
                           <span className="min-w-0 flex-1 truncate font-mono text-xs text-midnight">/tours/{p.slug}</span>
                           <span className="shrink-0 text-[10px] font-medium text-dark-gray/70">
@@ -451,7 +547,8 @@ export default function TourSettingsPanel({ open, onClose, form, tour }: TourSet
                             <X className="size-3.5" />
                           </button>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                   <input
@@ -462,6 +559,7 @@ export default function TourSettingsPanel({ open, onClose, form, tour }: TourSet
                     placeholder="Add an old slug, press Enter (e.g. tanzania-exploration-danielle-erin)"
                     className="w-full border border-border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-crimson-red/40"
                   />
+                  <FieldIssues issues={issuesFor("previousSlugs")} />
                 </div>
               </div>
             </section>

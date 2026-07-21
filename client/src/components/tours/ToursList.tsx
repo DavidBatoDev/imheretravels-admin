@@ -75,7 +75,17 @@ import {
 } from "@/services/tours-service";
 import TourDetails from "./TourDetails";
 
-export default function ToursList() {
+/**
+ * Which slice of `tourPackages` this list renders. Hosted tours are flagged on
+ * the tour itself (`isHosted`), independent of resident-host attachment.
+ */
+export type ToursListView = "all" | "regular" | "hosted";
+
+interface ToursListProps {
+  view?: ToursListView;
+}
+
+export default function ToursList({ view = "all" }: ToursListProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [allTours, setAllTours] = useState<TourPackage[]>([]); // Full list for client-side search
@@ -113,22 +123,62 @@ export default function ToursList() {
     });
   }, [allTours]);
 
-  // Map of booking counts keyed by tour name (computed from bookings collection)
+  /**
+   * Booking counts keyed by tourPackages document id.
+   *
+   * Bookings used to be matched by `tourPackageName`, but that string is a
+   * snapshot taken at booking time — renaming a tour silently orphaned its
+   * history (in prod that hid 101 of 211 bookings, and every hosted tour
+   * reported zero). `tourId` is stable; `tourCode` is the fallback for any
+   * booking predating the backfill, and the name is the last resort.
+   */
   const tourBookingCounts = useMemo(() => {
-    const map: Record<string, number> = {};
+    const byId: Record<string, number> = {};
+    const idByCode: Record<string, string> = {};
+    const idByName: Record<string, string> = {};
+    allTours.forEach((tour) => {
+      if (tour.tourCode) idByCode[tour.tourCode.trim().toLowerCase()] = tour.id;
+      if (tour.name) idByName[tour.name.trim().toLowerCase()] = tour.id;
+    });
+
     bookings.forEach((booking) => {
-      const tourName =
+      const code = booking.tourCode?.trim?.().toLowerCase();
+      const name = (
         booking.tourPackageName ||
         booking.tourPackage ||
         booking.tourName ||
         booking.tour ||
-        booking.package;
-      if (tourName && typeof tourName === "string" && tourName.trim() !== "") {
-        map[tourName] = (map[tourName] || 0) + 1;
-      }
+        booking.package
+      )
+        ?.trim?.()
+        .toLowerCase();
+
+      const tourId =
+        booking.tourId ||
+        (code ? idByCode[code] : undefined) ||
+        (name ? idByName[name] : undefined);
+
+      if (tourId) byId[tourId] = (byId[tourId] || 0) + 1;
     });
-    return map;
-  }, [bookings]);
+    return byId;
+  }, [bookings, allTours]);
+
+  // Hosted vs. regular split — drives the scorecards. Counts always cover the
+  // whole collection so they stay stable no matter which tab is open.
+  const tourStats = useMemo(() => {
+    const tally = (list: TourPackage[]) => ({
+      total: list.length,
+      active: list.filter((tour) => tour.status === "active").length,
+      draft: list.filter((tour) => tour.status === "draft").length,
+      archived: list.filter((tour) => tour.status === "archived").length,
+    });
+
+    return {
+      hosted: tally(allTours.filter((tour) => tour.isHosted === true)),
+      regular: tally(allTours.filter((tour) => tour.isHosted !== true)),
+      all: tally(allTours),
+    };
+  }, [allTours]);
 
   // Filter tours based on search and filters
   const filteredTours = useMemo(() => {
@@ -138,6 +188,13 @@ export default function ToursList() {
     if (fuse && searchTerm) {
       const fuseResults = fuse.search(searchTerm);
       results = fuseResults.map((result) => result.item);
+    }
+
+    // Apply hosted/regular view
+    if (view === "hosted") {
+      results = results.filter((tour) => tour.isHosted === true);
+    } else if (view === "regular") {
+      results = results.filter((tour) => tour.isHosted !== true);
     }
 
     // Apply status filter
@@ -156,7 +213,7 @@ export default function ToursList() {
 
       return nameCollator.compare(aName, bName);
     });
-  }, [fuse, searchTerm, statusFilter, allTours, nameCollator]);
+  }, [fuse, searchTerm, statusFilter, view, allTours, nameCollator]);
 
   // Load bookings data
   const loadBookings = () => {
@@ -469,76 +526,109 @@ export default function ToursList() {
 
   return (
     <div className="space-y-6">
-      {/* Statistics Cards with Add Button */}
-      <div className="grid grid-cols-2 md:grid-cols-[1fr_1fr_1fr_auto] gap-4">
-        {/* Total Tours */}
-        <Card className="border border-border hover:border-crimson-red transition-all duration-300 hover:shadow-md">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <p className="text-xs text-muted-foreground font-medium mb-2 uppercase tracking-wide">
-                  Total Tours
-                </p>
-                <p className="text-3xl font-bold text-foreground">
-                  {allTours.length}
-                </p>
-                {/* Breakdown */}
-                <div className="flex items-center gap-3 mt-2 flex-wrap">
-                  {allTours.filter((tour) => tour.status === "active").length >
-                    0 && (
-                    <div className="flex items-center gap-1">
-                      <div className="w-2 h-2 rounded-full bg-spring-green"></div>
-                      <p className="text-xs text-muted-foreground">
-                        Active:{" "}
-                        <span className="text-spring-green font-bold">
-                          {
-                            allTours.filter((tour) => tour.status === "active")
-                              .length
-                          }
-                        </span>
-                      </p>
+      {/* Tour count scorecards — tours, hosted tours, and both combined */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {(
+          [
+            {
+              key: "regular",
+              label: "Tours",
+              stats: tourStats.regular,
+              icon: MapPin,
+              accent: "text-blue-500",
+              iconBg: "from-blue-500/20 to-blue-500/10",
+              highlighted: view === "regular",
+            },
+            {
+              key: "hosted",
+              label: "Hosted Tours",
+              stats: tourStats.hosted,
+              icon: Users,
+              accent: "text-crimson-red",
+              iconBg: "from-crimson-red/20 to-crimson-red/10",
+              highlighted: view === "hosted",
+            },
+            {
+              key: "all",
+              label: "All Tours",
+              stats: tourStats.all,
+              icon: TrendingUp,
+              accent: "text-royal-purple",
+              iconBg: "from-royal-purple/20 to-royal-purple/10",
+              highlighted: view === "all",
+            },
+          ] as const
+        ).map((card) => {
+          const Icon = card.icon;
+          return (
+            <Card
+              key={card.key}
+              className={`border transition-all duration-300 hover:shadow-md ${
+                card.highlighted
+                  ? "border-crimson-red shadow-md"
+                  : "border-border hover:border-crimson-red"
+              }`}
+            >
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <p className="text-xs text-muted-foreground font-medium mb-2 uppercase tracking-wide">
+                      {card.label}
+                    </p>
+                    <p className={`text-3xl font-bold ${card.accent}`}>
+                      {card.stats.total}
+                    </p>
+                    {/* Breakdown */}
+                    <div className="flex items-center gap-3 mt-2 flex-wrap">
+                      {card.stats.active > 0 && (
+                        <div className="flex items-center gap-1">
+                          <div className="w-2 h-2 rounded-full bg-spring-green"></div>
+                          <p className="text-xs text-muted-foreground">
+                            Active:{" "}
+                            <span className="text-spring-green font-bold">
+                              {card.stats.active}
+                            </span>
+                          </p>
+                        </div>
+                      )}
+                      {card.stats.draft > 0 && (
+                        <div className="flex items-center gap-1">
+                          <div className="w-2 h-2 rounded-full bg-vivid-orange"></div>
+                          <p className="text-xs text-muted-foreground">
+                            Draft:{" "}
+                            <span className="text-vivid-orange font-bold">
+                              {card.stats.draft}
+                            </span>
+                          </p>
+                        </div>
+                      )}
+                      {card.stats.archived > 0 && (
+                        <div className="flex items-center gap-1">
+                          <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                          <p className="text-xs text-muted-foreground">
+                            Archived:{" "}
+                            <span className="text-blue-500 font-bold">
+                              {card.stats.archived}
+                            </span>
+                          </p>
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {allTours.filter((tour) => tour.status === "draft").length >
-                    0 && (
-                    <div className="flex items-center gap-1">
-                      <div className="w-2 h-2 rounded-full bg-vivid-orange"></div>
-                      <p className="text-xs text-muted-foreground">
-                        Draft:{" "}
-                        <span className="text-vivid-orange font-bold">
-                          {
-                            allTours.filter((tour) => tour.status === "draft")
-                              .length
-                          }
-                        </span>
-                      </p>
-                    </div>
-                  )}
-                  {allTours.filter((tour) => tour.status === "archived")
-                    .length > 0 && (
-                    <div className="flex items-center gap-1">
-                      <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                      <p className="text-xs text-muted-foreground">
-                        Archived:{" "}
-                        <span className="text-blue-500 font-bold">
-                          {
-                            allTours.filter(
-                              (tour) => tour.status === "archived",
-                            ).length
-                          }
-                        </span>
-                      </p>
-                    </div>
-                  )}
+                  </div>
+                  <div
+                    className={`p-4 bg-gradient-to-br ${card.iconBg} rounded-full rounded-br-none`}
+                  >
+                    <Icon className="h-6 w-6 text-foreground" />
+                  </div>
                 </div>
-              </div>
-              <div className="p-4 bg-gradient-to-br from-blue-500/20 to-blue-500/10 rounded-full rounded-br-none">
-                <MapPin className="h-6 w-6 text-foreground" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
 
+      {/* Statistics Cards with Add Button */}
+      <div className="grid grid-cols-2 md:grid-cols-[1fr_1fr_auto] gap-4">
         {/* Average Cost */}
         <Card className="border border-border hover:border-crimson-red transition-all duration-300 hover:shadow-md">
           <CardContent className="p-5">
@@ -579,7 +669,7 @@ export default function ToursList() {
                   const sortedTours = [...allTours]
                     .map((t) => ({
                       ...t,
-                      actualBookingsCount: tourBookingCounts[t.name] || 0,
+                      actualBookingsCount: tourBookingCounts[t.id] || 0,
                     }))
                     .sort(
                       (a, b) => b.actualBookingsCount - a.actualBookingsCount,
@@ -869,7 +959,7 @@ export default function ToursList() {
                       <div className="flex items-center">
                         <Users className="h-4 w-4 mr-1 text-royal-purple" />
                         <span className="text-foreground">
-                          {tourBookingCounts[tour.name] || 0}
+                          {tourBookingCounts[tour.id] || 0}
                         </span>
                       </div>
                     </div>
@@ -1000,12 +1090,14 @@ export default function ToursList() {
               <MapPin className="h-12 w-12 text-royal-purple/60" />
             </div>
             <h3 className="text-lg font-semibold text-foreground mb-2">
-              No tours found
+              {view === "hosted" ? "No hosted tours found" : "No tours found"}
             </h3>
             <p className="text-muted-foreground mb-4">
               {searchTerm || statusFilter !== "all"
                 ? "Try adjusting your search or filters"
-                : "Get started by creating your first tour package"}
+                : view === "hosted"
+                  ? 'Mark a tour as "Hosted" in its settings to see it here'
+                  : "Get started by creating your first tour package"}
             </p>
             <Button
               onClick={openCreateForm}

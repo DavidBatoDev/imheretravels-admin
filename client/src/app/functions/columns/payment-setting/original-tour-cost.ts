@@ -1,5 +1,6 @@
 import { BookingSheetColumn } from "@/types/booking-sheet-column";
 import { firebaseUtils } from "@/app/functions/firebase-utils";
+import { resolveTourPackage } from "./resolve-tour-package";
 
 export const originalTourCostColumn: BookingSheetColumn = {
   id: "originalTourCost",
@@ -59,6 +60,8 @@ export default async function getOriginalTourCost(
     originalTourCost?: number;
     lockPricing?: boolean;
     priceSource?: string;
+    tourId?: string;
+    tourCode?: string;
   },
 ): Promise<number | ""> {
   // If booking has locked pricing, return the stored value
@@ -69,16 +72,20 @@ export default async function getOriginalTourCost(
     return bookingContext.originalTourCost;
   }
 
-  if (!tourPackageName) return "";
+  // A tourId or tourCode is enough to resolve the tour even with no name.
+  if (!tourPackageName && !bookingContext?.tourId && !bookingContext?.tourCode) {
+    return "";
+  }
 
   // Fetch all tour packages
   const tourPackages = await firebaseUtils.getCollectionData("tourPackages");
   if (!tourPackages || tourPackages.length === 0) return "";
 
-  // Find the document with matching name
-  const matchedPackage = tourPackages.find(
-    (pkg: any) =>
-      pkg.name?.toLowerCase().trim() === tourPackageName.toLowerCase().trim(),
+  // Resolve by id → code → name; the name alone goes stale when a tour is renamed.
+  const matchedPackage = resolveTourPackage(
+    tourPackages as any[],
+    tourPackageName,
+    bookingContext,
   );
 
   // Check for custom original price if tourDate is provided

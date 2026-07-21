@@ -43,6 +43,13 @@ export interface Booking {
   // Tour package details
   tourPackageNameUniqueCounter: number;
   tourPackageName: string;
+  /**
+   * Stable tourPackages document id. `tourCode` and `tourPackageName` above are
+   * historical snapshots that drift when a tour is renamed or recoded — join on
+   * this instead. Backfilled by scripts/backfill-booking-tour-id.ts.
+   */
+  tourId?: string;
+  tourIdResolvedVia?: "tourCode" | "tourPackageName";
   formattedDate: string;
   tourDate: Date;
   returnDate?: Date;

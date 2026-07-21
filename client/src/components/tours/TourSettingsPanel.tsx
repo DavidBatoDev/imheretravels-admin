@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useFieldArray } from "react-hook-form";
 import type { UseFormReturn } from "react-hook-form";
 import {
-  X, Settings, Plus, AlertCircle, Copy, Check,
+  X, Settings, Plus, AlertCircle, Copy, Check, Users,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -297,6 +297,18 @@ export default function TourSettingsPanel({ open, onClose, form, tour, issues = 
                   className="data-[state=checked]:bg-crimson-red"
                 />
               </div>
+              <a
+                href="/resident-hosts"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex items-center gap-1.5 text-xs font-body text-crimson-red hover:underline"
+              >
+                <Users className="size-3.5" />
+                Manage Resident Hosts
+              </a>
+              <p className="mt-1 text-[11px] text-dark-gray">
+                Optional — not every tour host needs a resident host profile.
+              </p>
             </section>
 
             {/* ── Default Pricing ── */}

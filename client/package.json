@@ -93,7 +93,8 @@
     "fix:booking-money": "tsx scripts/fix-booking-money-types.ts",
     "report:all-tours": "tsx scripts/report-all-tours.ts",
     "report:review-blocked": "tsx scripts/report-review-blocked.ts",
-    "set:tour-code": "tsx scripts/set-tour-code.ts"
+    "set:tour-code": "tsx scripts/set-tour-code.ts",
+    "seed:dev": "tsx scripts/seed-dev-from-prod.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

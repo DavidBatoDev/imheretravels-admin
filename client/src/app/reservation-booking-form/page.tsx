@@ -233,7 +233,6 @@ const Page = () => {
     tourDate,
     setTourPackage,
     setTourDate,
-    isTourAllDatesTooSoon,
   });
 
   const getReservationDraftPayload = () =>

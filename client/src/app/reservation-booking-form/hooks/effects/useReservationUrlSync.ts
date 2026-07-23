@@ -27,7 +27,6 @@ type UseReservationUrlSyncOptions = {
   tourDate: string;
   setTourPackage: (value: string) => void;
   setTourDate: (value: string) => void;
-  isTourAllDatesTooSoon: (pkg?: { travelDates?: string[] }) => boolean;
 };
 
 export const useReservationUrlSync = ({
@@ -43,7 +42,6 @@ export const useReservationUrlSync = ({
   tourDate,
   setTourPackage,
   setTourDate,
-  isTourAllDatesTooSoon,
 }: UseReservationUrlSyncOptions) => {
   const replaceWithPaymentId = useCallback(
     (docId: string | null) => {
@@ -111,7 +109,10 @@ export const useReservationUrlSync = ({
             const s = p.slug ? String(p.slug).toLowerCase() : "";
             return s === normalized;
           });
-          if (match && !isTourAllDatesTooSoon(match)) {
+          // Preselect regardless of date availability — a deep link is a deliberate pick, and
+          // the sidebar card already shows a "No available dates" state for this case rather
+          // than needing the effect to silently no-op and leave "No tour selected yet" up.
+          if (match) {
             setTourPackage(match.id);
 
             try {
@@ -153,7 +154,6 @@ export const useReservationUrlSync = ({
     searchParams,
     tourPackage,
     tourPackages,
-    isTourAllDatesTooSoon,
     setTourPackage,
     setTourDate,
   ]);

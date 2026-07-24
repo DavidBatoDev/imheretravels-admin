@@ -593,7 +593,10 @@ export default function BookingDetailModal({
     if (currentBooking?.emailAddress) {
       try {
         await navigator.clipboard.writeText(currentBooking.emailAddress);
-        // You could add a toast notification here if desired
+        toast({
+          title: "Email copied",
+          description: "Email address copied to clipboard",
+        });
       } catch (err) {
         console.error("Failed to copy email:", err);
       }
@@ -947,15 +950,9 @@ export default function BookingDetailModal({
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    navigator.clipboard.writeText(
-                      `${process.env.NEXT_PUBLIC_WEBSITE_URL}/booking-status/${currentBooking.access_token}`,
-                    );
-                    toast({
-                      title: "Link copied",
-                      description: "Booking status URL copied to clipboard",
-                    });
+                    copyEmailToClipboard();
                   }}
-                  title="Copy Link"
+                  title="Copy email"
                 >
                   <Copy className="h-3 w-3 text-muted-foreground" />
                 </Button>
@@ -974,13 +971,25 @@ export default function BookingDetailModal({
                       <ExternalLink className="h-2.5 w-2.5" />
                     </a>
                     <div className="w-px h-3 bg-border mx-1"></div>
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        navigator.clipboard.writeText(
+                          `${process.env.NEXT_PUBLIC_WEBSITE_URL}/booking-status/${currentBooking.access_token}`,
+                        );
+                        toast({
+                          title: "Link copied",
+                          description: "Booking status URL copied to clipboard",
+                        });
+                      }}
+                      className="p-1 hover:bg-muted rounded transition-colors flex-shrink-0"
+                      title="Copy Link"
+                    >
+                      <Copy className="h-3 w-3 text-muted-foreground" />
+                    </button>
                   </div>
                 )}
-                <button
-                  onClick={copyEmailToClipboard}
-                  className="p-1 hover:bg-muted rounded transition-colors flex-shrink-0"
-                  title="Copy email"
-                ></button>
               </div>
               <p className="text-[10px] sm:text-xs text-muted-foreground">
                 Row #:{" "}

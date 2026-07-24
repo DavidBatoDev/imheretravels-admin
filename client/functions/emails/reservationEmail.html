@@ -1168,8 +1168,8 @@
           >
             <li>
               <strong>PM3 – Stripe Payment (Credit/Debit Cards)</strong>:<br />
-              <a
-                href="https://buy.stripe.com/7sY5kD5NF2uBfGj1NJco03g"
+              {% if bookingStatusUrl %}<a
+                href="{{ bookingStatusUrl }}"
                 target="_blank"
                 style="
                   background-color: #28a745;
@@ -1183,7 +1183,7 @@
                 "
               >
                 Pay securely online with Stripe
-              </a>
+              </a>{% else %}<span style="font-size: 13px; color: #666666;">Your payment link will be sent to you separately.</span>{% endif %}
             </li>
           </ul>
           {% if accessToken %}

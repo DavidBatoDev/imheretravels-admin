@@ -232,6 +232,22 @@ import {
   runMigration as runMigration066,
   rollbackMigration as rollbackMigration066,
 } from "./066-vietnam-itinerary-from-www";
+import {
+  runMigration as runMigration069,
+  rollbackMigration as rollbackMigration069,
+} from "./069-unify-group-ids";
+import {
+  runMigration as runMigration070,
+  rollbackMigration as rollbackMigration070,
+} from "./070-reservation-confirmed-template";
+import {
+  runMigration as runMigration071,
+  rollbackMigration as rollbackMigration071,
+} from "./071-pay-link-to-booking-status";
+import {
+  runMigration as runMigration072,
+  rollbackMigration as rollbackMigration072,
+} from "./072-final-payment-deadline-section";
 import migration034 from "./034-initialize-columns-metadata";
 
 // ============================================================================
@@ -2045,6 +2061,146 @@ async function main() {
       }
       break;
 
+    case "069":
+      console.log("📊 Running migration: 069-unify-group-ids");
+      const result069 = await runMigration069(dryRun);
+      console.log(`\n🎯 ${result069.message}`);
+      if (result069.details) {
+        console.log(
+          `📊 Details: ${result069.details.partiesRepaired} parties repaired, ${result069.details.partiesAlreadyConsistent} already consistent, ${result069.details.updated} bookings updated, ${result069.details.generatorFieldsRemoved} generator fields removed, ${result069.details.unlinked} unlinked, ${result069.details.errors} errors`,
+        );
+      }
+      break;
+
+    case "dry-run069":
+      console.log("🔍 Running migration in DRY RUN mode: 069-unify-group-ids");
+      const dryRunResult069 = await runMigration069(true);
+      console.log(`\n🎯 ${dryRunResult069.message}`);
+      if (dryRunResult069.details) {
+        console.log(
+          `📊 Details: ${dryRunResult069.details.partiesRepaired} parties would be repaired, ${dryRunResult069.details.partiesAlreadyConsistent} already consistent, ${dryRunResult069.details.updated} bookings would be updated, ${dryRunResult069.details.unlinked} unlinked`,
+        );
+      }
+      break;
+
+    case "rollback069":
+      console.log("↩️ Rolling back migration: 069-unify-group-ids");
+      const rollbackResult069 = await rollbackMigration069();
+      console.log(`\n🎯 ${rollbackResult069.message}`);
+      if (rollbackResult069.details) {
+        console.log(
+          `📊 Details: ${rollbackResult069.details.restored} restored, ${rollbackResult069.details.errors} errors`,
+        );
+      }
+      break;
+
+    case "070":
+      console.log("📊 Running migration: 070-reservation-confirmed-template");
+      const result070 = await runMigration070(dryRun);
+      console.log(`\n🎯 ${result070.message}`);
+      if (result070.details) {
+        console.log(
+          `📊 Details: ${result070.details.updated} updated, ${result070.details.errors} errors`,
+        );
+      }
+      break;
+
+    case "dry-run070":
+      console.log(
+        "🔍 Running migration in DRY RUN mode: 070-reservation-confirmed-template",
+      );
+      const dryRunResult070 = await runMigration070(true);
+      console.log(`\n🎯 ${dryRunResult070.message}`);
+      if (dryRunResult070.details) {
+        console.log(
+          `📊 Details: ${dryRunResult070.details.updated} would be updated`,
+        );
+      }
+      break;
+
+    case "rollback070":
+      console.log("↩️ Rolling back migration: 070-reservation-confirmed-template");
+      const rollbackResult070 = await rollbackMigration070();
+      console.log(`\n🎯 ${rollbackResult070.message}`);
+      if (rollbackResult070.details) {
+        console.log(
+          `📊 Details: ${rollbackResult070.details.restored} restored, ${rollbackResult070.details.errors} errors`,
+        );
+      }
+      break;
+
+    case "071":
+      console.log("📊 Running migration: 071-pay-link-to-booking-status");
+      const result071 = await runMigration071(dryRun);
+      console.log(`
+🎯 ${result071.message}`);
+      if (result071.details) {
+        console.log(
+          `📊 Details: ${result071.details.updated} templates updated, ${result071.details.totalLinks} links repointed, ${result071.details.skipped} untouched, ${result071.details.errors} errors`,
+        );
+      }
+      break;
+
+    case "dry-run071":
+      console.log("🔍 Running migration in DRY RUN mode: 071-pay-link-to-booking-status");
+      const dryRunResult071 = await runMigration071(true);
+      console.log(`
+🎯 ${dryRunResult071.message}`);
+      if (dryRunResult071.details) {
+        console.log(
+          `📊 Details: ${dryRunResult071.details.updated} templates would be updated, ${dryRunResult071.details.totalLinks} links repointed`,
+        );
+      }
+      break;
+
+    case "rollback071":
+      console.log("↩️ Rolling back migration: 071-pay-link-to-booking-status");
+      const rollbackResult071 = await rollbackMigration071();
+      console.log(`
+🎯 ${rollbackResult071.message}`);
+      if (rollbackResult071.details) {
+        console.log(
+          `📊 Details: ${rollbackResult071.details.restored} restored, ${rollbackResult071.details.errors} errors`,
+        );
+      }
+      break;
+
+    case "072":
+      console.log("📊 Running migration: 072-final-payment-deadline-section");
+      const result072 = await runMigration072(dryRun);
+      console.log(`
+🎯 ${result072.message}`);
+      if (result072.details) {
+        console.log(
+          `📊 Details: ${result072.details.updated} updated, ${result072.details.errors} errors`,
+        );
+      }
+      break;
+
+    case "dry-run072":
+      console.log("🔍 Running migration in DRY RUN mode: 072-final-payment-deadline-section");
+      const dryRunResult072 = await runMigration072(true);
+      console.log(`
+🎯 ${dryRunResult072.message}`);
+      if (dryRunResult072.details) {
+        console.log(
+          `📊 Details: ${dryRunResult072.details.updated} would be updated`,
+        );
+      }
+      break;
+
+    case "rollback072":
+      console.log("↩️ Rolling back migration: 072-final-payment-deadline-section");
+      const rollbackResult072 = await rollbackMigration072();
+      console.log(`
+🎯 ${rollbackResult072.message}`);
+      if (rollbackResult072.details) {
+        console.log(
+          `📊 Details: ${rollbackResult072.details.restored} restored, ${rollbackResult072.details.errors} errors`,
+        );
+      }
+      break;
+
     case "revalidate": {
       const url =
         process.env.WWW_REVALIDATE_URL ||
@@ -2120,6 +2276,10 @@ function showHelp() {
   043                Run the migration to update Revolut payment templates with approved term labels
   044                Run the migration to create late-fees config document
   045                Run the migration to create late-fee notice email template
+  069                Unify Duo/Group booking Group IDs onto the main booker's code
+  070                Upload the updated "Reservation Confirmed" email template
+  071                Repoint "Pay securely online" buttons to the booking status page
+  072                Add the Final Payment Deadline section to Reservation Confirmed
   rollback, undo     Rollback the migration 001 (delete created tours)
   rollback002        Rollback the migration 002 (delete created tours)
   rollback003        Rollback the migration 003 (delete created tours)

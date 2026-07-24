@@ -41,43 +41,6 @@ function generateBookingId(
 }
 
 /**
- * Generate Group/Duo Booking Member ID (standalone version, no allRows needed).
- */
-function generateGroupMemberIdFunction(
-  bookingType: string,
-  tourName: string,
-  firstName: string,
-  lastName: string,
-  email: string,
-  isActive: boolean,
-): string {
-  // Only Duo or Group bookings apply
-  if (!(bookingType === "Duo Booking" || bookingType === "Group Booking")) {
-    return "";
-  }
-
-  // Only generate ID if isActive is explicitly true
-  if (isActive !== true) return "";
-
-  const initials =
-    (firstName?.[0] ?? "").toUpperCase() + (lastName?.[0] ?? "").toUpperCase();
-  const idPrefix = bookingType === "Duo Booking" ? "DB" : "GB";
-
-  // Hash based on email + traveller identity
-  const identity = `${bookingType}|${tourName}|${firstName}|${lastName}|${email}`;
-  let hashNum = 0;
-  for (let i = 0; i < identity.length; i++) {
-    hashNum += identity.charCodeAt(i) * (i + 1);
-  }
-  const hashTag = String(Math.abs(hashNum) % 10000).padStart(4, "0");
-
-  // Fake member number: derive from hash as a stable 001–999
-  const memberNumber = String((Math.abs(hashNum) % 999) + 1).padStart(3, "0");
-
-  return `${idPrefix}-${initials}-${hashTag}-${memberNumber}`;
-}
-
-/**
  * Convert various date formats to Date object
  */
 function toDate(input: unknown): Date | null {
@@ -337,6 +300,9 @@ export async function POST(req: NextRequest) {
     let parentBookingP4DueDate = "";
     let parentBookingFullPaymentAmount: any = "";
     let parentBookingFullPaymentDueDate = "";
+    let parentBookingDocumentId = "";
+    let parentBookingMainBookerName = "";
+    let parentBookingMainBookerEmail = "";
 
     try {
       const parentPaymentRef = doc(db, "stripePayments", parentBookingId);
@@ -368,8 +334,16 @@ export async function POST(req: NextRequest) {
             parentBookingTourDate = parentBookingData?.tourDate;
             parentBookingReturnDate = parentBookingData?.returnDate || "";
 
-            // Inherit group ID
+            // Inherit party identity from the main booker
             parentBookingGroupId = parentBookingData?.groupId || "";
+            parentBookingDocumentId = parentBookingDocId;
+            parentBookingMainBookerName =
+              parentBookingData?.fullName ||
+              `${parentBookingData?.firstName || ""} ${
+                parentBookingData?.lastName || ""
+              }`.trim();
+            parentBookingMainBookerEmail =
+              parentBookingData?.emailAddress || "";
 
             // Inherit payment amounts and due dates
             parentBookingP1Amount = parentBookingData?.p1Amount || "";
@@ -513,16 +487,22 @@ export async function POST(req: NextRequest) {
     if (isGroupBooking) {
       bookingData.isMainBooker = false; // Guest is never the main booker
 
-      // Inherit the groupId from the main booker
-      // Guests don't need their own groupIdGroupIdGenerator
+      // Inherit the shared party code from the main booker — a guest never
+      // mints their own.
       bookingData.groupId = parentBookingGroupId || parentBooking.groupId;
+
+      // Same party context the primary-pays path stamps, so the admin Travel
+      // Party card and the group emails work for self-pay guests too.
+      bookingData.groupSize = parentBooking.groupSize || 1;
+      bookingData.mainBookerId = parentBookingDocumentId;
+      bookingData.mainBookerName = parentBookingMainBookerName;
+      bookingData.mainBookerEmail = parentBookingMainBookerEmail;
+      bookingData.reservationPaymentDocId = paymentDocId;
+      // This guest paid their own reservation fee.
+      bookingData.reservationFeePaidByMainBooker = false;
 
       console.log("📝 Creating guest booking with ID:", bookingData.bookingId);
       console.log("📝 isMainBooker:", bookingData.isMainBooker);
-      console.log(
-        "📝 groupIdGroupIdGenerator:",
-        bookingData.groupIdGroupIdGenerator,
-      );
       console.log("📝 groupId:", bookingData.groupId);
     } else {
       console.log("📝 Creating guest booking with ID:", bookingData.bookingId);

@@ -5,6 +5,7 @@ import { logger } from "firebase-functions";
 import EmailTemplateService from "./email-template-service";
 import { EmailTemplateLoader } from "./email-template-loader";
 import GmailApiService from "./gmail-api-service";
+import { buildBookingStatusUrl } from "./booking-status-url";
 import { google } from "googleapis";
 import * as dotenv from "dotenv";
 
@@ -638,6 +639,9 @@ export const onPaymentReminderEnabled = onDocumentUpdated(
             tourPackage: tourPackage || "",
             paymentPlan: paymentPlan || "",
             paymentMethod: paymentMethod || "",
+            // The traveller pays from their own booking status page, which
+            // knows who they are and what is actually due.
+            bookingStatusUrl: buildBookingStatusUrl(booking.access_token),
             terms: termData, // Array of objects with name, amount, dueDate, calendarLink
             remainingBalance: formatGBP(
               getColumnValue(

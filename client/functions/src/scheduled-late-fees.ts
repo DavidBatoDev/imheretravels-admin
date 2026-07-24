@@ -4,6 +4,7 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 import EmailTemplateService from "./email-template-service";
 import GmailApiService from "./gmail-api-service";
+import { buildBookingStatusUrl } from "./booking-status-url";
 
 if (getApps().length === 0) {
   initializeApp();
@@ -184,9 +185,7 @@ export const applyLateFeesDaily = onSchedule(
 
           const bookingCode =
             booking.bookingId || booking.bookingCode || bookingDoc.id;
-          const bookingStatusUrl = booking.access_token
-            ? `https://admin.imheretravels.com/booking-status/${booking.access_token}`
-            : "";
+          const bookingStatusUrl = buildBookingStatusUrl(booking.access_token);
 
           const templateVariables = {
             fullName: booking.fullName || "Customer",

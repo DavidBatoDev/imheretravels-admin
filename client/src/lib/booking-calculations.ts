@@ -1150,16 +1150,8 @@ export function calculateScheduledReminderDates(dueDates: {
   return result;
 }
 
-// ============================================================================
-// GROUP BOOKING UTILITIES
-// ============================================================================
-
-/**
- * Generate a 4-digit group ID
- */
-export function generateGroupId(): string {
-  return String(Math.floor(1000 + Math.random() * 9000));
-}
+// Group booking IDs live in @/lib/group-id — a party's code is derived from the
+// main booker so every member can share it.
 
 // ============================================================================
 // FULL BOOKING CREATION HELPER
@@ -1262,7 +1254,6 @@ export interface CreatedBookingData {
   // Group booking
   isMainBooking: boolean;
   isMainBooker: boolean;
-  groupIdGroupIdGenerator: string;
   groupId: string;
 
   // Row number (for spreadsheet compatibility)
@@ -1426,7 +1417,6 @@ export async function createBookingData(
     // Group booking
     isMainBooking: input.isMainBooking ?? true,
     isMainBooker: false,
-    groupIdGroupIdGenerator: "",
     groupId: input.groupId || "",
 
     // Row number (global across all bookings)

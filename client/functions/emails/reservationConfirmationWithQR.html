@@ -137,26 +137,76 @@
                                         ">
                                         <h3 style="color: #333333; margin: 0 0 15px 0; font-size: 16px; font-weight: bold;">Payment Summary</h3>
                                         <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                                            {% if isGroupBooking %}
                                             <tr style="border-bottom: 1px solid #e0e0e0;">
-                                                <td style="padding: 10px 0; color: #666666; font-weight: 500; width: 50%;">Payment Plan</td>
+                                                <td style="padding: 10px 0; color: #666666; font-weight: 500; width: 50%;">Reservation Fee Paid</td>
+                                                <td style="padding: 10px 0; color: #4caf50; font-weight: bold; text-align: right;">£{{ reservationFeePaid }}{% if isMainBooker %}<br /><span style="color: #999999; font-weight: normal; font-size: 12px;">covers {{ partySize }} travellers</span>{% elif reservationFeePaidBy %}<br /><span style="color: #999999; font-weight: normal; font-size: 12px;">paid by {{ reservationFeePaidBy }}</span>{% endif %}</td>
+                                                </tr>
+                                            {% endif %}
+                                            <tr style="border-bottom: 1px solid #e0e0e0;">
+                                                <td style="padding: 10px 0; color: #666666; font-weight: 500;">{% if isGroupBooking %}Your Payment Plan{% else %}Payment Plan{% endif %}</td>
                                                 <td style="padding: 10px 0; color: #333333; text-align: right;">{{ paymentPlan }}</td>
                                                 </tr>
                                             <tr style="border-bottom: 1px solid #e0e0e0;">
-                                                <td style="padding: 10px 0; color: #666666; font-weight: 500;">Total Cost</td>
+                                                <td style="padding: 10px 0; color: #666666; font-weight: 500;">{% if isGroupBooking %}Your Tour Cost{% else %}Total Cost{% endif %}</td>
                                                 <td style="padding: 10px 0; color: #333333; text-align: right; font-weight: bold;">£{{ totalCost
                                                     }}</td>
                                                 </tr>
                                             <tr style="border-bottom: 1px solid #e0e0e0;">
-                                                <td style="padding: 10px 0; color: #666666; font-weight: 500;">Amount Paid</td>
+                                                <td style="padding: 10px 0; color: #666666; font-weight: 500;">{% if isGroupBooking %}Paid So Far (You){% else %}Amount Paid{% endif %}</td>
                                                 <td style="padding: 10px 0; color: #4caf50; font-weight: bold; text-align: right;">£{{ paid }}
                                                     </td>
                                                 </tr>
                                             <tr>
-                                                <td style="padding: 10px 0; color: #666666; font-weight: 500;">Balance Due</td>
+                                                <td style="padding: 10px 0; color: #666666; font-weight: 500;">{% if isGroupBooking %}Your Balance Due{% else %}Balance Due{% endif %}</td>
                                                 <td style="padding: 10px 0; color: #e74c3c; font-weight: bold; text-align: right;">£{{
                                                     remainingBalance }}</td>
                                                 </tr>
                                             </table>
+                                        </div>
+                                    {% endif %}
+                                    <!-- Travel Party (Duo / Group bookings only) -->
+                                        {% if isGroupBooking and partyMembers.length %}
+                                        <div style="
+                                        background-color: #f5f5f5;
+                                        padding: 20px;
+                                        border-radius: 12px;
+                                        margin: 25px 0;
+                                        border-left: 5px solid #3f51b5;
+                                        ">
+                                        <h3 style="color: #333333; margin: 0 0 5px 0; font-size: 16px; font-weight: bold;">Your Travel Party</h3>
+                                        <p style="font-size: 13px; color: #666666; margin: 0 0 15px 0;">
+                                            {{ partySize }} travellers{% if groupId %} &middot; Group {{ groupId }}{% endif %}
+                                            </p>
+                                        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                                            {% for member in partyMembers %}
+                                            <tr style="border-bottom: 1px solid #e0e0e0;">
+                                                <td style="padding: 10px 0; color: #333333; font-weight: 500;">
+                                                    {{ member.name }}{% if member.isYou %} <span style="color: #3f51b5; font-size: 12px;">(you)</span>{% endif %}{% if member.isMainBooker %} <span style="color: #999999; font-size: 12px;">&middot; main booker</span>{% endif %}
+                                                    {% if member.paymentPlan %}<br /><span style="color: #999999; font-weight: normal; font-size: 12px;">{{ member.paymentPlan }}</span>{% endif %}
+                                                    </td>
+                                                <td style="padding: 10px 0; color: #666666; text-align: right; font-size: 13px;">
+                                                    <span style="color: #4caf50;">£{{ member.paid }} paid</span><br />
+                                                    <span style="color: #e74c3c;">£{{ member.remainingBalance }} due</span>
+                                                    </td>
+                                                </tr>
+                                            {% endfor %}
+                                            {% if isMainBooker %}
+                                            <tr>
+                                                <td style="padding: 12px 0 0 0; color: #333333; font-weight: bold;">Party Total</td>
+                                                <td style="padding: 12px 0 0 0; color: #666666; text-align: right; font-size: 13px;">
+                                                    <span style="color: #333333;">£{{ partyTotalCost }} total</span><br />
+                                                    <span style="color: #4caf50;">£{{ partyTotalPaid }} paid</span><br />
+                                                    <span style="color: #e74c3c;">£{{ partyRemainingBalance }} due</span>
+                                                    </td>
+                                                </tr>
+                                            {% endif %}
+                                            </table>
+                                        {% if isMainBooker %}
+                                        <p style="font-size: 12px; color: #999999; margin: 15px 0 0 0;">
+                                            Everyone in your party has received their own confirmation email with their personal booking status link.
+                                            </p>
+                                        {% endif %}
                                         </div>
                                     {% endif %}
                                     <!-- QR Code Section -->

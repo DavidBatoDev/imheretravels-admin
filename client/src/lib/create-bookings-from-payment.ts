@@ -18,10 +18,10 @@ import {
 } from "firebase/firestore";
 import {
   createBookingData,
-  generateGroupId,
   normalizeTourDateToUTCPlus8Nine,
   type BookingCreationInput,
 } from "@/lib/booking-calculations";
+import { generateGroupCode, isGroupBookingType } from "@/lib/group-id";
 import crypto from "crypto";
 
 export type CreationLockOwner = "api" | "webhook";
@@ -51,34 +51,6 @@ export class CreateBookingsError extends Error {
     super(message);
     this.status = status;
   }
-}
-
-function generateGroupMemberIdFunction(
-  bookingType: string,
-  tourName: string,
-  firstName: string,
-  lastName: string,
-  email: string,
-  isActive: boolean,
-): string {
-  if (!(bookingType === "Duo Booking" || bookingType === "Group Booking")) {
-    return "";
-  }
-  if (isActive !== true) return "";
-
-  const initials =
-    (firstName?.[0] ?? "").toUpperCase() + (lastName?.[0] ?? "").toUpperCase();
-  const idPrefix = bookingType === "Duo Booking" ? "DB" : "GB";
-
-  const identity = `${bookingType}|${tourName}|${firstName}|${lastName}|${email}`;
-  let hashNum = 0;
-  for (let i = 0; i < identity.length; i++) {
-    hashNum += identity.charCodeAt(i) * (i + 1);
-  }
-  const hashTag = String(Math.abs(hashNum) % 10000).padStart(4, "0");
-  const memberNumber = String((Math.abs(hashNum) % 999) + 1).padStart(3, "0");
-
-  return `${idPrefix}-${initials}-${hashTag}-${memberNumber}`;
 }
 
 function toDate(input: unknown): Date | null {
@@ -319,10 +291,26 @@ export async function createBookingsForReservationPayment(opts: {
   const totalBookingsCount = await getTotalBookingsCount();
 
   const bookingType: string = paymentData.booking?.type || "Single Booking";
-  const isGroupBooking =
-    bookingType === "Duo Booking" || bookingType === "Group Booking";
+  const isGroupBooking = isGroupBookingType(bookingType);
+
+  const mainBookerFirstName = paymentData.customer?.firstName || "";
+  const mainBookerLastName = paymentData.customer?.lastName || "";
+  const mainBookerEmail = paymentData.customer?.email || "";
+  const mainBookerName =
+    `${mainBookerFirstName} ${mainBookerLastName}`.trim();
+
+  // ONE shared code for the whole travel party, always derived from the main
+  // booker. Guests inherit it verbatim — they must never mint their own, or the
+  // party falls apart in the admin UI and in the group emails.
   const groupId = isGroupBooking
-    ? paymentData.booking?.groupCode || generateGroupId()
+    ? paymentData.booking?.groupCode ||
+      generateGroupCode(
+        bookingType,
+        tourPackageName,
+        mainBookerFirstName,
+        mainBookerLastName,
+        mainBookerEmail,
+      )
     : "";
 
   const tourDateParsed = toDate(paymentData.tour?.date);
@@ -353,11 +341,26 @@ export async function createBookingsForReservationPayment(opts: {
     ? Timestamp.fromDate(normalizedTourDate)
     : null;
 
+  // Party context stamped on EVERY member's booking so the admin UI and the
+  // reservation emails can show the whole party without joining through
+  // stripePayments.
+  const partyContext = isGroupBooking
+    ? {
+        // The number of booking docs this payment actually creates, which is
+        // what the admin Travel Party card and the email roster count.
+        groupSize: guestDetails.length + 1,
+        mainBookerName,
+        mainBookerEmail,
+        reservationPaymentDocId: paymentDocId,
+        reservationFeePaidByMainBooker: true,
+      }
+    : {};
+
   // 1. MAIN BOOKER
   const mainBookingInput: BookingCreationInput = {
-    email: paymentData.customer?.email || "",
-    firstName: paymentData.customer?.firstName || "",
-    lastName: paymentData.customer?.lastName || "",
+    email: mainBookerEmail,
+    firstName: mainBookerFirstName,
+    lastName: mainBookerLastName,
     bookingType,
     tourPackageName,
     tourCode,
@@ -384,23 +387,19 @@ export async function createBookingsForReservationPayment(opts: {
 
   if (isGroupBooking) {
     mainBookingData.isMainBooker = true;
-    const generatedGroupMemberId = generateGroupMemberIdFunction(
-      bookingType,
-      tourPackageName,
-      paymentData.customer?.firstName || "",
-      paymentData.customer?.lastName || "",
-      paymentData.customer?.email || "",
-      true,
-    );
-    mainBookingData.groupIdGroupIdGenerator = generatedGroupMemberId;
-    mainBookingData.groupId = generatedGroupMemberId;
+    mainBookingData.groupId = groupId;
+    // Only the main booker records what was actually charged for the whole
+    // party; each member's own `reservationFee`/`paid` stays the per-person
+    // split that drives their individual balance.
+    (mainBookingData as any).reservationFeePaidTotal = totalReservationFee;
   }
 
   const mainAccessToken = generateAccessToken();
 
   const mainBookingRef = await addDoc(collection(db, "bookings"), {
     ...mainBookingData,
-    emailAddress: paymentData.customer?.email || "",
+    ...partyContext,
+    emailAddress: mainBookerEmail,
     access_token: mainAccessToken,
     tourDate: tourDateTimestamp,
     returnDate: calculatedReturnDate,
@@ -418,6 +417,12 @@ export async function createBookingsForReservationPayment(opts: {
   console.log(
     `✅ Main booker booking created: ${mainBookingRef.id} (${mainBookingData.bookingId})`,
   );
+
+  // Every member — including the main booker — points at the main booker's doc,
+  // so "who leads this party" is a single field read from any member.
+  if (isGroupBooking) {
+    await updateDoc(mainBookingRef, { mainBookerId: mainBookingRef.id });
+  }
 
   // 2. GUESTS
   for (let i = 0; i < guestDetails.length; i++) {
@@ -450,22 +455,15 @@ export async function createBookingsForReservationPayment(opts: {
     if (isGroupBooking) {
       guestBookingData.isMainBooker = false;
       (guestBookingData as any).mainBookerId = mainBookingRef.id;
-      const guestGroupMemberId = generateGroupMemberIdFunction(
-        bookingType,
-        tourPackageName,
-        guest.firstName || "",
-        guest.lastName || "",
-        guest.email || "",
-        true,
-      );
-      guestBookingData.groupIdGroupIdGenerator = guestGroupMemberId;
-      guestBookingData.groupId = guestGroupMemberId;
+      // Inherit the party code — never generate a per-guest one.
+      guestBookingData.groupId = groupId;
     }
 
     const guestAccessToken = generateAccessToken();
 
     const guestBookingRef = await addDoc(collection(db, "bookings"), {
       ...guestBookingData,
+      ...partyContext,
       emailAddress: guest.email || "",
       access_token: guestAccessToken,
       tourDate: tourDateTimestamp,
@@ -493,6 +491,9 @@ export async function createBookingsForReservationPayment(opts: {
   await updateDoc(paymentDocRef, {
     "booking.documentId": createdBookingDocIds[0],
     "booking.id": createdBookingIds[0],
+    // Persist the party code so the guest self-pay invitation flow
+    // (getParentBookingData) resolves it instead of falling back to "".
+    ...(isGroupBooking ? { "booking.groupCode": groupId } : {}),
     bookingIds: createdBookingIds,
     bookingDocumentIds: createdBookingDocIds,
     "timestamps.updatedAt": serverTimestamp(),

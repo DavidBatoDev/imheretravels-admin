@@ -3214,6 +3214,30 @@ export default function BookingsSection() {
                               {booking.bookingType}
                             </Badge>
                           )}
+                          {/* Duo/Group bookings: surface the shared party so a
+                              guest's row is recognisable without opening it. */}
+                          {(booking.bookingType === "Duo Booking" ||
+                            booking.bookingType === "Group Booking") && (
+                            <Badge
+                              variant="outline"
+                              className="text-[8px] sm:text-xs font-medium border-0 px-0.5 sm:px-1.5 py-0 rounded-full bg-purple-100 text-purple-700 whitespace-nowrap"
+                              title={[
+                                booking.groupId
+                                  ? `Group ${booking.groupId}`
+                                  : "No Group ID set",
+                                booking.isMainBooker
+                                  ? "Main booker"
+                                  : booking.mainBookerName
+                                    ? `Main booker: ${booking.mainBookerName}`
+                                    : "",
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            >
+                              👥 {booking.groupSize || ""}
+                              {booking.isMainBooker ? " ★" : ""}
+                            </Badge>
+                          )}
                         </div>
                         <div className="flex items-center gap-1.5">
                           <h3 className="font-bold text-xs sm:text-base text-foreground group-hover:text-crimson-red transition-colors truncate font-mono pt-1 sm:pt-1.5">

@@ -64,7 +64,8 @@ export const COLUMN_ORDERS: Record<string, number> = {
   // DUO OR GROUP BOOKING (27-29)
   // ============================================================================
   isMainBooker: 27,
-  groupIdGroupIdGenerator: 28,
+  // 28 intentionally free — the old "Group ID / Group ID Generator" column was
+  // removed; `groupId` is now the single shared party code.
   groupId: 29,
 
   // ============================================================================

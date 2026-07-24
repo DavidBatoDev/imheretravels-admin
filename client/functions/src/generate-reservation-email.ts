@@ -4,6 +4,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 import EmailTemplateService from "./email-template-service";
 import GmailApiService from "./gmail-api-service";
+import { buildBookingStatusUrl } from "./booking-status-url";
 import * as dotenv from "dotenv";
 
 // Load environment variables from .env
@@ -132,19 +133,24 @@ function getSubjectLine(
   }
 }
 
-// Helper function to get main booker by group ID
+// Helper function to get main booker by group ID.
+// Single-field equality only — adding `isMainBooker` to the query would need a
+// composite index that does not exist, so the flag is filtered in memory.
 async function getMainBookerByGroupId(groupId: string): Promise<string | null> {
   try {
     const bookingsSnap = await db
       .collection("bookings")
-      .where("groupIdGroupIdGenerator", "==", groupId)
-      .where("isMainBooker", "==", true)
-      .limit(1)
+      .where("groupId", "==", groupId)
       .get();
 
     if (bookingsSnap.empty) return null;
 
-    const booking = bookingsSnap.docs[0].data();
+    const mainDoc = bookingsSnap.docs.find(
+      (d) => d.data().isMainBooker === true,
+    );
+    if (!mainDoc) return null;
+
+    const booking = mainDoc.data();
     const firstName = booking.firstName || "";
     const lastName = booking.lastName || "";
     return `${firstName} ${lastName}`.trim();
@@ -343,7 +349,7 @@ export const onGenerateEmailDraftChanged = onDocumentUpdated(
         // Extract booking data for template variables
         const fullName = bookingData.fullName || "";
         const bookingIdValue = bookingData.bookingId || "";
-        const groupId = bookingData.groupIdGroupIdGenerator || "";
+        const groupId = bookingData.groupId || "";
         const tourPackage = bookingData.tourPackageName || "";
         const tourDateRaw = bookingData.tourDate;
         const returnDateRaw = bookingData.returnDate;
@@ -491,6 +497,9 @@ export const onGenerateEmailDraftChanged = onDocumentUpdated(
             : "",
           tourPackageCoverImage,
           accessToken,
+          // The traveller pays from their own booking status page, which knows
+          // who they are and what is actually due.
+          bookingStatusUrl: buildBookingStatusUrl(accessToken),
         };
 
         // Process template content

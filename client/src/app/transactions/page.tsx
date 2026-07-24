@@ -20,9 +20,10 @@ import {
   ArrowUpRight,
   RefreshCcw,
   XCircle,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PaymentDetailsDialog } from "@/components/transactions/PaymentDetailsDialog";
 import { RefundDialogs } from "@/components/transactions/RefundDialogs";
 
@@ -118,7 +119,22 @@ interface Transaction {
   booking?: {
     id: string; // Booking ID (e.g. SB-TXP...)
     documentId: string;
+    type?: string;
+    groupSize?: number;
+    groupId?: string;
+    guestDetails?: Array<{
+      email: string;
+      firstName: string;
+      lastName: string;
+      birthdate: string;
+      nationality: string;
+      whatsAppNumber: string;
+      whatsAppCountry?: string;
+    }>;
   };
+  // One entry per traveller for Duo/Group payments; the main booker is first.
+  bookingIds?: string[];
+  bookingDocumentIds?: string[];
   tour?: {
     packageName: string;
   };
@@ -143,6 +159,7 @@ export default function TransactionsPage() {
   const [activeTab, setActiveTab] = useState("All");
   const { toast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   // State for actions
   const [selectedTransaction, setSelectedTransaction] =
@@ -262,7 +279,24 @@ export default function TransactionsPage() {
           value: (t) => (t.payment?.currency || "").toUpperCase(),
         },
         { header: "Tour Package", value: (t) => t.tour?.packageName || "" },
-        { header: "Booking ID", value: (t) => t.booking?.id || "" },
+        {
+          header: "Travellers",
+          value: (t) =>
+            getTravellers(t)
+              .map((g) => (g.email ? `${g.name} <${g.email}>` : g.name))
+              .join("; "),
+        },
+        { header: "Group ID", value: (t) => t.booking?.groupId || "" },
+        {
+          header: "Booking ID",
+          value: (t) =>
+            (t.bookingIds && t.bookingIds.length
+              ? t.bookingIds
+              : [t.booking?.id || ""]
+            )
+              .filter(Boolean)
+              .join("; "),
+        },
         { header: "Date", value: (t) => formatCsvDate(getDate(t)) },
         { header: "Transaction Doc ID", value: (t) => t.id },
       ];
@@ -287,6 +321,24 @@ export default function TransactionsPage() {
       setIsExporting(false);
     }
   };
+
+  // Deep link: /transactions?paymentId=<stripePayments doc id> opens that
+  // payment's details straight away. Used by the booking modal's Travel Party
+  // card so admins can jump from a guest's booking to the fee that paid for it.
+  const deepLinkPaymentId = searchParams?.get("paymentId") || null;
+  const [handledDeepLinkId, setHandledDeepLinkId] = useState<string | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!deepLinkPaymentId || deepLinkPaymentId === handledDeepLinkId) return;
+    const match = data.find((t) => t.id === deepLinkPaymentId);
+    if (!match) return;
+
+    setSelectedTransaction(match);
+    setViewDialogOpen(true);
+    setHandledDeepLinkId(deepLinkPaymentId);
+  }, [deepLinkPaymentId, handledDeepLinkId, data]);
 
   useEffect(() => {
     // Set up realtime listener for transactions
@@ -542,6 +594,45 @@ export default function TransactionsPage() {
     return t.payment.type || "Payment";
   };
 
+  // Everyone this payment covers, main booker first. For a Duo/Group booking the
+  // primary booker pays one lump sum for the whole party, so a guest's name only
+  // ever appears here — never as the transaction's own customer.
+  const getTravellers = (t: Transaction) => {
+    const primary = [t.customer?.firstName, t.customer?.lastName]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+
+    const travellers: Array<{ name: string; email: string; isMain: boolean }> =
+      [];
+
+    if (primary || t.customer?.email) {
+      travellers.push({
+        name: primary || t.customer?.email || "",
+        email: t.customer?.email || "",
+        isMain: true,
+      });
+    }
+
+    for (const guest of t.booking?.guestDetails || []) {
+      const name = [guest.firstName, guest.lastName]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+      if (!name && !guest.email) continue;
+      travellers.push({
+        name: name || guest.email || "",
+        email: guest.email || "",
+        isMain: false,
+      });
+    }
+
+    return travellers;
+  };
+
+  const isGroupTransaction = (t: Transaction) =>
+    t.booking?.type === "Duo Booking" || t.booking?.type === "Group Booking";
+
   const getCurrencySymbol = (currency: string) => {
     const map: Record<string, string> = {
       gbp: "£",
@@ -638,12 +729,33 @@ export default function TransactionsPage() {
       let match = false;
 
       const t = item.data;
-      match = Boolean(
-        t.customer?.email?.toLowerCase().includes(q) ||
-        t.payment.amount.toString().includes(q) ||
-        t.payment.currency.toLowerCase().includes(q) ||
-        t.tour?.packageName?.toLowerCase().includes(q) ||
-        t.payment.installmentTerm?.toLowerCase().includes(q),
+      // Guests on a Duo/Group booking are not the payment's customer, so their
+      // name/email must be searchable too — otherwise looking up a guest's
+      // reservation fee turns up nothing.
+      const haystack = [
+        t.customer?.email,
+        t.customer?.firstName,
+        t.customer?.lastName,
+        [t.customer?.firstName, t.customer?.lastName].filter(Boolean).join(" "),
+        t.payment.amount?.toString(),
+        t.payment.currency,
+        t.tour?.packageName,
+        t.payment.installmentTerm,
+        t.booking?.id,
+        t.booking?.documentId,
+        t.booking?.groupId,
+        t.booking?.type,
+        ...(t.bookingIds || []),
+        ...(t.booking?.guestDetails || []).flatMap((g) => [
+          g.email,
+          g.firstName,
+          g.lastName,
+          [g.firstName, g.lastName].filter(Boolean).join(" "),
+        ]),
+      ];
+
+      match = haystack.some(
+        (value) => value && String(value).toLowerCase().includes(q),
       );
 
       if (!match) return false;
@@ -1009,6 +1121,7 @@ export default function TransactionsPage() {
                   <TableHead>Type</TableHead>
                   {activeTab === "All" && <TableHead>Method</TableHead>}
                   <TableHead>Tour</TableHead>
+                  <TableHead className="min-w-[190px]">Travellers</TableHead>
                   <TableHead>Email Address</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead className="min-w-[180px]">Booking ID</TableHead>
@@ -1032,6 +1145,9 @@ export default function TransactionsPage() {
                         <Skeleton className="h-4 w-32" />
                       </TableCell>
                       <TableCell>
+                        <Skeleton className="h-4 w-36" />
+                      </TableCell>
+                      <TableCell>
                         <Skeleton className="h-4 w-40" />
                       </TableCell>
                       <TableCell>
@@ -1048,7 +1164,7 @@ export default function TransactionsPage() {
                 ) : combinedData.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={activeTab === "All" ? 9 : 8}
+                      colSpan={activeTab === "All" ? 10 : 9}
                       className="h-24 text-center text-muted-foreground"
                     >
                       No transactions found
@@ -1102,6 +1218,63 @@ export default function TransactionsPage() {
                             </span>
                           </TableCell>
                           <TableCell>
+                            {(() => {
+                              const travellers = getTravellers(t);
+                              if (travellers.length === 0)
+                                return (
+                                  <span className="text-sm text-muted-foreground">
+                                    —
+                                  </span>
+                                );
+
+                              const isGroup = isGroupTransaction(t);
+                              const count =
+                                t.booking?.groupSize || travellers.length;
+
+                              return (
+                                <div className="flex flex-col gap-0.5">
+                                  <div className="flex items-center gap-1.5">
+                                    {isGroup && (
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[10px] font-medium border-purple-200 text-purple-700 bg-purple-50 whitespace-nowrap px-1.5"
+                                        title={t.booking?.groupId || undefined}
+                                      >
+                                        <Users className="h-3 w-3 mr-1" />
+                                        {t.booking?.type === "Duo Booking"
+                                          ? "Duo"
+                                          : "Group"}{" "}
+                                        · {count}
+                                      </Badge>
+                                    )}
+                                    <span className="text-sm text-foreground whitespace-nowrap">
+                                      {travellers[0].name}
+                                    </span>
+                                  </div>
+                                  {travellers.length > 1 && (
+                                    <span
+                                      className="text-xs text-muted-foreground truncate max-w-[220px]"
+                                      title={travellers
+                                        .slice(1)
+                                        .map((g) =>
+                                          g.email
+                                            ? `${g.name} <${g.email}>`
+                                            : g.name,
+                                        )
+                                        .join(", ")}
+                                    >
+                                      with{" "}
+                                      {travellers
+                                        .slice(1)
+                                        .map((g) => g.name)
+                                        .join(", ")}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </TableCell>
+                          <TableCell>
                             <span className="text-sm text-muted-foreground hover:text-primary cursor-pointer hover:underline transition-colors whitespace-nowrap">
                               {t.customer?.email || "—"}
                             </span>
@@ -1110,20 +1283,58 @@ export default function TransactionsPage() {
                             {formatDate(getDate(t))}
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded whitespace-nowrap">
-                                {t.booking?.id || "—"}
-                              </span>
-                              {t.booking?.documentId && (
-                                <Link
-                                  href={`/bookings?tab=bookings&bookingId=${t.booking.documentId}`}
-                                  className="text-muted-foreground hover:text-primary transition-colors"
-                                  title="View Booking"
-                                >
-                                  <ExternalLink className="h-4 w-4" />
-                                </Link>
-                              )}
-                            </div>
+                            {(() => {
+                              // A Duo/Group payment creates one booking per
+                              // traveller — link to all of them, not just the
+                              // main booker's.
+                              const docIds =
+                                t.bookingDocumentIds &&
+                                t.bookingDocumentIds.length > 0
+                                  ? t.bookingDocumentIds
+                                  : t.booking?.documentId
+                                    ? [t.booking.documentId]
+                                    : [];
+                              const ids =
+                                t.bookingIds && t.bookingIds.length > 0
+                                  ? t.bookingIds
+                                  : t.booking?.id
+                                    ? [t.booking.id]
+                                    : [];
+
+                              if (docIds.length === 0 && ids.length === 0) {
+                                return (
+                                  <span className="text-sm font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                    —
+                                  </span>
+                                );
+                              }
+
+                              return (
+                                <div className="flex flex-col gap-1">
+                                  {(docIds.length ? docIds : ids).map(
+                                    (_, index) => (
+                                      <div
+                                        key={docIds[index] || ids[index]}
+                                        className="flex items-center gap-2"
+                                      >
+                                        <span className="text-sm font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded whitespace-nowrap">
+                                          {ids[index] || "—"}
+                                        </span>
+                                        {docIds[index] && (
+                                          <Link
+                                            href={`/bookings?tab=bookings&bookingId=${docIds[index]}`}
+                                            className="text-muted-foreground hover:text-primary transition-colors"
+                                            title="View Booking"
+                                          >
+                                            <ExternalLink className="h-4 w-4" />
+                                          </Link>
+                                        )}
+                                      </div>
+                                    ),
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </TableCell>
                           <TableCell className="text-center">
                             <DropdownMenu>

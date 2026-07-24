@@ -59,6 +59,9 @@ import { functionMap } from "@/app/functions/columns/functions-index";
 import { bookingService } from "@/services/booking-service";
 import { getSchedulePolicy } from "@/lib/schedule-policy";
 import SchedulePolicyBadge from "@/components/bookings/SchedulePolicyBadge";
+import TravelPartyCard, {
+  isPartyBooking,
+} from "@/components/bookings/TravelPartyCard";
 import { useToast } from "@/hooks/use-toast";
 import EditBookingModal from "./EditBookingModal";
 import { db } from "@/lib/firebase";
@@ -1269,6 +1272,12 @@ export default function BookingDetailModal({
                       </div>
                     </div>
                   </div>
+
+                  {/* Travel Party — who else is on this booking and who paid */}
+                  {isPartyBooking(currentBooking?.bookingType) &&
+                    currentBooking && (
+                      <TravelPartyCard booking={currentBooking} />
+                    )}
 
                   {/* Dynamic Columns by Parent Tab */}
                   {isLoadingColumns ? (

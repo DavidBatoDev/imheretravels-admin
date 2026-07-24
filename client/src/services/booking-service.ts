@@ -5,6 +5,8 @@ import {
   collection,
   query,
   orderBy,
+  where,
+  getDocs,
   DocumentData,
   Unsubscribe,
 } from "firebase/firestore";
@@ -27,6 +29,7 @@ export interface BookingService {
   createBooking(bookingData: Record<string, any>): Promise<string>;
   getBooking(bookingId: string): Promise<DocumentData | null>;
   getAllBookings(): Promise<DocumentData[]>;
+  getGroupMembers(groupId: string): Promise<DocumentData[]>;
 
   // Real-time Listeners (remain Firebase-based)
   subscribeToBookings(
@@ -218,6 +221,38 @@ class BookingServiceImpl implements BookingService {
         }`
       );
       throw error;
+    }
+  }
+
+  /**
+   * Every booking in a Duo/Group travel party, main booker first.
+   *
+   * Single-field equality only — adding `isMainBooker` to the query would need
+   * a composite index that does not exist, so ordering happens in memory.
+   */
+  async getGroupMembers(groupId: string): Promise<DocumentData[]> {
+    if (!groupId) return [];
+
+    try {
+      const snapshot = await getDocs(
+        query(collection(db, COLLECTION_NAME), where("groupId", "==", groupId))
+      );
+
+      return snapshot.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .sort((a: any, b: any) => {
+          const aMain = a.isMainBooker === true ? 0 : 1;
+          const bMain = b.isMainBooker === true ? 0 : 1;
+          if (aMain !== bMain) return aMain - bMain;
+          return String(a.fullName || "").localeCompare(String(b.fullName || ""));
+        });
+    } catch (error) {
+      console.error(
+        `❌ Failed to get group members for ${groupId}: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+      return [];
     }
   }
 

@@ -44,9 +44,6 @@ import p3DueDateFunction from "./payment-term-3/p3-due-date";
 import p4AmountFunction from "./payment-term-4/p4-amount";
 import p4DueDateFunction from "./payment-term-4/p4-due-date";
 
-// Duo or Group Booking Functions
-import groupIdGeneratorFunction from "./duo-or-group-booking/group-id-group-id-generator";
-import generateGroupMemberIdFunction from "./duo-or-group-booking/group-id-group-id-generator";
 
 // Email Functions - Reservation
 // import generateGmailDraftFunction from "./reservation-email/email-draft-link";
@@ -108,9 +105,6 @@ export {
   availablePaymentTermFunction,
   daysBetweenReservationAndTourFunction,
   paymentConditionFunction,
-  // Group
-  generateGroupMemberIdFunction,
-  groupIdGeneratorFunction,
   // Email - Reservation
   // generateGmailDraftFunction,
   // getEmailDraftSubjectFunction,
@@ -194,9 +188,6 @@ export const functionMap: Record<string, Function> = {
   p4DueDateFunction,
   getP4DueDateFunction: p4DueDateFunction, // Alias
 
-  // Duo or Group Booking
-  groupIdGeneratorFunction,
-
   // Identifier functions
   travellerInitialsFunction,
   lookupTourCodeFunction,
@@ -212,9 +203,6 @@ export const functionMap: Record<string, Function> = {
   availablePaymentTermFunction,
   daysBetweenReservationAndTourFunction,
   paymentConditionFunction,
-
-  // Group Booking functions
-  generateGroupMemberIdFunction,
 
   // Email functions - Reservation
   // generateGmailDraftFunction,

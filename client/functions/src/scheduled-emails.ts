@@ -4,6 +4,7 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 import GmailApiService from "./gmail-api-service";
 import EmailTemplateService from "./email-template-service";
+import { buildBookingStatusUrl } from "./booking-status-url";
 import * as dotenv from "dotenv";
 
 // Load environment variables from .env
@@ -145,6 +146,9 @@ async function rerenderEmailTemplate(
       paymentMethod: bookingData.paymentMethod || "Other",
       paymentPlan: bookingData.availablePaymentTerms || "",
       accessToken: bookingData.access_token || "",
+      // The traveller pays from their own booking status page, which knows who
+      // they are and what is actually due.
+      bookingStatusUrl: buildBookingStatusUrl(bookingData.access_token),
     };
 
     // Update payment term data if applicable

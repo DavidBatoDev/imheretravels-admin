@@ -94,7 +94,7 @@
               {{ paymentMethod }}
               {% if paymentMethod == "Stripe" %}
               <br />
-              <a href="https://buy.stripe.com/7sY5kD5NF2uBfGj1NJco03g" target="_blank" style="
+              {% if bookingStatusUrl %}<a href="{{ bookingStatusUrl }}" target="_blank" style="
                         background-color: #28a745;
                         color: white;
                         text-decoration: none;
@@ -103,7 +103,7 @@
                         border-radius: 4px;
                         display: inline-block;
                         margin-top: 8px;
-                        ">Pay securely online with Stripe</a>
+                        ">Pay securely online with Stripe</a>{% else %}<span style="font-size: 13px; color: #666666;">Your payment link will be sent to you separately.</span>{% endif %}
               {% else %}
               <br /><br />
               <span style="font-size: 13px; color: #666666;">[Details will be provided separately]</span>

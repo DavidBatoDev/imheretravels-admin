@@ -10,6 +10,29 @@ import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
  * Body: { checkout_session_id: "cs_test_..." } OR { stripe_payment_doc_id: "EVMHhG..." }
  */
 export async function POST(req: NextRequest) {
+  // Server-side guard: NODE_ENV is set by the Next.js build/runtime itself and
+  // cannot be influenced by NEXT_PUBLIC_* env vars or client requests, unlike
+  // the client-side NEXT_PUBLIC_ENV check that previously gated this route.
+  // This endpoint marks installments paid with no Stripe verification at all,
+  // so it must never be reachable on a deployed (production or preview) build.
+  if (process.env.NODE_ENV !== "development") {
+    return NextResponse.json(
+      { error: "This test-only endpoint is disabled outside local development" },
+      { status: 403 },
+    );
+  }
+
+  // Second, independent guard: this must never run against the production
+  // Firebase project, even from a local `next dev` server (which always has
+  // NODE_ENV=development) — a dev machine pointed at prod via .env.local has
+  // hit this route before and force-marked real bookings paid with no charge.
+  if (process.env.FIREBASE_PROJECT_ID === "imheretravels-a3f81") {
+    return NextResponse.json(
+      { error: "This test-only endpoint is disabled against the production Firebase project" },
+      { status: 403 },
+    );
+  }
+
   try {
     const { checkout_session_id, stripe_payment_doc_id } = await req.json();
 

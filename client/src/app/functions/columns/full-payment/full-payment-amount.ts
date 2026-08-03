@@ -131,10 +131,15 @@ export default function getFullPaymentRemainingFunction(
 
   if (!isLastMinute && !isFullPayment) return "";
 
-  // choose cost depending on isMainBooker
-  const baseCost = isMainBooker
-    ? discountedTourCost || 0
-    : originalTourCost || 0;
+  // Use the discounted cost when one is actually active, otherwise fall back
+  // to the original price — mirrors every other cost calculation in this
+  // codebase (see p1-amount.ts, remaining-balance.ts). Gating this on
+  // isMainBooker instead zeroed out baseCost for any main booker without an
+  // active discount, since discountedTourCost is empty/0 for them.
+  const baseCost =
+    (discountedTourCost || 0) > 0
+      ? discountedTourCost || 0
+      : originalTourCost || 0;
 
   // handle reservation and credit safely
   const resFee = reservationFee || 0;

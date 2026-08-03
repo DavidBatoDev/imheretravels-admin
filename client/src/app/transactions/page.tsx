@@ -340,6 +340,21 @@ export default function TransactionsPage() {
     setHandledDeepLinkId(deepLinkPaymentId);
   }, [deepLinkPaymentId, handledDeepLinkId, data]);
 
+  // Deep link: /transactions?search=<query> preseeds the search box, e.g. with
+  // a booking's human-readable ID. Used by the booking modal's "View all in
+  // Transactions" link — the existing text search already matches on
+  // booking.id/documentId, so this scopes the list to that one booking.
+  const deepLinkSearch = searchParams?.get("search") || null;
+  const [handledDeepLinkSearch, setHandledDeepLinkSearch] = useState<
+    string | null
+  >(null);
+
+  useEffect(() => {
+    if (!deepLinkSearch || deepLinkSearch === handledDeepLinkSearch) return;
+    setSearchQuery(deepLinkSearch);
+    setHandledDeepLinkSearch(deepLinkSearch);
+  }, [deepLinkSearch, handledDeepLinkSearch]);
+
   useEffect(() => {
     // Set up realtime listener for transactions
     const paymentsRef = collection(db, "stripePayments");

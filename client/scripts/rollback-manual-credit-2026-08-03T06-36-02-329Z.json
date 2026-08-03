@@ -1,0 +1,38 @@
+{
+  "project": "imheretravels-a3f81",
+  "takenAt": "2026-08-03T06-36-02-329Z",
+  "bookingChanges": [
+    {
+      "docId": "Rwuh6RfWqOsGLvJGRCEr",
+      "bookingId": "SB-VNE-20261115-CP003",
+      "changes": [
+        {
+          "field": "p2Amount",
+          "from": 549.5,
+          "to": 399.5
+        }
+      ]
+    },
+    {
+      "docId": "CpagQJnzlo0Z8Ufla8Eb",
+      "bookingId": "SB-PHSS-J-20261108-KD001",
+      "changes": [
+        {
+          "field": "paid",
+          "from": 999,
+          "to": 1199
+        },
+        {
+          "field": "remainingBalance",
+          "from": 200,
+          "to": 0
+        },
+        {
+          "field": "bookingStatus",
+          "from": "Waiting for Full Payment",
+          "to": "Booking Confirmed — Jul 31, 2026"
+        }
+      ]
+    }
+  ]
+}

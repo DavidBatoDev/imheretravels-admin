@@ -1,0 +1,17 @@
+{
+  "project": "imheretravels-a3f81",
+  "takenAt": "2026-08-03T06-59-19-044Z",
+  "bookingChanges": [
+    {
+      "docId": "Rwuh6RfWqOsGLvJGRCEr",
+      "bookingId": "SB-VNE-20261115-CP003",
+      "changes": [
+        {
+          "field": "remainingBalance",
+          "from": 549.5,
+          "to": 399.5
+        }
+      ]
+    }
+  ]
+}

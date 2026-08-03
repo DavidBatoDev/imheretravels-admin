@@ -1743,6 +1743,11 @@ export default function BookingStatusPage() {
                       <p className="text-xs text-green-700 mt-0.5">
                         {paymentProgressValue}% Complete
                       </p>
+                      {showManualCreditInTable && (
+                        <p className="text-xs text-green-700 mt-0.5">
+                          Manual Credit Applied: £{manualCreditAmount.toFixed(2)} (Credit From: {creditFromLabel})
+                        </p>
+                      )}
                     </div>
 
                     <div className="bg-red-50 rounded-lg p-3 sm:p-4 border-l-4 border-crimson-red min-w-0 max-w-full overflow-hidden">

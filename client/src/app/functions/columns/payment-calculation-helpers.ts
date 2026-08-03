@@ -167,47 +167,15 @@ export const allocateInstallmentAmounts = (
     return splitAmountWithRemainder(total, terms);
   }
 
-  const noCreditAllocation = splitAmountWithRemainder(total, terms);
+  // Credit against a specific installment term (P1–P4) is a discount that
+  // only reduces that one term's due amount; every other term keeps its
+  // normal, even share of `total` — the customer's overall balance drops by
+  // exactly the credit amount.
+  const allocations = splitAmountWithRemainder(total, terms);
   const creditIndex = creditOrder - 1;
-  const allocations = new Array<number>(terms).fill(0);
-
-  for (let index = 0; index < creditIndex; index += 1) {
-    allocations[index] = noCreditAllocation[index] ?? 0;
-  }
-
-  const prefixTotal = allocations
-    .slice(0, creditIndex)
-    .reduce((sum, amount) => sum + amount, 0);
-  const termsAfterCredit = terms - creditOrder;
-
-  if (termsAfterCredit === 0) {
-    allocations[creditIndex] = roundCurrency(total - prefixTotal);
-    return allocations;
-  }
-
-  allocations[creditIndex] = roundCurrency(creditAmt);
-
-  const remainingTotal = roundCurrency(
-    total - prefixTotal - allocations[creditIndex],
+  allocations[creditIndex] = roundCurrency(
+    Math.max(0, (allocations[creditIndex] ?? 0) - creditAmt),
   );
-  const suffixAllocation = splitAmountWithRemainder(
-    remainingTotal,
-    termsAfterCredit,
-  );
-
-  for (let index = 0; index < suffixAllocation.length; index += 1) {
-    allocations[creditIndex + 1 + index] = suffixAllocation[index];
-  }
-
-  // Ensure exact 2-decimal total consistency by absorbing any floating residue
-  // in the final visible term.
-  const summed = roundCurrency(
-    allocations.reduce((sum, amount) => sum + (toNumber(amount) || 0), 0),
-  );
-  const diff = roundCurrency(total - summed);
-  if (Math.abs(diff) > 0) {
-    allocations[terms - 1] = roundCurrency((allocations[terms - 1] ?? 0) + diff);
-  }
 
   return allocations;
 };
@@ -264,7 +232,18 @@ export const allocateInstallmentAmountsWithPaidLocks = (
   const lockedTotal = roundCurrency(
     lockedIndices.reduce((sum, index) => sum + (allocations[index] ?? 0), 0),
   );
-  const unlockedTarget = roundCurrency(total - lockedTotal);
+  // Target the credit-adjusted grand total (sum of baseAllocations), not the
+  // raw pre-credit `total` — otherwise crediting one term while another is
+  // already locked-paid would force the unlocked term(s) back up to make the
+  // raw total, silently cancelling out the credit. A locked term that
+  // collected slightly more or less than its theoretical share (e.g.
+  // reconciling a real, out-of-band payment) has that difference absorbed by
+  // the remaining unlocked term(s), so every term still sums to the
+  // credit-adjusted total exactly.
+  const grandTarget = roundCurrency(
+    baseAllocations.reduce((sum, amount) => sum + (toNumber(amount) || 0), 0),
+  );
+  const unlockedTarget = roundCurrency(grandTarget - lockedTotal);
 
   if (unlockedTarget <= 0) {
     unlockedIndices.forEach((index) => {

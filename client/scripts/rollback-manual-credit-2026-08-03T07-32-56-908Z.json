@@ -1,0 +1,30 @@
+{
+  "project": "imheretravels-a3f81",
+  "takenAt": "2026-08-03T07-32-56-908Z",
+  "bookingChanges": [
+    {
+      "docId": "Rwuh6RfWqOsGLvJGRCEr",
+      "bookingId": "SB-VNE-20261115-CP003",
+      "changes": [
+        {
+          "field": "p1Amount",
+          "from": 475,
+          "to": 475
+        },
+        {
+          "field": "p1DatePaid",
+          "from": {
+            "_seconds": 1785498660,
+            "_nanoseconds": 0
+          },
+          "to": "2026-07-31T11:51:00.000Z"
+        },
+        {
+          "field": "p2Amount",
+          "from": 324.5,
+          "to": 324
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "project": "imheretravels-a3f81",
+  "takenAt": "2026-08-03T07-08-18-436Z",
+  "bookingChanges": [
+    {
+      "docId": "Rwuh6RfWqOsGLvJGRCEr",
+      "bookingId": "SB-VNE-20261115-CP003",
+      "changes": [
+        {
+          "field": "p1Amount",
+          "from": 399.5,
+          "to": 475
+        },
+        {
+          "field": "p1DatePaid",
+          "from": {
+            "_seconds": 1785628800,
+            "_nanoseconds": 0
+          },
+          "to": "2026-07-31T11:51:00.000Z"
+        },
+        {
+          "field": "p1Amount",
+          "from": 399.5,
+          "to": 475
+        },
+        {
+          "field": "p2Amount",
+          "from": 399.5,
+          "to": 324
+        },
+        {
+          "field": "paid",
+          "from": 649.5,
+          "to": 725
+        },
+        {
+          "field": "remainingBalance",
+          "from": 399.5,
+          "to": 324
+        },
+        {
+          "field": "bookingStatus",
+          "from": "Installment 1/2 — last paid Aug 2, 2026",
+          "to": "Installment 1/2 — last paid Jul 31, 2026"
+        }
+      ]
+    }
+  ]
+}

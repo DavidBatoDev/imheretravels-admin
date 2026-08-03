@@ -230,37 +230,18 @@ export default function getTotalPaidAmountFunction(
     toNumber(reservationFee) +
     (creditAppliedTo("Reservation") ? appliedCredit : 0);
 
-  // Full Payment
-  const fullPaid = hasPaidDate(fullPaymentDate)
-    ? creditAppliedTo("Full Payment")
-      ? appliedCredit
-      : toNumber(fullPaymentAmount)
-    : 0;
+  // Full Payment — fullPaymentAmount is already net of any manual credit
+  // (see getFullPaymentRemainingFunction), so it's counted as-is once paid.
+  const fullPaid = hasPaidDate(fullPaymentDate) ? toNumber(fullPaymentAmount) : 0;
 
-  // Partial Payments
-  const p1_paid = p1IsPaid
-    ? creditAppliedTo("P1")
-      ? appliedCredit
-      : toNumber(p1Amount)
-    : 0;
-
-  const p2_paid = p2IsPaid
-    ? creditAppliedTo("P2")
-      ? appliedCredit
-      : toNumber(p2Amount)
-    : 0;
-
-  const p3_paid = p3IsPaid
-    ? creditAppliedTo("P3")
-      ? appliedCredit
-      : toNumber(p3Amount)
-    : 0;
-
-  const p4_paid = p4IsPaid
-    ? creditAppliedTo("P4")
-      ? appliedCredit
-      : toNumber(p4Amount)
-    : 0;
+  // Partial Payments — p1Amount..p4Amount are already net of any manual
+  // credit applied to that term (see allocateInstallmentAmounts), so each is
+  // counted as-is once paid. Only a "Reservation" credit is added separately
+  // above, since the Reservation Fee field is never itself discounted.
+  const p1_paid = p1IsPaid ? toNumber(p1Amount) : 0;
+  const p2_paid = p2IsPaid ? toNumber(p2Amount) : 0;
+  const p3_paid = p3IsPaid ? toNumber(p3Amount) : 0;
+  const p4_paid = p4IsPaid ? toNumber(p4Amount) : 0;
 
   // Late fees are counted as paid only when an actual date-paid is present.
   const p1PenaltyPaid = hasPaidDate(p1DatePaid) ? toNumber(p1LateFeesPenalty) : 0;

@@ -82,6 +82,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -133,6 +135,12 @@ import {
   createColumnComputationRetryConfig,
   isRetryableError,
 } from "@/utils/retry-computation";
+import {
+  allocateInstallmentAmountsWithPaidLocks,
+  getPaymentPlanTerms,
+  toNumber as toNumberSafe,
+  roundCurrency,
+} from "@/app/functions/columns/payment-calculation-helpers";
 // Simple deep equality check
 const isEqual = (a: any, b: any): boolean => {
   if (a === b) return true;
@@ -607,6 +615,20 @@ export default function BookingsDataGrid({
 
   const [showFilters, setShowFilters] = useState(false);
   const [showColumnsDialog, setShowColumnsDialog] = useState(false);
+
+  // Preview shown before committing a Manual Credit / Credit From edit, so an
+  // admin can see the resulting P1–P4 due amounts before they hit Firestore.
+  const [creditPreview, setCreditPreview] = useState<{
+    rowId: string;
+    columnId: string;
+    value: string;
+    dataType?: string;
+    bookingLabel: string;
+    terms: number;
+    before: number[];
+    after: number[];
+    resolve: (confirmed: boolean) => void;
+  } | null>(null);
 
   const [internalDateRangeFilters, setInternalDateRangeFilters] = useState<
     Record<string, { from?: Date; to?: Date }>
@@ -1294,7 +1316,7 @@ export default function BookingsDataGrid({
   );
 
   // Helper function to save changes to Firebase (called on blur)
-  const saveToFirebase = useCallback(
+  const commitFieldSave = useCallback(
     async (
       rowId: string,
       columnId: string,
@@ -1357,6 +1379,121 @@ export default function BookingsDataGrid({
       });
     },
     [localInputValues, columns, recomputeDirectDependentsForRow],
+  );
+
+  // Manual Credit / Credit From feed directly into every P1–P4 due amount
+  // (see allocateInstallmentAmounts). A typo here silently changes what a
+  // customer owes, so before committing either field we compute what the
+  // due amounts would become and ask the admin to confirm.
+  const CREDIT_PREVIEW_COLUMNS = React.useMemo(
+    () => new Set(["manualCredit", "creditFrom"]),
+    [],
+  );
+
+  const requestCreditConfirmation = useCallback(
+    (rowId: string, columnId: string, value: string): Promise<boolean> => {
+      return new Promise<boolean>((resolve) => {
+        const row = (localData.length ? localData : data).find(
+          (r) => r.id === rowId,
+        );
+        if (!row) {
+          resolve(true);
+          return;
+        }
+
+        const terms = getPaymentPlanTerms(row.paymentPlan);
+        if (terms <= 0) {
+          // No installment plan yet — nothing to preview.
+          resolve(true);
+          return;
+        }
+
+        const newManualCredit =
+          columnId === "manualCredit"
+            ? value === ""
+              ? 0
+              : parseFloat(value) || 0
+            : toNumberSafe(row.manualCredit);
+        const newCreditFrom =
+          columnId === "creditFrom" ? value : row.creditFrom || "";
+
+        const baseCost =
+          toNumberSafe(row.discountedTourCost) > 0
+            ? toNumberSafe(row.discountedTourCost)
+            : toNumberSafe(row.originalTourCost);
+        const total = baseCost - toNumberSafe(row.reservationFee);
+        const currentAmounts = [
+          row.p1Amount,
+          row.p2Amount,
+          row.p3Amount,
+          row.p4Amount,
+        ];
+        const paidDates = [
+          row.p1DatePaid,
+          row.p2DatePaid,
+          row.p3DatePaid,
+          row.p4DatePaid,
+        ];
+
+        const before = allocateInstallmentAmountsWithPaidLocks(
+          total,
+          terms,
+          row.creditFrom,
+          row.manualCredit,
+          currentAmounts,
+          paidDates,
+        );
+        const after = allocateInstallmentAmountsWithPaidLocks(
+          total,
+          terms,
+          newCreditFrom,
+          newManualCredit,
+          currentAmounts,
+          paidDates,
+        );
+
+        const changed = before.some(
+          (v, i) => roundCurrency(v) !== roundCurrency(after[i] ?? 0),
+        );
+        if (!changed) {
+          resolve(true);
+          return;
+        }
+
+        setCreditPreview({
+          rowId,
+          columnId,
+          value,
+          bookingLabel: row.bookingId || row.fullName || rowId,
+          terms,
+          before,
+          after,
+          resolve,
+        });
+      });
+    },
+    [localData, data],
+  );
+
+  const saveToFirebase = useCallback(
+    async (
+      rowId: string,
+      columnId: string,
+      value: string,
+      dataType?: string,
+    ) => {
+      if (CREDIT_PREVIEW_COLUMNS.has(columnId)) {
+        const confirmed = await requestCreditConfirmation(
+          rowId,
+          columnId,
+          value,
+        );
+        if (!confirmed) return;
+      }
+
+      return commitFieldSave(rowId, columnId, value, dataType);
+    },
+    [CREDIT_PREVIEW_COLUMNS, requestCreditConfirmation, commitFieldSave],
   );
 
   // Helper function to update input value - ONLY local state updates during typing!
@@ -5260,6 +5397,77 @@ export default function BookingsDataGrid({
         }
         allBookingsData={localData.length > 0 ? localData : data}
       />
+
+      {/* Manual Credit / Credit From preview — shows the resulting P1–P4 due
+          amounts before the edit is committed to Firestore. */}
+      <Dialog
+        open={creditPreview !== null}
+        onOpenChange={(open) => {
+          if (!open && creditPreview) {
+            creditPreview.resolve(false);
+            setCreditPreview(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm updated dues</DialogTitle>
+            <DialogDescription>
+              Changing {creditPreview?.columnId === "manualCredit" ? "Manual Credit" : "Credit From"}{" "}
+              for <span className="font-medium">{creditPreview?.bookingLabel}</span> will change these
+              term amounts:
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            {creditPreview?.before.map((beforeAmount, index) => {
+              const afterAmount = creditPreview.after[index] ?? 0;
+              const isChanged =
+                roundCurrency(beforeAmount) !== roundCurrency(afterAmount);
+              return (
+                <div
+                  key={index}
+                  className={`flex items-center justify-between rounded-md border px-3 py-2 text-sm ${
+                    isChanged ? "border-amber-300 bg-amber-50" : "border-gray-200"
+                  }`}
+                >
+                  <span className="font-medium">P{index + 1} Amount</span>
+                  <span>
+                    £{beforeAmount.toFixed(2)}
+                    {isChanged && (
+                      <>
+                        {" "}
+                        <span className="text-muted-foreground">→</span>{" "}
+                        <span className="font-semibold text-amber-700">
+                          £{afterAmount.toFixed(2)}
+                        </span>
+                      </>
+                    )}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                creditPreview?.resolve(false);
+                setCreditPreview(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                creditPreview?.resolve(true);
+                setCreditPreview(null);
+              }}
+            >
+              Save with these dues
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

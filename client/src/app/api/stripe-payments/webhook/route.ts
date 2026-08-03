@@ -13,6 +13,10 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { createBookingsForReservationPayment } from "@/lib/create-bookings-from-payment";
+import {
+  getCreditOrder,
+  getPaymentPlanTerms,
+} from "@/app/functions/columns/payment-calculation-helpers";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: null as any,
@@ -328,7 +332,22 @@ async function handleInstallmentCheckoutPaid(session: Stripe.Checkout.Session) {
         sum + (Number(booking[`${id}LateFeesPenalty`]) || 0),
       0,
     );
-    const totalCost = baseCost + allAppliedLateFees;
+    // Manual credit reduces the total amount the customer owes immediately —
+    // mirrors remaining-balance.ts, which nets it out unconditionally rather
+    // than only once the credited term is paid. Gating this on payment status
+    // would contradict the (already-discounted) term amount shown on the
+    // customer's own Payment Schedule, and would leave remainingBalance stuck
+    // above zero — exactly the "stuck on Pending" bug this fixes.
+    const creditPlan = (booking.paymentPlan || "").trim();
+    const isFullPaymentPlan = creditPlan === "Full Payment";
+    const manualCreditAmt = Number(booking.manualCredit) || 0;
+    const creditOrder = getCreditOrder(booking.creditFrom, manualCreditAmt);
+    const planTermsForCredit = getPaymentPlanTerms(creditPlan);
+    const creditValidForPlan = isFullPaymentPlan
+      ? manualCreditAmt > 0
+      : creditOrder === 0 || (creditOrder >= 1 && creditOrder <= planTermsForCredit);
+    const appliedManualCredit = creditValidForPlan ? manualCreditAmt : 0;
+    const totalCost = baseCost + allAppliedLateFees - appliedManualCredit;
 
     // Start with reservation fee
     let calculatedPaid = booking.reservationFee || 0;
@@ -344,9 +363,16 @@ async function handleInstallmentCheckoutPaid(session: Stripe.Checkout.Session) {
         booking.fullPaymentDatePaid ||
         booking.paymentTokens?.full_payment?.status === "success";
 
+      // fullPaymentAmount is expected to equal what Stripe actually charged
+      // for this checkout, but it can drift if the booking's cost/credit
+      // fields were edited between checkout creation and payment. Use the
+      // real charged amount from the stripePayments doc as ground truth.
+      const actualAmount = isCurrentPayment
+        ? Number(paymentData.payment?.amount) || booking.fullPaymentAmount || 0
+        : booking.fullPaymentAmount || 0;
+
       if (isCurrentPayment || isAlreadyPaid) {
-        const amount = booking.fullPaymentAmount || 0;
-        calculatedPaid += amount;
+        calculatedPaid += actualAmount;
       }
 
       const newRemainingBalance = totalCost - calculatedPaid;
@@ -361,8 +387,7 @@ async function handleInstallmentCheckoutPaid(session: Stripe.Checkout.Session) {
       }
 
       // Calculate paid terms (full payment only; reservation fee excluded)
-      const paidTerms =
-        isCurrentPayment || isAlreadyPaid ? booking.fullPaymentAmount || 0 : 0;
+      const paidTerms = isCurrentPayment || isAlreadyPaid ? actualAmount : 0;
 
       // 5. Map installment_id to flat field names
       const datePaidFieldMap: Record<string, string> = {
@@ -398,6 +423,9 @@ async function handleInstallmentCheckoutPaid(session: Stripe.Checkout.Session) {
 
         // Update flat field for backward compatibility
         [datePaidField]: paidTimestamp,
+        // Self-heal the stored amount to what Stripe actually charged, in
+        // case it drifted from the booking's cost/credit fields since checkout.
+        fullPaymentAmount: actualAmount,
 
         // Update totals with recalculated values
         paid: calculatedPaid,
@@ -423,6 +451,16 @@ async function handleInstallmentCheckoutPaid(session: Stripe.Checkout.Session) {
       (id: string) => booking[`${id}Amount`] > 0,
     ).length;
 
+    // The current installment's amount is expected to equal what Stripe
+    // actually charged, but it can drift if the booking's cost/credit fields
+    // were edited between checkout creation and payment. Use the real
+    // charged amount from the stripePayments doc as ground truth, and
+    // self-heal the stored field to match (see update below).
+    const actualCurrentAmount =
+      Number(paymentData.payment?.amount) ||
+      booking[`${installment_id}Amount`] ||
+      0;
+
     installments.forEach((id: string) => {
       const isCurrentPayment = id === installment_id;
       const isAlreadyPaid =
@@ -430,7 +468,9 @@ async function handleInstallmentCheckoutPaid(session: Stripe.Checkout.Session) {
         booking.paymentTokens?.[id]?.status === "success";
 
       if (isCurrentPayment || isAlreadyPaid) {
-        const amount = booking[`${id}Amount`] || 0;
+        const amount = isCurrentPayment
+          ? actualCurrentAmount
+          : booking[`${id}Amount`] || 0;
         calculatedPaid += amount;
         // Mirror paid.ts: late fee is counted as paid when its installment is paid
         calculatedPaid += Number(booking[`${id}LateFeesPenalty`] || 0);
@@ -511,7 +551,9 @@ async function handleInstallmentCheckoutPaid(session: Stripe.Checkout.Session) {
         booking.paymentTokens?.[id]?.status === "success" ||
         id === installment_id;
       if (isPaid) {
-        paidTerms += booking[`${id}Amount`] || 0;
+        paidTerms += id === installment_id
+          ? actualCurrentAmount
+          : booking[`${id}Amount`] || 0;
         paidTerms += Number(booking[`${id}LateFeesPenalty`] || 0);
       }
     });
@@ -552,6 +594,9 @@ async function handleInstallmentCheckoutPaid(session: Stripe.Checkout.Session) {
       // Update flat field for backward compatibility
       [datePaidField]: paidTimestamp,
       [`${installment_id}ScheduledReminderDate`]: "",
+      // Self-heal the stored amount to what Stripe actually charged, in case
+      // it drifted from the booking's cost/credit fields since checkout.
+      [`${installment_id}Amount`]: actualCurrentAmount,
 
       // Update totals with recalculated values
       paid: calculatedPaid,

@@ -1,6 +1,7 @@
 import { BookingSheetColumn } from "@/types/booking-sheet-column";
 import {
-  getAppliedManualCreditAmount,
+  getCreditOrder,
+  getPaymentPlanTerms,
   hasPaidDate,
   roundCurrency,
   toNumber,
@@ -280,55 +281,43 @@ export default function getRemainingBalanceFunction(
   const discCost = toNumber(discountedTourCost);
   const resFee = toNumber(reservationFee);
   const creditFromValue = creditFrom ?? "";
-  const appliedCredit = getAppliedManualCreditAmount(
-    creditFromValue,
-    creditAmount,
-    fullPaymentDate,
-    p1DatePaid,
-    p2DatePaid,
-    p3DatePaid,
-    p4DatePaid,
-  );
-  const creditAppliedTo = (source: string): boolean =>
-    appliedCredit > 0 && creditFromValue === source;
+  const creditAmt = toNumber(creditAmount);
+  const plan = (paymentPlan ?? "").trim();
+
+  // Net the credit out of the customer's balance immediately — matching
+  // allocateInstallmentAmounts / getFullPaymentRemainingFunction, which both
+  // reduce the relevant term's own due amount unconditionally, not only once
+  // that term is paid. Gating this on payment status would contradict the
+  // (already-discounted) amount shown for that term on the customer's own
+  // Payment Schedule, since remaining balance would never fully reach zero.
+  const isFullPaymentPlan = plan === "Full Payment";
+  const creditOrder = getCreditOrder(creditFromValue, creditAmt);
+  const terms = getPaymentPlanTerms(plan);
+  const creditValidForPlan =
+    isFullPaymentPlan // full-payment-amount.ts nets any credit unconditionally
+      ? creditAmt > 0
+      : creditOrder === 0 || (creditOrder >= 1 && creditOrder <= terms);
+  const netCredit = creditValidForPlan ? creditAmt : 0;
 
   // Determine which total cost to use (discounted or original)
   // Automatically use discounted cost if available (from active discount events)
   const baseCost = discCost > 0 ? discCost : origCost;
 
-  // Subtract reservation fee and any credit from reservation
-  const total =
-    baseCost -
-    resFee -
-    (creditAppliedTo("Reservation") ? appliedCredit : 0);
+  // Subtract reservation fee and any applicable manual credit
+  const total = baseCost - resFee - netCredit;
 
-  // Total paid amount so far (treat missing amounts as 0)
+  // Total paid amount so far (treat missing amounts as 0). Full Payment and
+  // P1–P4 amounts are already net of any manual credit applied to that term
+  // (see getFullPaymentRemainingFunction / allocateInstallmentAmounts), so
+  // each is counted as-is once paid — a Reservation credit is netted out of
+  // `total` above instead, since the Reservation Fee is never itself
+  // discounted.
   const paid =
-    (hasPaidDate(fullPaymentDate)
-      ? creditAppliedTo("Full Payment")
-        ? appliedCredit
-        : toNumber(fullPaymentAmount)
-      : 0) +
-    (hasPaidDate(p1DatePaid)
-      ? creditAppliedTo("P1")
-        ? appliedCredit
-        : toNumber(p1Amount)
-      : 0) +
-    (hasPaidDate(p2DatePaid)
-      ? creditAppliedTo("P2")
-        ? appliedCredit
-        : toNumber(p2Amount)
-      : 0) +
-    (hasPaidDate(p3DatePaid)
-      ? creditAppliedTo("P3")
-        ? appliedCredit
-        : toNumber(p3Amount)
-      : 0) +
-    (hasPaidDate(p4DatePaid)
-      ? creditAppliedTo("P4")
-        ? appliedCredit
-        : toNumber(p4Amount)
-      : 0);
+    (hasPaidDate(fullPaymentDate) ? toNumber(fullPaymentAmount) : 0) +
+    (hasPaidDate(p1DatePaid) ? toNumber(p1Amount) : 0) +
+    (hasPaidDate(p2DatePaid) ? toNumber(p2Amount) : 0) +
+    (hasPaidDate(p3DatePaid) ? toNumber(p3Amount) : 0) +
+    (hasPaidDate(p4DatePaid) ? toNumber(p4Amount) : 0);
 
   // All applied late fees increase total amount due.
   const totalLateFees =

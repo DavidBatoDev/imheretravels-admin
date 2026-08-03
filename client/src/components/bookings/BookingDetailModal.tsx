@@ -62,6 +62,7 @@ import SchedulePolicyBadge from "@/components/bookings/SchedulePolicyBadge";
 import TravelPartyCard, {
   isPartyBooking,
 } from "@/components/bookings/TravelPartyCard";
+import BookingTransactionHistory from "@/components/bookings/BookingTransactionHistory";
 import { useToast } from "@/hooks/use-toast";
 import EditBookingModal from "./EditBookingModal";
 import { db } from "@/lib/firebase";
@@ -1270,6 +1271,9 @@ export default function BookingDetailModal({
                           )}
                         </div>
                       </div>
+
+                      {/* Transaction History — Stripe payments tied to this booking */}
+                      <BookingTransactionHistory booking={currentBooking} />
                     </div>
                   </div>
 

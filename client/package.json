@@ -91,6 +91,7 @@
     "standardize:hosted-codes": "tsx scripts/standardize-hosted-tour-codes.ts",
     "audit:booking-money": "tsx scripts/audit-booking-money-types.ts",
     "fix:booking-money": "tsx scripts/fix-booking-money-types.ts",
+    "fix:manual-credit": "tsx scripts/fix-manual-credit-bookings.ts",
     "report:all-tours": "tsx scripts/report-all-tours.ts",
     "report:review-blocked": "tsx scripts/report-review-blocked.ts",
     "set:tour-code": "tsx scripts/set-tour-code.ts",

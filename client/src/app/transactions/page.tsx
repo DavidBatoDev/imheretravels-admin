@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { format } from "date-fns";
 import {
   CheckCircle2,
@@ -146,7 +146,7 @@ interface Transaction {
   };
 }
 
-export default function TransactionsPage() {
+function TransactionsPageContent() {
   const [data, setData] = useState<Transaction[]>([]);
   const [stats, setStats] = useState({
     all: 0,
@@ -1492,5 +1492,13 @@ export default function TransactionsPage() {
         paymentIntentId={paymentIntentId}
       />
     </DashboardLayout>
+  );
+}
+
+export default function TransactionsPage() {
+  return (
+    <Suspense fallback={null}>
+      <TransactionsPageContent />
+    </Suspense>
   );
 }

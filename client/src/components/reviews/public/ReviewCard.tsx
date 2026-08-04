@@ -55,6 +55,9 @@ export default function ReviewCard({
     review.source === "tourradar"
       ? getTourRadarReviewsUrl(review.tourSlug, review.externalTourId)
       : undefined;
+  // Google's legacy reviews API exposes no per-review permalink, so this links
+  // to the business's Google Maps page (its reviews tab), not this one review.
+  const sourceUrl = review.source === "google" ? review.externalUrl : tourRadarUrl;
   const isModal = variant === "modal";
   // Real SVG flag (emoji flags don't render on Windows). Prefer the source's flag
   // (TourRadar countryEmoji → ISO), else derive from the free-text location.
@@ -70,9 +73,9 @@ export default function ReviewCard({
       <div className="flex items-center justify-between gap-3">
         <Stars count={review.rating} />
         {sourceLabel &&
-          (tourRadarUrl ? (
+          (sourceUrl ? (
             <a
-              href={tourRadarUrl}
+              href={sourceUrl}
               target="_blank"
               rel="noopener noreferrer"
               className={`${sourceBadgeCls} transition-colors hover:bg-light-grey/70 hover:text-crimson-red`}

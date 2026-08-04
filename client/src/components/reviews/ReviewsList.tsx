@@ -15,6 +15,7 @@ import {
   assignReviewTour,
   verifyAdminBooking,
   tourNamesLooselyMatch,
+  suggestTourForReview,
   type BookingCheckMatch,
 } from "@/services/reviews-service";
 import type { ReviewDoc, CategoryRatings, PublicReview, ReviewVideo } from "@/types/reviews";
@@ -1032,9 +1033,17 @@ function AssignTourDialog({
   const [value, setValue] = useState<string>(HUB_ONLY);
   const [saving, setSaving] = useState(false);
 
+  // Federated reviews arrive with no tour association — guess one from the review
+  // text (word-overlap against tour names) so the admin has a starting point to
+  // confirm or override, instead of always defaulting to "Community hub only".
+  const suggestion = useMemo(
+    () => (review ? suggestTourForReview(review.bodyMarkdown, tours) : null),
+    [review, tours],
+  );
+
   useEffect(() => {
-    if (review) setValue(review.tourSlug || HUB_ONLY);
-  }, [review]);
+    if (review) setValue(review.tourSlug || suggestion?.slug || HUB_ONLY);
+  }, [review, suggestion]);
 
   async function save() {
     if (!review) return;
@@ -1076,6 +1085,11 @@ function AssignTourDialog({
               ))}
             </SelectContent>
           </Select>
+          {suggestion && !review?.tourSlug && (
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Suggested from the review text — confirm or pick a different tour.
+            </p>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>

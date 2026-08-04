@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import PermissionGuard from "@/components/auth/PermissionGuard";
 import ReviewsList from "@/components/reviews/ReviewsList";
+import ReviewSyncPanel from "@/components/reviews/ReviewSyncPanel";
 
 export const metadata: Metadata = {
   title: "Tour Reviews - ImHereTravels Admin",
@@ -21,6 +22,7 @@ export default function ReviewsPage() {
               Moderate traveler reviews, add photos, and hide or publish reviews
             </p>
           </div>
+          <ReviewSyncPanel />
           <ReviewsList />
         </div>
       </PermissionGuard>

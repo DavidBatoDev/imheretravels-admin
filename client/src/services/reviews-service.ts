@@ -295,6 +295,52 @@ export function tourNamesLooselyMatch(a: string, b: string): boolean {
   return na === nb || na.includes(nb) || nb.includes(na);
 }
 
+/** Tour-name words too generic to count as evidence a review mentions that tour. */
+const TOUR_MATCH_STOPWORDS = new Set([
+  "the", "and", "of", "in", "to", "a", "an",
+  "tour", "tours", "trip", "trips", "package", "packages", "adventure",
+  "adventures", "experience", "experiences", "escape", "escapes", "getaway",
+  "getaways", "group", "small", "days", "day", "night", "nights", "philippines",
+]);
+
+/** Normalize + split into words, dropping stopwords and short/numeric-only tokens. */
+function significantTokens(name: string): string[] {
+  return normalizeForMatch(name)
+    .split(" ")
+    .filter((w) => w.length >= 3 && !/^\d+$/.test(w) && !TOUR_MATCH_STOPWORDS.has(w));
+}
+
+/**
+ * Best-guess tour match for a federated review's free-text body — Google/TourRadar
+ * reviews arrive with no tour association, so this suggests one for the admin to
+ * confirm (or override) in the assign-tour dialog. Not authoritative: scores each
+ * tour by how many of its distinctive name words appear in the review text (as
+ * whole words) and returns the top scorer, or null when nothing scores.
+ */
+export function suggestTourForReview(
+  bodyMarkdown: string,
+  tours: { id: string; slug: string; name: string }[],
+): { id: string; slug: string; name: string } | null {
+  const haystack = ` ${normalizeForMatch(bodyMarkdown)} `;
+  if (haystack.trim().length === 0) return null;
+
+  let best: { id: string; slug: string; name: string } | null = null;
+  let bestScore = 0;
+  for (const tour of tours) {
+    const tokens = significantTokens(tour.name);
+    if (tokens.length === 0) continue;
+    let score = 0;
+    for (const tok of tokens) {
+      if (haystack.includes(` ${tok} `)) score += tok.length;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      best = tour;
+    }
+  }
+  return bestScore > 0 ? best : null;
+}
+
 function firstNameOf(b: Record<string, any>): string {
   if (b.firstName) return String(b.firstName).trim();
   if (b.fullName) return String(b.fullName).trim().split(/\s+/)[0] ?? "";

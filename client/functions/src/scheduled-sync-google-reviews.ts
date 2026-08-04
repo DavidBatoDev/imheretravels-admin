@@ -1,6 +1,7 @@
 // functions/src/scheduled-sync-google-reviews.ts
 import * as admin from "firebase-admin";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { google } from "googleapis";
 import {
@@ -138,6 +139,35 @@ async function fetchAllGoogleReviews(token: string): Promise<GoogleReview[]> {
   return all;
 }
 
+/**
+ * Fetch the location's public Google Maps place page (`metadata.mapsUri` via the
+ * Business Information API v1, which the same OAuth token already covers). The
+ * legacy v4 `reviews.list` endpoint exposes no per-review permalink, so this is
+ * a location-level "see our Google reviews" link, not a deep link to one review.
+ */
+async function fetchLocationMapsUri(token: string): Promise<string | null> {
+  const locationId = process.env.GBP_LOCATION_ID;
+  if (!locationId) return null;
+  try {
+    const url =
+      `https://mybusinessbusinessinformation.googleapis.com/v1/locations/${locationId}` +
+      `?readMask=metadata`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) {
+      logger.warn(`[syncGoogleReviews] locations.get responded ${res.status} — skipping mapsUri.`);
+      return null;
+    }
+    const data = (await res.json()) as { metadata?: { mapsUri?: string } };
+    return data.metadata?.mapsUri || null;
+  } catch (error) {
+    logger.warn(
+      "[syncGoogleReviews] failed to fetch location mapsUri:",
+      error instanceof Error ? error.message : error,
+    );
+    return null;
+  }
+}
+
 async function revalidateWww(): Promise<void> {
   const url =
     process.env.WWW_REVALIDATE_URL ||
@@ -179,6 +209,137 @@ function withTimestamps(fields: Record<string, unknown>): Record<string, unknown
   return out;
 }
 
+/** Shared body for the scheduled run and the admin "Sync now" button. */
+export async function runGoogleReviewsSync(trigger: "schedule" | "manual"): Promise<{
+  ok: boolean;
+  fetched: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  skippedReason?: string;
+}> {
+  const db = admin.firestore();
+  const config = await loadConfig(db);
+
+  // A manual run ignores the `enabled` flag — the admin is asking for it explicitly.
+  if (!config.enabled && trigger === "schedule") {
+    logger.info("[syncGoogleReviews] disabled via config — skipping.");
+    return { ok: true, fetched: 0, created: 0, updated: 0, skipped: 0, skippedReason: "disabled via config" };
+  }
+
+  logger.info("⭐ Syncing Google reviews…");
+
+  let created = 0;
+  let updated = 0;
+  let skipped = 0;
+  let newlyPublished = 0;
+
+  const token = await getAccessToken();
+  if (!token) {
+    return {
+      ok: true,
+      fetched: 0,
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      skippedReason: "GBP_CLIENT_ID/SECRET/REFRESH_TOKEN not configured",
+    };
+  }
+
+  const [reviews, mapsUri] = await Promise.all([
+    fetchAllGoogleReviews(token),
+    fetchLocationMapsUri(token),
+  ]);
+  // Diagnostic: how many reviews Google's API itself returned a reviewer photo
+  // for, vs. isAnonymous — settles whether missing avatars on the site are a
+  // mapping bug (they wouldn't be, per google-reviews-map.ts) or genuinely
+  // absent from what Google serves for this location.
+  const withPhoto = reviews.filter((r) => r.reviewer?.profilePhotoUrl).length;
+  const anonymous = reviews.filter((r) => r.reviewer?.isAnonymous).length;
+  logger.info(
+    `[syncGoogleReviews] fetched ${reviews.length} review(s), ` +
+      `${withPhoto} with a reviewer photo, ${anonymous} anonymous. ` +
+      `mapsUri=${mapsUri ? "ok" : "none"}`,
+  );
+
+  const nowMs = Date.now();
+  // Chunk into batches of <=500 writes.
+  let batch = db.batch();
+  let ops = 0;
+  const flush = async () => {
+    if (ops > 0 && !config.dryRun) await batch.commit();
+    batch = db.batch();
+    ops = 0;
+  };
+
+  const seenDocIds = new Set<string>();
+
+  for (const raw of reviews) {
+    const mapped = mapGoogleReview(raw);
+    if (!mapped) {
+      skipped += 1;
+      continue;
+    }
+    seenDocIds.add(mapped.docId);
+    const ref = db.collection(REVIEWS_COLLECTION).doc(mapped.docId);
+    const existing = await ref.get();
+
+    if (!existing.exists) {
+      const fields = withTimestamps(
+        buildNewReviewFields(mapped, config.defaultStatus, nowMs),
+      );
+      if (mapsUri) fields.externalUrl = mapsUri;
+      if (!config.dryRun) batch.set(ref, fields, { merge: true });
+      created += 1;
+      if (config.defaultStatus === "published") newlyPublished += 1;
+      ops += 1;
+    } else {
+      const existingData = existing.data() ?? {};
+      const update = buildUpdateFields(mapped, existingData, nowMs);
+      // Backfill the maps link even on runs with no content change, so
+      // already-synced reviews pick it up without waiting on Google's
+      // updateTime to advance.
+      const needsUrlBackfill = !!mapsUri && existingData.externalUrl !== mapsUri;
+      if (update || needsUrlBackfill) {
+        const fields = withTimestamps(update ?? {});
+        if (needsUrlBackfill) fields.externalUrl = mapsUri;
+        if (!config.dryRun) batch.set(ref, fields, { merge: true });
+        if (update) {
+          updated += 1;
+          // A content refresh on an already-published review is publicly visible.
+          if ((existingData.status ?? "") === "published") newlyPublished += 1;
+        }
+        ops += 1;
+      } else {
+        skipped += 1;
+      }
+    }
+
+    if (ops >= 450) await flush();
+  }
+  await flush();
+
+  logger.info(
+    `[syncGoogleReviews] done. created=${created} updated=${updated} ` +
+      `skipped=${skipped} dryRun=${config.dryRun}`,
+  );
+
+  if (!config.dryRun) {
+    await db.collection(LOGS_COLLECTION).add({
+      ranAt: ts(nowMs),
+      trigger,
+      fetched: reviews.length,
+      created,
+      updated,
+      skipped,
+      defaultStatus: config.defaultStatus,
+    });
+    if (newlyPublished > 0) await revalidateWww();
+  }
+
+  return { ok: true, fetched: reviews.length, created, updated, skipped };
+}
+
 export const syncGoogleReviews = onSchedule(
   {
     schedule: "0 */6 * * *", // every 6 hours
@@ -187,92 +348,33 @@ export const syncGoogleReviews = onSchedule(
     timeoutSeconds: 300,
   },
   async () => {
-    const db = admin.firestore();
-    const config = await loadConfig(db);
-    if (!config.enabled) {
-      logger.info("[syncGoogleReviews] disabled via config — skipping.");
-      return;
-    }
-
-    logger.info("⭐ Syncing Google reviews…");
-
-    let created = 0;
-    let updated = 0;
-    let skipped = 0;
-    let newlyPublished = 0;
-
     try {
-      const token = await getAccessToken();
-      if (!token) return;
-
-      const reviews = await fetchAllGoogleReviews(token);
-      logger.info(`[syncGoogleReviews] fetched ${reviews.length} review(s).`);
-
-      const nowMs = Date.now();
-      // Chunk into batches of <=500 writes.
-      let batch = db.batch();
-      let ops = 0;
-      const flush = async () => {
-        if (ops > 0 && !config.dryRun) await batch.commit();
-        batch = db.batch();
-        ops = 0;
-      };
-
-      const seenDocIds = new Set<string>();
-
-      for (const raw of reviews) {
-        const mapped = mapGoogleReview(raw);
-        if (!mapped) {
-          skipped += 1;
-          continue;
-        }
-        seenDocIds.add(mapped.docId);
-        const ref = db.collection(REVIEWS_COLLECTION).doc(mapped.docId);
-        const existing = await ref.get();
-
-        if (!existing.exists) {
-          const fields = withTimestamps(
-            buildNewReviewFields(mapped, config.defaultStatus, nowMs),
-          );
-          if (!config.dryRun) batch.set(ref, fields, { merge: true });
-          created += 1;
-          if (config.defaultStatus === "published") newlyPublished += 1;
-          ops += 1;
-        } else {
-          const update = buildUpdateFields(mapped, existing.data() ?? {}, nowMs);
-          if (update) {
-            if (!config.dryRun) batch.set(ref, withTimestamps(update), { merge: true });
-            updated += 1;
-            // A content refresh on an already-published review is publicly visible.
-            if ((existing.data()?.status ?? "") === "published") newlyPublished += 1;
-            ops += 1;
-          } else {
-            skipped += 1;
-          }
-        }
-
-        if (ops >= 450) await flush();
-      }
-      await flush();
-
-      logger.info(
-        `[syncGoogleReviews] done. created=${created} updated=${updated} ` +
-          `skipped=${skipped} dryRun=${config.dryRun}`,
-      );
-
-      if (!config.dryRun) {
-        await db.collection(LOGS_COLLECTION).add({
-          ranAt: ts(nowMs),
-          fetched: reviews.length,
-          created,
-          updated,
-          skipped,
-          defaultStatus: config.defaultStatus,
-        });
-        if (newlyPublished > 0) await revalidateWww();
-      }
+      await runGoogleReviewsSync("schedule");
     } catch (error) {
       logger.error("[syncGoogleReviews] error:", error);
+    }
+  },
+);
+
+/** Admin "Sync now" — same body, but requires an authenticated tour manager. */
+export const syncGoogleReviewsNow = onCall(
+  { region: "asia-southeast1", timeoutSeconds: 300, cors: true },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Sign in to run the Google reviews sync.");
+    }
+    const userSnap = await admin.firestore().doc(`users/${request.auth.uid}`).get();
+    if (userSnap.data()?.permissions?.canManageTours !== true) {
+      throw new HttpsError("permission-denied", "You cannot manage tours.");
+    }
+    try {
+      return await runGoogleReviewsSync("manual");
+    } catch (error) {
+      logger.error("[syncGoogleReviewsNow] error:", error);
+      throw new HttpsError(
+        "internal",
+        error instanceof Error ? error.message : "Google reviews sync failed.",
+      );
     }
   },
 );

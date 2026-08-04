@@ -41,7 +41,7 @@ export { publishScheduledTours } from "./scheduled-publish-tours";
 // Publishes destinations whose scheduledPublishAt time has passed (runs every 15 min)
 export { publishScheduledDestinations } from "./scheduled-publish-destinations";
 // Imports Google Business Profile reviews into tourReviews (runs every 6 hours)
-export { syncGoogleReviews } from "./scheduled-sync-google-reviews";
+export { syncGoogleReviews, syncGoogleReviewsNow } from "./scheduled-sync-google-reviews";
 // Imports TourRadar reviews into tourReviews. Admin "Sync now" button only for
 // now — the scheduled cron is on hold, see scheduled-sync-tourradar-reviews.ts.
 export { syncTourRadarReviewsNow } from "./scheduled-sync-tourradar-reviews";

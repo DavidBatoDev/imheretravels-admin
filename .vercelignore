@@ -1,0 +1,7 @@
+.git
+**/node_modules
+**/.next
+**/coverage
+**/*.tsbuildinfo
+documentation
+client/exports

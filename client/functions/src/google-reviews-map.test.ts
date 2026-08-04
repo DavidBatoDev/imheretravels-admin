@@ -12,6 +12,7 @@ import {
   mapGoogleReview,
   buildNewReviewFields,
   buildUpdateFields,
+  toEpochMs,
 } from "./google-reviews-map";
 
 let passed = 0;
@@ -94,6 +95,24 @@ test("buildUpdateFields returns null when updateTime did not advance", () => {
   const m = mapGoogleReview(SAMPLE)!;
   const res = buildUpdateFields(m, { externalUpdatedAt: m.externalUpdatedAt }, Date.now());
   assert.strictEqual(res, null);
+});
+
+test("toEpochMs coerces number / Firestore Timestamp / {_seconds} / Date", () => {
+  assert.strictEqual(toEpochMs(1_700_000_000_000), 1_700_000_000_000);
+  assert.strictEqual(toEpochMs({ toMillis: () => 1_700_000_000_000 }), 1_700_000_000_000);
+  assert.strictEqual(toEpochMs({ _seconds: 1_700_000_000, _nanoseconds: 0 }), 1_700_000_000_000);
+  assert.strictEqual(toEpochMs(new Date(1_700_000_000_000)), 1_700_000_000_000);
+  assert.strictEqual(toEpochMs(undefined), 0);
+  assert.strictEqual(toEpochMs(NaN), 0);
+});
+
+test("buildUpdateFields is idempotent when the stored value is a Firestore Timestamp", () => {
+  // Reproduces the real stored shape: externalUpdatedAt is written as a
+  // Firestore Timestamp (toMillis), NOT a raw number. A re-sync with no upstream
+  // change must skip (return null), or every run rewrites + revalidates.
+  const m = mapGoogleReview(SAMPLE)!;
+  const stored = { externalUpdatedAt: { toMillis: () => m.externalUpdatedAt } };
+  assert.strictEqual(buildUpdateFields(m, stored, Date.now()), null);
 });
 
 test("buildUpdateFields refreshes ONLY content, preserving moderation", () => {

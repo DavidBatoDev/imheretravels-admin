@@ -156,6 +156,23 @@ export function buildNewReviewFields(
 }
 
 /**
+ * Coerce a stored epoch value to milliseconds. Tolerates a plain number, a
+ * Firestore Timestamp (duck-typed `toMillis()` — kept dependency-free so this
+ * module needs no firebase-admin), a `{ _seconds }` serialized Timestamp, or a
+ * Date. Returns 0 when it can't be interpreted.
+ */
+export function toEpochMs(value: unknown): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (value && typeof (value as { toMillis?: unknown }).toMillis === "function") {
+    return (value as { toMillis: () => number }).toMillis();
+  }
+  if (value instanceof Date) return value.getTime();
+  const secs = (value as { _seconds?: unknown })?._seconds;
+  if (typeof secs === "number") return secs * 1000;
+  return 0;
+}
+
+/**
  * Decide what (if anything) to write when the review already exists. Returns the
  * content-only field map to merge, or null when nothing changed. Never returns
  * moderation/assignment fields (`status`, `assigned`, `tour*`) so admin actions
@@ -166,7 +183,7 @@ export function buildUpdateFields(
   existing: { externalUpdatedAt?: number } | Record<string, unknown>,
   nowMs: number,
 ): Record<string, unknown> | null {
-  const prev = Number((existing as { externalUpdatedAt?: number }).externalUpdatedAt ?? 0);
+  const prev = toEpochMs((existing as { externalUpdatedAt?: unknown }).externalUpdatedAt);
   if (m.externalUpdatedAt && prev && m.externalUpdatedAt <= prev) return null;
 
   const fields: Record<string, unknown> = {

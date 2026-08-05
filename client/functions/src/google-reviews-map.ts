@@ -24,6 +24,16 @@ export interface GoogleReview {
   createTime?: string; // RFC3339
   updateTime?: string; // RFC3339
   reviewReply?: { comment?: string; updateTime?: string };
+  reviewMediaItems?: Array<{
+    thumbnailUrl?: string;
+    thumbnailLabel?: string;
+    videoUrl?: string;
+  }>;
+}
+
+export interface MappedGoogleReviewVideo {
+  src: string;
+  poster?: string;
 }
 
 /** Normalized, storage-ready view of a Google review (epoch ms, numeric rating). */
@@ -37,6 +47,8 @@ export interface MappedGoogleReview {
   reviewerFullName: string;
   reviewerAvatar?: string;
   externalReply?: string;
+  photos: string[];
+  videos: MappedGoogleReviewVideo[];
   createdAt: number; // epoch ms
   externalUpdatedAt: number; // epoch ms
   displayDate: string; // "Month YYYY"
@@ -103,6 +115,20 @@ export function mapGoogleReview(review: GoogleReview): MappedGoogleReview | null
   const externalUpdatedAt = review.updateTime
     ? Date.parse(review.updateTime) || createdAt
     : createdAt;
+  const photos: string[] = [];
+  const videos: MappedGoogleReviewVideo[] = [];
+  for (const item of review.reviewMediaItems ?? []) {
+    const thumbnailUrl = item.thumbnailUrl?.trim();
+    const videoUrl = item.videoUrl?.trim();
+    if (videoUrl) {
+      videos.push({
+        src: videoUrl,
+        ...(thumbnailUrl ? { poster: thumbnailUrl } : {}),
+      });
+    } else if (thumbnailUrl) {
+      photos.push(thumbnailUrl);
+    }
+  }
 
   return {
     externalId,
@@ -114,6 +140,10 @@ export function mapGoogleReview(review: GoogleReview): MappedGoogleReview | null
     reviewerFullName: name.full,
     reviewerAvatar: review.reviewer?.profilePhotoUrl || undefined,
     externalReply: review.reviewReply?.comment?.trim() || undefined,
+    photos: [...new Set(photos)],
+    videos: videos.filter(
+      (video, index) => videos.findIndex((candidate) => candidate.src === video.src) === index,
+    ),
     createdAt,
     externalUpdatedAt,
     displayDate: toDisplayDate(createdAt),
@@ -152,6 +182,8 @@ export function buildNewReviewFields(
   if (m.reviewerLastName) fields.reviewerLastName = m.reviewerLastName;
   if (m.reviewerAvatar) fields.reviewerAvatar = m.reviewerAvatar;
   if (m.externalReply) fields.externalReply = m.externalReply;
+  if (m.photos.length) fields.photos = m.photos;
+  if (m.videos.length) fields.videos = m.videos;
   return fields;
 }
 
@@ -176,24 +208,34 @@ export function toEpochMs(value: unknown): number {
  * Decide what (if anything) to write when the review already exists. Returns the
  * content-only field map to merge, or null when nothing changed. Never returns
  * moderation/assignment fields (`status`, `assigned`, `tour*`) so admin actions
- * survive re-syncs. Only refreshes when Google's updateTime advanced.
+ * survive re-syncs. Content refreshes when Google's updateTime advances; media
+ * also backfills older synced documents that predate reviewMediaItems support.
  */
 export function buildUpdateFields(
   m: MappedGoogleReview,
-  existing: { externalUpdatedAt?: number } | Record<string, unknown>,
+  existing: Record<string, unknown>,
   nowMs: number,
 ): Record<string, unknown> | null {
-  const prev = toEpochMs((existing as { externalUpdatedAt?: unknown }).externalUpdatedAt);
-  if (m.externalUpdatedAt && prev && m.externalUpdatedAt <= prev) return null;
+  const prev = toEpochMs(existing.externalUpdatedAt);
+  const contentAdvanced = !m.externalUpdatedAt || !prev || m.externalUpdatedAt > prev;
+  const needsPhotoBackfill =
+    m.photos.length > 0 && (!Array.isArray(existing.photos) || existing.photos.length === 0);
+  const needsVideoBackfill =
+    m.videos.length > 0 && (!Array.isArray(existing.videos) || existing.videos.length === 0);
+  if (!contentAdvanced && !needsPhotoBackfill && !needsVideoBackfill) return null;
 
-  const fields: Record<string, unknown> = {
-    rating: m.rating,
-    bodyMarkdown: m.bodyMarkdown,
-    externalUpdatedAt: m.externalUpdatedAt,
-    updatedAt: nowMs,
-  };
-  // Avatar + reply are the only other content that legitimately changes upstream.
-  fields.reviewerAvatar = m.reviewerAvatar ?? null;
-  fields.externalReply = m.externalReply ?? null;
+  const fields: Record<string, unknown> = { updatedAt: nowMs };
+  if (contentAdvanced) {
+    fields.rating = m.rating;
+    fields.bodyMarkdown = m.bodyMarkdown;
+    fields.externalUpdatedAt = m.externalUpdatedAt;
+    fields.reviewerAvatar = m.reviewerAvatar ?? null;
+    fields.externalReply = m.externalReply ?? null;
+    fields.photos = m.photos.length ? m.photos : null;
+    fields.videos = m.videos.length ? m.videos : null;
+  } else {
+    if (needsPhotoBackfill) fields.photos = m.photos;
+    if (needsVideoBackfill) fields.videos = m.videos;
+  }
   return fields;
 }

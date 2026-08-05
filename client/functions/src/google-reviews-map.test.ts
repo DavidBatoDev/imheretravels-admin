@@ -72,6 +72,27 @@ test("mapGoogleReview normalizes a full review", () => {
   assert.strictEqual(m.createdAt, Date.parse("2025-03-14T10:00:00Z"));
 });
 
+test("mapGoogleReview separates attached photos and videos", () => {
+  const m = mapGoogleReview({
+    ...SAMPLE,
+    reviewMediaItems: [
+      { thumbnailUrl: " https://lh5.googleusercontent.com/photo-one " },
+      { thumbnailUrl: "https://lh5.googleusercontent.com/photo-one" },
+      {
+        thumbnailUrl: "https://lh5.googleusercontent.com/video-poster",
+        videoUrl: " https://lh5.googleusercontent.com/video-one ",
+      },
+    ],
+  })!;
+  assert.deepStrictEqual(m.photos, ["https://lh5.googleusercontent.com/photo-one"]);
+  assert.deepStrictEqual(m.videos, [
+    {
+      src: "https://lh5.googleusercontent.com/video-one",
+      poster: "https://lh5.googleusercontent.com/video-poster",
+    },
+  ]);
+});
+
 test("mapGoogleReview skips unspecified rating and missing id", () => {
   assert.strictEqual(mapGoogleReview({ ...SAMPLE, starRating: "STAR_RATING_UNSPECIFIED" }), null);
   assert.strictEqual(mapGoogleReview({ starRating: "FIVE" }), null);
@@ -112,6 +133,39 @@ test("buildUpdateFields is idempotent when the stored value is a Firestore Times
   // change must skip (return null), or every run rewrites + revalidates.
   const m = mapGoogleReview(SAMPLE)!;
   const stored = { externalUpdatedAt: { toMillis: () => m.externalUpdatedAt } };
+  assert.strictEqual(buildUpdateFields(m, stored, Date.now()), null);
+});
+
+test("buildUpdateFields backfills review media without a newer updateTime", () => {
+  const m = mapGoogleReview({
+    ...SAMPLE,
+    reviewMediaItems: [
+      { thumbnailUrl: "https://lh5.googleusercontent.com/photo-one" },
+      {
+        thumbnailUrl: "https://lh5.googleusercontent.com/video-poster",
+        videoUrl: "https://lh5.googleusercontent.com/video-one",
+      },
+    ],
+  })!;
+  const stored = { externalUpdatedAt: { toMillis: () => m.externalUpdatedAt } };
+  const res = buildUpdateFields(m, stored, 999)!;
+  assert.deepStrictEqual(res.photos, ["https://lh5.googleusercontent.com/photo-one"]);
+  assert.deepStrictEqual(res.videos, [
+    {
+      src: "https://lh5.googleusercontent.com/video-one",
+      poster: "https://lh5.googleusercontent.com/video-poster",
+    },
+  ]);
+  assert.strictEqual("bodyMarkdown" in res, false);
+  assert.strictEqual(res.updatedAt, 999);
+});
+
+test("buildUpdateFields preserves existing media when upstream time is unchanged", () => {
+  const m = mapGoogleReview(SAMPLE)!;
+  const stored = {
+    externalUpdatedAt: { toMillis: () => m.externalUpdatedAt },
+    photos: ["https://example.com/manually-added-photo"],
+  };
   assert.strictEqual(buildUpdateFields(m, stored, Date.now()), null);
 });
 

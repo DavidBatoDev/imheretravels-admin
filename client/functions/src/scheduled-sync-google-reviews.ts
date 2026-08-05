@@ -255,10 +255,12 @@ export async function runGoogleReviewsSync(trigger: "schedule" | "manual"): Prom
   // mapping bug (they wouldn't be, per google-reviews-map.ts) or genuinely
   // absent from what Google serves for this location.
   const withPhoto = reviews.filter((r) => r.reviewer?.profilePhotoUrl).length;
+  const withMedia = reviews.filter((r) => (r.reviewMediaItems?.length ?? 0) > 0).length;
   const anonymous = reviews.filter((r) => r.reviewer?.isAnonymous).length;
   logger.info(
     `[syncGoogleReviews] fetched ${reviews.length} review(s), ` +
-      `${withPhoto} with a reviewer photo, ${anonymous} anonymous. ` +
+      `${withPhoto} with a reviewer photo, ${withMedia} with review media, ` +
+      `${anonymous} anonymous. ` +
       `mapsUri=${mapsUri ? "ok" : "none"}`,
   );
 

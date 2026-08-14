@@ -625,7 +625,7 @@ export default function BookingStatusPage() {
   const handleContactSupport = () => {
     const subject = `Booking Inquiry - ${booking?.bookingId}`;
     const body = `Hello ImHereTravels Team,\n\nI have a question regarding my booking:\n\nBooking ID: ${booking?.bookingId}\nName: ${booking?.fullName}\nTour: ${booking?.tourPackageName}\n\n[Your question here]\n\nThank you!`;
-    window.location.href = `mailto:support@imheretravels.com?subject=${encodeURIComponent(
+    window.location.href = `mailto:bella@imheretravels.com?subject=${encodeURIComponent(
       subject,
     )}&body=${encodeURIComponent(body)}`;
   };
@@ -1751,7 +1751,7 @@ export default function BookingStatusPage() {
                   <div>
                     <p className="text-xs text-gray-500 mb-0.5">Email</p>
                     <a
-                      href="mailto:support@imheretravels.com"
+                      href="mailto:bella@imheretravels.com"
                       className="text-xs sm:text-sm font-semibold text-crimson-red hover:underline break-all"
                     >
                       bella@imheretravels.com

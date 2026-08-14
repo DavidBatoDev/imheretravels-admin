@@ -392,28 +392,32 @@ export function getDaysBetweenDates(
 }
 
 /**
- * Calculate eligible last-Friday dates count for payment terms
+ * Compute the eligible last-Friday-of-month installment dates for a booking:
+ * last Friday dates strictly after (reservationDate + 2d) and on/before the
+ * policy cutoff (2 months before tourDate for bookings made on/after
+ * 1 Jun 2026, or tourDate - 3d for older bookings).
+ *
+ * Shared core for getEligible2ndOfMonths (count) and
+ * generateInstallmentDueDates (formatted dates) so both stay in lockstep.
  */
-export function getEligible2ndOfMonths(
+export function getEligibleInstallmentDates(
   reservationDate: unknown,
   tourDate: unknown,
-): number | "" {
+): Date[] {
   const res = toDate(reservationDate);
   const tour = toDate(tourDate);
 
-  if (!res || !tour) return "";
+  if (!res || !tour) return [];
 
   const resUTC = normalizeUTCDate(res);
   const tourUTC = normalizeUTCDate(tour);
 
-  // Align with installment due-date generation:
-  // last Friday dates in (res + 2, tour - 3].
   const monthCount =
     (tourUTC.getUTCFullYear() - resUTC.getUTCFullYear()) * 12 +
     (tourUTC.getUTCMonth() - resUTC.getUTCMonth()) +
     1;
 
-  if (monthCount <= 0) return 0;
+  if (monthCount <= 0) return [];
 
   const DAY_MS = 24 * 60 * 60 * 1000;
   const installmentDates: Date[] = Array.from(
@@ -440,13 +444,22 @@ export function getEligible2ndOfMonths(
     ? twoMonthsBeforeTour
     : new Date(tourUTC.getTime() - 3 * DAY_MS);
 
-  const eligible = installmentDates.filter(
+  return installmentDates.filter(
     (d) =>
       d.getTime() > resUTC.getTime() + 2 * DAY_MS &&
       d.getTime() <= cutoffDate.getTime(),
   );
+}
 
-  return eligible.length;
+/**
+ * Calculate eligible last-Friday dates count for payment terms
+ */
+export function getEligible2ndOfMonths(
+  reservationDate: unknown,
+  tourDate: unknown,
+): number | "" {
+  if (!toDate(reservationDate) || !toDate(tourDate)) return "";
+  return getEligibleInstallmentDates(reservationDate, tourDate).length;
 }
 
 /**
@@ -565,43 +578,7 @@ export function generateInstallmentDueDates(
   const tour = toDate(tourDate);
   if (!res || !tour) return result;
 
-  const resUTC = normalizeUTCDate(res);
-  const tourUTC = normalizeUTCDate(tour);
-
-  // Generate all valid last-day-of-month dates
-  // Day 0 of (month + 1) = last day of (month), matching p1–p4DueDate.ts logic
-  const monthCount =
-    (tourUTC.getUTCFullYear() - resUTC.getUTCFullYear()) * 12 +
-    (tourUTC.getUTCMonth() - resUTC.getUTCMonth()) +
-    1;
-
-  const DAY_MS = 24 * 60 * 60 * 1000;
-  const secondDates: Date[] = Array.from({ length: monthCount }, (_, i) => {
-    const t = Date.UTC(
-      resUTC.getUTCFullYear(),
-      resUTC.getUTCMonth() + i + 1,
-      0,
-    );
-    const lastDay = new Date(t);
-    const offset = (lastDay.getUTCDay() - 5 + 7) % 7; // days back to last Friday
-    return new Date(t - offset * DAY_MS);
-  });
-
-  // Bookings made on/after June 1 2026 use the 2-month-before-tour cutoff.
-  const POLICY_DATE = new Date(Date.UTC(2026, 5, 1));
-  const isNewPolicy = resUTC.getTime() >= POLICY_DATE.getTime();
-  const twoMonthsBeforeTour = new Date(
-    Date.UTC(tourUTC.getUTCFullYear(), tourUTC.getUTCMonth() - 2, tourUTC.getUTCDate()),
-  );
-  const cutoffDate = isNewPolicy
-    ? twoMonthsBeforeTour
-    : new Date(tourUTC.getTime() - 3 * DAY_MS);
-
-  const validDates = secondDates.filter(
-    (d) =>
-      d.getTime() > resUTC.getTime() + 2 * DAY_MS &&
-      d.getTime() <= cutoffDate.getTime(),
-  );
+  const validDates = getEligibleInstallmentDates(reservationDate, tourDate);
 
   const fmt = (d: Date) =>
     d.toLocaleDateString("en-US", {

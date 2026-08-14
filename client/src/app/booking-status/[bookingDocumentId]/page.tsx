@@ -44,6 +44,7 @@ import { db } from "@/lib/firebase";
 import {
   getDaysBetweenDates,
   getEligible2ndOfMonths,
+  getEligibleInstallmentDates,
   getPaymentCondition,
 } from "@/lib/booking-calculations";
 import PayNowModal from "@/components/booking-status/PayNowModal";
@@ -831,40 +832,19 @@ export default function BookingStatusPage() {
     const monthlyAmount = monthsRequired
       ? remainingBalance / monthsRequired
       : remainingBalance;
-    const schedule: Array<{ date: string; amount: number }> = [];
 
-    const today = new Date();
-    let nextMonth = today.getMonth() + 1;
-    let nextYear = today.getFullYear();
-    if (nextMonth > 11) {
-      nextMonth = 0;
-      nextYear++;
-    }
+    const eligibleDates = getEligibleInstallmentDates(
+      booking.reservationDate,
+      booking.tourDate,
+    ).slice(0, monthsRequired);
 
-    for (let i = 0; i < monthsRequired; i++) {
-      let paymentMonth = nextMonth + i;
-      let paymentYear = nextYear;
-
-      while (paymentMonth > 11) {
-        paymentMonth -= 12;
-        paymentYear++;
-      }
-
-      const dateStr = `${paymentYear}-${String(paymentMonth + 1).padStart(
-        2,
-        "0",
-      )}-02`;
-
-      schedule.push({
-        date: dateStr,
-        amount:
-          i === monthsRequired - 1
-            ? remainingBalance - monthlyAmount * (monthsRequired - 1)
-            : monthlyAmount,
-      });
-    }
-
-    return schedule;
+    return eligibleDates.map((d, i) => ({
+      date: d.toISOString().slice(0, 10),
+      amount:
+        i === monthsRequired - 1
+          ? remainingBalance - monthlyAmount * (monthsRequired - 1)
+          : monthlyAmount,
+    }));
   };
 
   const getFriendlyDescription = (monthsRequired: number) => {

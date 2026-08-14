@@ -41,6 +41,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { db } from "@/lib/firebase";
+import {
+  getDaysBetweenDates,
+  getEligible2ndOfMonths,
+  getPaymentCondition,
+} from "@/lib/booking-calculations";
 import PayNowModal from "@/components/booking-status/PayNowModal";
 
 // Grace period (days) after an instalment's due date before a late fee is valid.
@@ -780,52 +785,36 @@ export default function BookingStatusPage() {
     return booking.formattedDate || "---";
   })();
 
-  const calculateDaysBetween = (dateValue: any): number => {
-    const tour = getDateFromValue(dateValue);
-    if (!tour) return 0;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    tour.setHours(0, 0, 0, 0);
-    const diffTime = tour.getTime() - today.getTime();
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  };
-
   const getAvailablePaymentTerm = () => {
     const tourDateValue = booking.tourDate;
     if (!tourDateValue)
       return { term: "", isLastMinute: false, isInvalid: false };
 
-    const daysBetween = calculateDaysBetween(tourDateValue);
+    const daysBetween = getDaysBetweenDates(
+      booking.reservationDate,
+      tourDateValue,
+    );
+    const eligible2ndOfMonths = getEligible2ndOfMonths(
+      booking.reservationDate,
+      tourDateValue,
+    );
+    const condition = getPaymentCondition(
+      tourDateValue,
+      eligible2ndOfMonths,
+      daysBetween,
+    );
 
-    if (daysBetween < 2) {
+    if (condition === "Invalid Booking") {
       return { term: "invalid", isLastMinute: false, isInvalid: true };
-    } else if (daysBetween >= 2 && daysBetween < 30) {
-      return { term: "full_payment", isLastMinute: true, isInvalid: false };
-    } else {
-      const today = new Date();
-      const tourDateObj = getDateFromValue(tourDateValue);
-      if (!tourDateObj) {
-        return { term: "", isLastMinute: false, isInvalid: false };
-      }
-      const fullPaymentDue = new Date(tourDateObj);
-      fullPaymentDue.setDate(fullPaymentDue.getDate() - 30);
-
-      const yearDiff = fullPaymentDue.getFullYear() - today.getFullYear();
-      const monthDiff = fullPaymentDue.getMonth() - today.getMonth();
-      const monthCount = Math.max(0, yearDiff * 12 + monthDiff);
-
-      if (monthCount >= 4) {
-        return { term: "P4", isLastMinute: false, isInvalid: false };
-      } else if (monthCount === 3) {
-        return { term: "P3", isLastMinute: false, isInvalid: false };
-      } else if (monthCount === 2) {
-        return { term: "P2", isLastMinute: false, isInvalid: false };
-      } else if (monthCount === 1) {
-        return { term: "P1", isLastMinute: false, isInvalid: false };
-      } else {
-        return { term: "full_payment", isLastMinute: true, isInvalid: false };
-      }
     }
+    if (condition === "Last Minute Booking") {
+      return { term: "full_payment", isLastMinute: true, isInvalid: false };
+    }
+    const termMatch = condition.match(/P[1-4]/);
+    if (termMatch) {
+      return { term: termMatch[0], isLastMinute: false, isInvalid: false };
+    }
+    return { term: "", isLastMinute: false, isInvalid: false };
   };
 
   const fixTermName = (name: string) =>

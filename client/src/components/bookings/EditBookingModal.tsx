@@ -51,6 +51,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDefaultPaymentPlan } from "@/lib/payment-plan-defaults";
+import { formatTourDuration } from "@/lib/tour-duration";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -4220,7 +4221,7 @@ export default function EditBookingModal({
                     Tour Duration
                   </p>
                   <p className="font-semibold text-foreground">
-                    {formData.tourDuration || "N/A"}
+                    {formatTourDuration(formData.tourDuration) || "N/A"}
                   </p>
                 </div>
                 <div>

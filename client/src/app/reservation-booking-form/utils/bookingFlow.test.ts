@@ -52,8 +52,10 @@ describe("bookingFlow utilities", () => {
       isInvalid: false,
     });
 
+    // Reserved 10 Mar 2026 => legacy policy (cutoff = tourDate - 3d).
+    // Eligible last Fridays: 27 Mar, 24 Apr, 29 May => P3.
     expect(getAvailablePaymentTermForDate("2026-06-20", fromDate)).toEqual({
-      term: "P2",
+      term: "P3",
       isLastMinute: false,
       isInvalid: false,
     });
@@ -74,10 +76,11 @@ describe("bookingFlow utilities", () => {
       fromDate: new Date("2026-03-10T12:00:00Z"),
     });
 
+    // Last Friday of each month, not the retired "2nd of the month" scheme.
     expect(schedule).toHaveLength(3);
-    expect(schedule[0].date).toBe("2026-04-02");
-    expect(schedule[1].date).toBe("2026-05-02");
-    expect(schedule[2].date).toBe("2026-06-02");
+    expect(schedule[0].date).toBe("2026-03-27");
+    expect(schedule[1].date).toBe("2026-04-24");
+    expect(schedule[2].date).toBe("2026-05-29");
 
     const totalScheduled = schedule.reduce((sum, row) => sum + row.amount, 0);
     expect(totalScheduled).toBeCloseTo(2100, 8);

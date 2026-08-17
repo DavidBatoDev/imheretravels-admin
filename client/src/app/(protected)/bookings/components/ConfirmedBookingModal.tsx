@@ -41,6 +41,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { formatTourDuration } from "@/lib/tour-duration";
 
 interface ConfirmedBookingModalProps {
   booking: ConfirmedBooking | null;
@@ -725,7 +726,7 @@ export default function ConfirmedBookingModal({
                                 Duration
                               </p>
                               <p className="text-xs font-semibold">
-                                {bookingData.tourDuration}
+                                {formatTourDuration(bookingData.tourDuration)}
                               </p>
                             </div>
                           )}
@@ -764,7 +765,7 @@ export default function ConfirmedBookingModal({
                                 Duration
                               </p>
                               <p className="text-xs font-semibold">
-                                {bookingData.tourDuration}
+                                {formatTourDuration(bookingData.tourDuration)}
                               </p>
                             </div>
                           )}

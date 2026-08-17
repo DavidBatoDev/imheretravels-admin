@@ -1,3 +1,4 @@
+import { computeEligibleInstallmentDatesLocal } from "@/lib/installment-schedule";
 import { BookingSheetColumn } from "@/types/booking-sheet-column";
 
 export const p3DueDateColumn: BookingSheetColumn = {
@@ -122,35 +123,8 @@ export default function getP3DueDateFunction(
   const res = new Date(ry, rm - 1, rd);
   const [ty, tm, td] = tourYmd.split("-").map(Number);
   const tour = new Date(ty, tm - 1, td);
-  const monthCount =
-    (tour.getFullYear() - res.getFullYear()) * 12 +
-    (tour.getMonth() - res.getMonth()) +
-    1;
-
-  const DAY_MS = 86400000;
-  // Generate the last Friday of each month
-  const lastDayDates = Array.from({ length: monthCount }, (_, i) => {
-    const lastDay = new Date(res.getFullYear(), res.getMonth() + i + 1, 0);
-    const offset = (lastDay.getDay() - 5 + 7) % 7; // days back to last Friday
-    return new Date(res.getFullYear(), res.getMonth() + i + 1, -offset);
-  });
-  // Bookings made on/after June 1 2026 use the 2-month-before-tour cutoff.
-  const POLICY_DATE = new Date(2026, 5, 1);
-  const isNewPolicy = res.getTime() >= POLICY_DATE.getTime();
-  const twoMonthsBeforeTour = new Date(
-    tour.getFullYear(),
-    tour.getMonth() - 2,
-    tour.getDate(),
-  );
-  const cutoffDate = isNewPolicy
-    ? twoMonthsBeforeTour
-    : new Date(tour.getTime() - 3 * DAY_MS);
-
-  const validDates = lastDayDates.filter(
-    (d) =>
-      d.getTime() > res.getTime() + 2 * DAY_MS &&
-      d.getTime() <= cutoffDate.getTime(),
-  );
+  // Canonical rule lives in lib/installment-schedule.ts — do not reimplement.
+  const validDates = computeEligibleInstallmentDatesLocal(res, tour);
 
   if (validDates.length < 3) return "";
   const fmt = (d: Date) =>

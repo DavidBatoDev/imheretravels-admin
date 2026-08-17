@@ -1,3 +1,5 @@
+import { computeEligibleInstallmentDatesLocal } from "@/lib/installment-schedule";
+
 export type AvailablePaymentTerm = {
   term: string;
   isLastMinute: boolean;
@@ -16,8 +18,6 @@ export type GeneratePaymentScheduleInput = {
   depositAmount: number;
   fromDate?: Date;
 };
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 const toLocalDate = (dateStr: string): Date | null => {
   if (!dateStr) return null;
@@ -46,44 +46,8 @@ const getEligibleLastFridayDates = (
   if (!tourDate) return [];
   tourDate.setHours(0, 0, 0, 0);
 
-  const monthCount =
-    (tourDate.getFullYear() - reservationDate.getFullYear()) * 12 +
-    (tourDate.getMonth() - reservationDate.getMonth()) +
-    1;
-
-  if (monthCount <= 0) return [];
-
-  const lastFridayDates: Date[] = Array.from({ length: monthCount }, (_, i) => {
-    const lastDay = new Date(
-      reservationDate.getFullYear(),
-      reservationDate.getMonth() + i + 1,
-      0,
-    );
-    const offset = (lastDay.getDay() - 5 + 7) % 7;
-    return new Date(
-      reservationDate.getFullYear(),
-      reservationDate.getMonth() + i + 1,
-      -offset,
-    );
-  });
-
-  // Bookings made on/after June 1 2026: 2-month-before-tour cutoff.
-  const POLICY_DATE = new Date(2026, 5, 1);
-  const isNewPolicy = reservationDate.getTime() >= POLICY_DATE.getTime();
-  const twoMonthsBeforeTour = new Date(
-    tourDate.getFullYear(),
-    tourDate.getMonth() - 2,
-    tourDate.getDate(),
-  );
-  const cutoffDate = isNewPolicy
-    ? twoMonthsBeforeTour
-    : new Date(tourDate.getTime() - 3 * DAY_MS);
-
-  return lastFridayDates.filter(
-    (date) =>
-      date.getTime() > reservationDate.getTime() + 2 * DAY_MS &&
-      date.getTime() <= cutoffDate.getTime(),
-  );
+  // Canonical rule lives in lib/installment-schedule.ts — do not reimplement.
+  return computeEligibleInstallmentDatesLocal(reservationDate, tourDate);
 };
 
 export const calculateDaysBetween = (

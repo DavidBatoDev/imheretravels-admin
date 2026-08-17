@@ -1,3 +1,4 @@
+import { computeEligibleInstallmentDatesLocal } from "@/lib/installment-schedule";
 import { BookingSheetColumn } from "@/types/booking-sheet-column";
 
 export const p1DueDateColumn: BookingSheetColumn = {
@@ -224,40 +225,8 @@ export default function getP1DueDateFunction(
   // If either is still invalid (paranoid guard)
   if (isNaN(res.getTime()) || isNaN(tour.getTime())) return "ERROR";
 
-  // monthCount = DATEDIF(res, tour, "M") + 1
-  const monthCount =
-    (tour.getFullYear() - res.getFullYear()) * 12 +
-    (tour.getMonth() - res.getMonth()) +
-    1;
-
-  if (monthCount <= 0) return "";
-
-  // generate the last Friday of each month between res and tour (1..monthCount)
-  const lastDayDates: Date[] = Array.from({ length: monthCount }, (_, i) => {
-    const lastDay = new Date(res.getFullYear(), res.getMonth() + i + 1, 0);
-    const offset = (lastDay.getDay() - 5 + 7) % 7; // days back to last Friday
-    return new Date(res.getFullYear(), res.getMonth() + i + 1, -offset);
-  });
-
-  // Bookings made on/after June 1 2026 use the 2-month-before-tour cutoff.
-  // Older bookings keep the original 3-day cutoff so their schedules are unchanged.
-  const DAY_MS = 24 * 60 * 60 * 1000;
-  const POLICY_DATE = new Date(2026, 5, 1);
-  const isNewPolicy = res.getTime() >= POLICY_DATE.getTime();
-  const twoMonthsBeforeTour = new Date(
-    tour.getFullYear(),
-    tour.getMonth() - 2,
-    tour.getDate(),
-  );
-  const cutoffDate = isNewPolicy
-    ? twoMonthsBeforeTour
-    : new Date(tour.getTime() - 3 * DAY_MS);
-
-  const validDates = lastDayDates.filter(
-    (d) =>
-      d.getTime() > res.getTime() + 2 * DAY_MS &&
-      d.getTime() <= cutoffDate.getTime(),
-  );
+  // Canonical rule lives in lib/installment-schedule.ts — do not reimplement.
+  const validDates = computeEligibleInstallmentDatesLocal(res, tour);
 
   if (validDates.length < 1) return "";
 

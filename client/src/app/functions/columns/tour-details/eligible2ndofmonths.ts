@@ -1,3 +1,4 @@
+import { computeEligibleInstallmentDatesLocal } from "@/lib/installment-schedule";
 import { BookingSheetColumn } from "@/types/booking-sheet-column";
 
 export const eligible2ndofmonthsColumn: BookingSheetColumn = {
@@ -38,9 +39,12 @@ export const eligible2ndofmonthsColumn: BookingSheetColumn = {
 // Column Function Implementation
 /**
  * NOTE:
- * Logic is aligned with current installment due-date rules:
+ * Delegates to the canonical rule in lib/installment-schedule.ts:
  * - candidate date per month = last Friday of that month
- * - valid if date is in (reservationDate + 2 days, tourDate - 3 days]
+ * - valid if in (reservationDate + 2 days, cutoff], where cutoff is
+ *   tourDate - 2 calendar months (bookings from 1 Jun 2026) or tourDate - 3 days
+ * - plus snap-back to the last Friday before the cutoff when the monthly
+ *   anchor overshoots it
  *
  * Returns: number | ""  (empty string if either date is blank/invalid)
  */
@@ -130,43 +134,6 @@ export default function eligibleSecondsCountFunction(
   const resD = startOfDay(res);
   const tourD = startOfDay(tour);
 
-  const monthCount =
-    (tourD.getFullYear() - resD.getFullYear()) * 12 +
-    (tourD.getMonth() - resD.getMonth()) +
-    1;
-
-  if (monthCount <= 0) return 0;
-
-  const DAY_MS = 24 * 60 * 60 * 1000;
-
-  const installmentDates: Date[] = Array.from(
-    { length: monthCount },
-    (_, i) => {
-      const lastDay = new Date(resD.getFullYear(), resD.getMonth() + i + 1, 0);
-      const offset = (lastDay.getDay() - 5 + 7) % 7; // days back to last Friday
-      return new Date(resD.getFullYear(), resD.getMonth() + i + 1, -offset);
-    },
-  );
-
-  // Bookings made on/after June 1 2026: use the 2-month-before-tour cutoff so
-  // that no installment can be scheduled after the final payment deadline.
-  // Pre-policy bookings keep the original 3-day cutoff.
-  const POLICY_DATE = new Date(2026, 5, 1);
-  const isNewPolicy = resD.getTime() >= POLICY_DATE.getTime();
-  const twoMonthsBeforeTour = new Date(
-    tourD.getFullYear(),
-    tourD.getMonth() - 2,
-    tourD.getDate(),
-  );
-  const cutoffDate = isNewPolicy
-    ? twoMonthsBeforeTour
-    : new Date(tourD.getTime() - 3 * DAY_MS);
-
-  const eligible = installmentDates.filter(
-    (d) =>
-      d.getTime() > resD.getTime() + 2 * DAY_MS &&
-      d.getTime() <= cutoffDate.getTime(),
-  );
-
-  return eligible.length;
+  // Canonical rule lives in lib/installment-schedule.ts — do not reimplement.
+  return computeEligibleInstallmentDatesLocal(resD, tourD).length;
 }

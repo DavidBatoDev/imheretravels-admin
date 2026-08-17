@@ -7,6 +7,8 @@
 
 import { Timestamp } from "firebase/firestore";
 
+import { computeEligibleInstallmentDates } from "./installment-schedule";
+
 // ============================================================================
 // DATE UTILITIES
 // ============================================================================
@@ -392,10 +394,10 @@ export function getDaysBetweenDates(
 }
 
 /**
- * Compute the eligible last-Friday-of-month installment dates for a booking:
- * last Friday dates strictly after (reservationDate + 2d) and on/before the
- * policy cutoff (2 months before tourDate for bookings made on/after
- * 1 Jun 2026, or tourDate - 3d for older bookings).
+ * Compute the eligible last-Friday-of-month installment dates for a booking.
+ *
+ * Thin adapter over the canonical rule in lib/installment-schedule.ts — this
+ * function only handles input parsing. Do not reimplement the rule here.
  *
  * Shared core for getEligible2ndOfMonths (count) and
  * generateInstallmentDueDates (formatted dates) so both stay in lockstep.
@@ -409,45 +411,9 @@ export function getEligibleInstallmentDates(
 
   if (!res || !tour) return [];
 
-  const resUTC = normalizeUTCDate(res);
-  const tourUTC = normalizeUTCDate(tour);
-
-  const monthCount =
-    (tourUTC.getUTCFullYear() - resUTC.getUTCFullYear()) * 12 +
-    (tourUTC.getUTCMonth() - resUTC.getUTCMonth()) +
-    1;
-
-  if (monthCount <= 0) return [];
-
-  const DAY_MS = 24 * 60 * 60 * 1000;
-  const installmentDates: Date[] = Array.from(
-    { length: monthCount },
-    (_, i) => {
-      const t = Date.UTC(
-        resUTC.getUTCFullYear(),
-        resUTC.getUTCMonth() + i + 1,
-        0,
-      );
-      const lastDay = new Date(t);
-      const offset = (lastDay.getUTCDay() - 5 + 7) % 7; // days back to last Friday
-      return new Date(t - offset * DAY_MS);
-    },
-  );
-
-  // Bookings made on/after June 1 2026: 2-month-before-tour cutoff.
-  const POLICY_DATE = new Date(Date.UTC(2026, 5, 1));
-  const isNewPolicy = resUTC.getTime() >= POLICY_DATE.getTime();
-  const twoMonthsBeforeTour = new Date(
-    Date.UTC(tourUTC.getUTCFullYear(), tourUTC.getUTCMonth() - 2, tourUTC.getUTCDate()),
-  );
-  const cutoffDate = isNewPolicy
-    ? twoMonthsBeforeTour
-    : new Date(tourUTC.getTime() - 3 * DAY_MS);
-
-  return installmentDates.filter(
-    (d) =>
-      d.getTime() > resUTC.getTime() + 2 * DAY_MS &&
-      d.getTime() <= cutoffDate.getTime(),
+  return computeEligibleInstallmentDates(
+    normalizeUTCDate(res),
+    normalizeUTCDate(tour),
   );
 }
 

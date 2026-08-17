@@ -1,7 +1,7 @@
 /**
  * Explicit Firebase project selection for scripts.
  *
- * .env.local carries both projects' credentials — one block active, one
+ * The local env file carries both projects' credentials — one block active, one
  * commented — and which is which has been flipped back and forth. Reading
  * whatever happens to be uncommented makes a script's target invisible at the
  * call site, which is how you run a "dev" migration against production.
@@ -34,20 +34,33 @@ function readAll(raw: string, key: string): string[] {
 }
 
 export function loadCredentials(target: Target): Creds {
-  const file = path.resolve(__dirname, "..", "..", ".env.local");
+  const clientRoot = path.resolve(__dirname, "..", "..");
+  const localFile = path.join(clientRoot, ".env.local");
+  const fallbackFile = path.join(clientRoot, ".env");
+  const file = fs.existsSync(localFile) ? localFile : fallbackFile;
+
+  if (!fs.existsSync(file)) {
+    throw new Error(
+      `Firebase credentials file not found. Expected ${localFile} or ${fallbackFile}.`,
+    );
+  }
+
   const raw = fs.readFileSync(file, "utf8");
+  const fileName = path.basename(file);
 
   const [ids, emails, keys] = KEYS.map((k) => readAll(raw, k));
   if (ids.length !== emails.length || ids.length !== keys.length) {
     throw new Error(
-      `.env.local is malformed: found ${ids.length} project ids, ${emails.length} client emails, ${keys.length} private keys — each block must define all three.`,
+      `${fileName} is malformed: found ${ids.length} project ids, ${emails.length} client emails, ${keys.length} private keys — each block must define all three.`,
     );
   }
 
   // Blocks appear in the same order for every key, so index i is one block.
   const idx = ids.findIndex((id) => id.includes("dev") === (target === "dev"));
   if (idx === -1) {
-    throw new Error(`No ${target} credentials found in .env.local (saw: ${ids.join(", ")})`);
+    throw new Error(
+      `No ${target} credentials found in ${fileName} (saw: ${ids.join(", ")})`,
+    );
   }
 
   return {

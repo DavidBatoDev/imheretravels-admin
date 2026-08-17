@@ -12,6 +12,92 @@ export type PatchNote = {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    slug: "installment-snap-back",
+    title: "Instalment Snap-Back — Recovering a Lost Payment Term",
+    description:
+      "When the last Friday of a month falls just past the 2-month payment deadline, the instalment is no longer dropped. The schedule now falls back to the last Friday that still meets the deadline, so bookings keep a term they previously lost.",
+    date: "2026-08-17",
+    version: "1.3.0",
+    categories: ["feature", "improvement"],
+    content: `# Instalment Snap-Back — Recovering a Lost Payment Term
+
+## Summary
+
+Instalments are anchored to the **last Friday of each month**, and every booking must be paid in full **2 calendar months before departure**. When those two rules collide — the month's last Friday lands a few days past the deadline — the instalment used to be **dropped entirely**, costing the traveller a payment term.
+
+The schedule now **snaps back** to the last Friday that still meets the deadline instead.
+
+---
+
+## The case that prompted this
+
+Booking \`SB-BZT-B-20261227-ED003\` — Brazil's Treasures, tour **Dec 27, 2026**, £1,699 total, £250 reservation fee.
+
+| | Eligible Fridays | Offered |
+|---|---|---|
+| Before | Aug 28, Sep 25 | **P2** — £724.50 x 2 |
+| After | Aug 28, Sep 25, **Oct 23** | **P3** — £483.00 x 3 |
+
+The deadline is Oct 27 (Dec 27 minus 2 calendar months). October's last Friday is **Oct 30** — three days late, so the term was dropped. But **Fri Oct 23** is 65 days before the tour and well within the deadline. The schedule was never infeasible; the rule simply had no fallback.
+
+---
+
+## The rule
+
+> If a booking already has at least one eligible Friday and fewer than 4 terms,
+> append the **last Friday on or before the deadline** — provided it is at least
+> **14 days** after the previous instalment.
+
+### Bounds
+
+Measured across 230,442 reservation-date x tour-date combinations:
+
+| Measure | Min | Max | Avg |
+|---|---|---|---|
+| Days moved back from the overshooting anchor | 7 | 21 | 12.1 |
+| Gap from the previous instalment | 14 | 28 | 19 |
+| Final payment's lead time before the tour | 59 | 68 | 63.9 |
+| Slack under the deadline | 0 | 6 | 3 |
+
+About **12.4%** of bookings gain one extra term. The monthly rhythm is preserved — only ~2.3% of all gaps become non-monthly, and average spacing barely moves (P1→P2 30.3 → 29.7 days).
+
+---
+
+## What does *not* change
+
+- **Existing due dates never move.** Snap-back only ever *appends* a date, so P1/P2/P3 stay identical for every booking. Some bookings simply gain one more option.
+- **Legacy bookings** (reserved before Jun 1, 2026) are excluded — they keep the original 3-day cutoff and their schedules are untouched.
+- **Last Minute Bookings stay last-minute.** Snap-back requires at least one existing eligible Friday, so a booking with zero slots still requires full payment within 48 hours. Scenarios C and D of the 2-Month Final Payment Deadline policy are unaffected.
+- **The 4-term cap holds.** A booking already qualifying for P4 gains nothing.
+
+---
+
+## The 14-day floor
+
+Without a minimum gap, snap-back could schedule a payment only **7 days** after the previous one (12,159 of the simulated scenarios). The floor rejects those, leaving the term dropped as before. Minimum spacing is therefore 14 days by construction.
+
+---
+
+## Files Changed
+
+| File | Change |
+|---|---|
+| \`lib/installment-schedule.ts\` | **New.** Canonical rule + snap-back. Single source of truth. |
+| \`lib/booking-calculations.ts\` | \`getEligibleInstallmentDates\` now delegates; parsing only |
+| \`reservation-booking-form/utils/bookingFlow.ts\` | Form preview delegates |
+| \`functions/columns/tour-details/eligible2ndofmonths.ts\` | Delegates |
+| \`functions/columns/payment-term-{1,2,3,4}/pN-due-date.ts\` | Delegate |
+| \`lib/installment-schedule.test.ts\` | **New.** 14 tests incl. invariant sweeps |
+| \`scripts/backfill-installment-snapback.ts\` | **New.** Dry-run-by-default backfill |
+
+### Consolidation
+
+The last-Friday + cutoff rule previously existed in **six near-identical copies** — one using UTC arithmetic, five using local time. They had drifted before (\`scripts/audit-booking-status-payment-term-mismatch.ts\` exists to detect exactly that). All six now delegate to \`lib/installment-schedule.ts\`.
+
+This also fixes a latent timezone bug: \`tourDate\` is stored normalized to 01:00 UTC, so the local-time copies computed the previous calendar day in negative-offset timezones and could land on the wrong side of the cutoff. The shared core works on timezone-agnostic civil dates.
+`,
+  },
+  {
     slug: "stripe-only-payments",
     title: "Revolut & Ulster Removed — Stripe-Only Payments",
     description:

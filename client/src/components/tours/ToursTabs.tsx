@@ -63,6 +63,9 @@ export default function ToursTabs() {
       </div>
 
       <Tabs value={activeTab} onValueChange={onChange} className="w-full">
+        {/* Sticky under the dashboard navbar (h-16) so the tabs stay reachable
+            while scrolling a long tour list. */}
+        <div className="sticky top-0 z-30 -mx-1 bg-background px-1 py-2 lg:top-16">
         <TabsList className="grid w-full grid-cols-3 bg-muted border border-border">
           <TabsTrigger
             value="packages"
@@ -83,6 +86,7 @@ export default function ToursTabs() {
             Discounted Tours
           </TabsTrigger>
         </TabsList>
+        </div>
 
         <TabsContent value="packages" className="mt-6">
           <ToursList view="regular" />

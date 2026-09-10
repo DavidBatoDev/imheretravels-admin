@@ -14,6 +14,7 @@ import { TourPackage } from "@/types/tours";
 import TravelDatesEditor from "./TravelDatesEditor";
 import type { PublishIssue } from "@/lib/tour-publish-validation";
 import { deriveHostedTourCode } from "@/lib/hosted-tour-code";
+import AttachedHostPicker from "./AttachedHostPicker";
 
 const CURRENCY_SYM: Record<string, string> = { USD: "$", EUR: "£", GBP: "£" };
 
@@ -309,6 +310,11 @@ export default function TourSettingsPanel({ open, onClose, form, tour, issues = 
               <p className="mt-1 text-[11px] text-dark-gray">
                 Optional — not every tour host needs a resident host profile.
               </p>
+              {/* Attaching writes residentHost.attachedTourIds directly, so it
+                  only makes sense once the tour exists and is flagged hosted. */}
+              {(w("isHosted") ?? false) && (
+                <AttachedHostPicker tourId={tour?.id} />
+              )}
             </section>
 
             {/* ── Default Pricing ── */}

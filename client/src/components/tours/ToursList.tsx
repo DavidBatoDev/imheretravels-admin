@@ -362,15 +362,29 @@ export default function ToursList({ view = "all" }: ToursListProps) {
 
   // Duplicate tour → creates a fresh DRAFT copy; the onSnapshot list refreshes
   // itself, so no manual refetch is needed.
-  const handleDuplicateTour = async (tour: TourPackage) => {
+  const handleDuplicateTour = async (
+    tour: TourPackage,
+    options?: { isHosted?: boolean },
+  ) => {
     if (duplicatingId) return; // guard against double-clicks
     setDuplicatingId(tour.id);
     try {
-      await duplicateTour(tour.id);
+      const newId = await duplicateTour(tour.id, options);
+      const kind =
+        options?.isHosted === true
+          ? " hosted tour"
+          : options?.isHosted === false
+            ? " tour"
+            : "";
       toast({
         title: "Success",
-        description: `Duplicated "${tour.name}" as a draft.`,
+        description: `Duplicated "${tour.name}" as a draft${kind}.`,
       });
+      // The "as hosted / as tour" variants exist to be edited right away, so
+      // open the copy; a plain Duplicate leaves the admin on the list.
+      if (options?.isHosted !== undefined) {
+        router.push(`/tours/${newId}/edit`);
+      }
     } catch (error) {
       console.error("Error duplicating tour:", error);
       toast({
@@ -751,8 +765,8 @@ export default function ToursList({ view = "all" }: ToursListProps) {
         </div>
       </div>
 
-      {/* Filters */}
-      <Card className="border border-royal-purple/20 dark:border-border shadow">
+      {/* Filters — sticky right below the sticky tab bar. */}
+      <Card className="sticky top-[3.5rem] z-20 border border-royal-purple/20 dark:border-border shadow lg:top-[7.5rem]">
         <CardContent className="p-6">
           <div className="flex flex-col gap-2 md:flex-row md:gap-4">
             <div className="flex-1">
@@ -922,6 +936,27 @@ export default function ToursList({ view = "all" }: ToursListProps) {
                           {duplicatingId === tour.id
                             ? "Duplicating…"
                             : "Duplicate"}
+                        </DropdownMenuItem>
+                        {/* Same copy, with the hosted flag forced on/off so the
+                            admin can spin a hosted variant off a normal tour
+                            (and vice versa) without a second edit pass. */}
+                        <DropdownMenuItem
+                          onClick={() =>
+                            handleDuplicateTour(tour, { isHosted: true })
+                          }
+                          disabled={duplicatingId === tour.id}
+                        >
+                          <Users className="h-4 w-4 mr-2" />
+                          Duplicate as Hosted Tour
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() =>
+                            handleDuplicateTour(tour, { isHosted: false })
+                          }
+                          disabled={duplicatingId === tour.id}
+                        >
+                          <MapPin className="h-4 w-4 mr-2" />
+                          Duplicate as Tour
                         </DropdownMenuItem>
                         {tour.status !== "archived" && (
                           <DropdownMenuItem

@@ -110,7 +110,10 @@ export async function createTour(
  *
  * @returns the new tour's id.
  */
-export async function duplicateTour(id: string): Promise<string> {
+export async function duplicateTour(
+  id: string,
+  options?: { isHosted?: boolean },
+): Promise<string> {
   const source = await getTourById(id);
   if (!source) {
     throw new Error("Tour to duplicate was not found");
@@ -165,7 +168,10 @@ export async function duplicateTour(id: string): Promise<string> {
 
   // Carry over optional presentation fields only when present (no collision risk).
   if (source.destinations) (payload as any).destinations = source.destinations;
-  if (source.isHosted !== undefined) payload.isHosted = source.isHosted;
+  // `options.isHosted` lets the caller force the copy's hosted flag ("Duplicate
+  // as Hosted Tour" / "Duplicate as Tour"); otherwise it mirrors the source.
+  if (options?.isHosted !== undefined) payload.isHosted = options.isHosted;
+  else if (source.isHosted !== undefined) payload.isHosted = source.isHosted;
   if (source.brochureLink) payload.brochureLink = source.brochureLink;
   if (source.preDeparturePack) payload.preDeparturePack = source.preDeparturePack;
   if (source.depositNote) (payload as any).depositNote = source.depositNote;

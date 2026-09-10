@@ -14,7 +14,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
   Save, ArrowLeft, Plus, X, Settings, Image as ImageIcon, Camera, Pencil,
-  Link2, Calendar, ArrowRight, Undo2, Redo2, RotateCcw,
+  Link2, Calendar, ArrowRight, Undo2, Redo2, RotateCcw, ChevronLeft, ChevronRight,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -267,7 +267,7 @@ export default function ResidentHostForm({ onClose, onSubmit, host, isLoading = 
   const gallerySlides = (w("gallerySlides") as GalleryMediaItem[][][]) ?? [];
 
   const { fields: introFields, append: addIntro, remove: rmIntro } = useFieldArray({ control: form.control, name: "intro" as any });
-  const { fields: tripFields, append: addTrip, remove: rmTrip } = useFieldArray({ control: form.control, name: "upcomingTrips" });
+  const { fields: tripFields, prepend: addTrip, remove: rmTrip, move: moveTrip } = useFieldArray({ control: form.control, name: "upcomingTrips" });
   const { fields: whyFields, append: addWhyField, remove: rmWhyField } = useFieldArray({ control: form.control, name: "whyTravel" as any });
   const { fields: howFields, append: addHow, remove: rmHow } = useFieldArray({ control: form.control, name: "howItWorks" as any });
 
@@ -600,16 +600,41 @@ export default function ResidentHostForm({ onClose, onSubmit, host, isLoading = 
               </div>
 
               <ul className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                {/* Add trip sits first so a new trip lands leftmost — matching
+                    www, which renders this list in authored order. */}
+                <li>
+                  <button type="button"
+                    onClick={() => (addTrip as any)({ name: "", dates: "TBA", tourId: "", tourSlug: "", image: "", imageAlt: "", duration: "", description: "", price: "", priceNote: "", comingSoon: false })}
+                    className="flex h-full min-h-[280px] w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-crimson-red/40 text-crimson-red transition-colors hover:border-crimson-red hover:bg-crimson-red/5">
+                    <Plus className="h-6 w-6" />
+                    <span className="font-body text-sm font-semibold">Add Trip</span>
+                  </button>
+                </li>
+
                 {tripFields.map((field, i) => {
                   const trip = trips[i] ?? {};
                   const isTBA = !trip.duration;
                   return (
                     <li key={field.id} className="group/card relative flex h-full flex-col overflow-hidden rounded-lg bg-white shadow-small">
-                      {/* Remove card */}
-                      <button type="button" onClick={() => rmTrip(i)}
-                        className="absolute right-2 top-2 z-20 grid size-7 place-items-center rounded-full bg-white/90 text-crimson-red opacity-0 shadow-small transition-opacity group-hover/card:opacity-100">
-                        <X className="h-4 w-4" />
-                      </button>
+                      {/* Card controls — reorder (this order is exactly what www
+                          renders, left to right) and remove. */}
+                      <div className="absolute right-2 top-2 z-20 flex gap-1 opacity-0 transition-opacity group-hover/card:opacity-100">
+                        <button type="button" onClick={() => moveTrip(i, i - 1)} disabled={i === 0}
+                          title="Move earlier"
+                          className="grid size-7 place-items-center rounded-full bg-white/90 text-midnight shadow-small disabled:opacity-30">
+                          <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <button type="button" onClick={() => moveTrip(i, i + 1)} disabled={i === tripFields.length - 1}
+                          title="Move later"
+                          className="grid size-7 place-items-center rounded-full bg-white/90 text-midnight shadow-small disabled:opacity-30">
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                        <button type="button" onClick={() => rmTrip(i)}
+                          title="Remove trip"
+                          className="grid size-7 place-items-center rounded-full bg-white/90 text-crimson-red shadow-small">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
 
                       {/* Image */}
                       <div className="group/img relative aspect-[4/3] w-full overflow-hidden bg-light-grey">
@@ -665,7 +690,7 @@ export default function ResidentHostForm({ onClose, onSubmit, host, isLoading = 
                         {(() => {
                           const linkedId = trip.tourId || tours.find((t) => t.slug === trip.tourSlug)?.id || "";
                           return (
-                            <div className="mt-3 flex items-center gap-2 rounded-lg border border-dashed border-light-grey p-2">
+                            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-light-grey p-2">
                               <Link2 className="h-3.5 w-3.5 shrink-0 text-dark-gray/50" />
                               <select
                                 value={linkedId}
@@ -675,7 +700,7 @@ export default function ResidentHostForm({ onClose, onSubmit, host, isLoading = 
                                   sv(`upcomingTrips.${i}.tourId`, id || undefined);
                                   sv(`upcomingTrips.${i}.tourSlug`, t?.slug ?? "");
                                 }}
-                                className="flex-1 rounded-md border border-border bg-white px-2 py-1 text-xs text-dark-gray outline-none focus:ring-2 focus:ring-crimson-red/40"
+                                className="min-w-0 flex-1 basis-40 rounded-md border border-border bg-white px-2 py-1 text-xs text-dark-gray outline-none focus:ring-2 focus:ring-crimson-red/40"
                               >
                                 <option value="">— Link a tour (optional) —</option>
                                 {tours.map((t) => (
@@ -685,7 +710,7 @@ export default function ResidentHostForm({ onClose, onSubmit, host, isLoading = 
                                 ))}
                               </select>
                               {linkedId && (
-                                <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-crimson-red px-3 py-1 font-body text-b4-desktop font-medium text-white opacity-80">
+                                <span className="ml-auto inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-crimson-red px-3 py-1 font-body text-b4-desktop font-medium text-white opacity-80">
                                   View Tour <ArrowRight className="h-3 w-3" />
                                 </span>
                               )}
@@ -697,15 +722,6 @@ export default function ResidentHostForm({ onClose, onSubmit, host, isLoading = 
                   );
                 })}
 
-                {/* Add trip card */}
-                <li>
-                  <button type="button"
-                    onClick={() => (addTrip as any)({ name: "", dates: "TBA", tourId: "", tourSlug: "", image: "", imageAlt: "", duration: "", description: "", price: "", priceNote: "", comingSoon: false })}
-                    className="flex h-full min-h-[280px] w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-crimson-red/40 text-crimson-red transition-colors hover:border-crimson-red hover:bg-crimson-red/5">
-                    <Plus className="h-6 w-6" />
-                    <span className="font-body text-sm font-semibold">Add Trip</span>
-                  </button>
-                </li>
               </ul>
             </div>
           </section>

@@ -266,7 +266,7 @@ export default function ReviewCard({
         </div>
 
         {hasMedia && (
-          <div className="relative w-24 shrink-0 self-stretch sm:w-28 md:w-40">
+          <div className="relative w-24 shrink-0 self-stretch empty:hidden sm:w-28 md:w-40">
             <ReviewPhotos
               photos={review.photos}
               videos={review.videos}

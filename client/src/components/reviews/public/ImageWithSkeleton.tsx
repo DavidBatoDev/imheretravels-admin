@@ -33,6 +33,8 @@ export type ImageWithSkeletonProps = Omit<
   rounded?: Rounded;
   /** Swapped in if the image errors (default: site fallback). */
   fallbackSrc?: string;
+  /** Handle a failed image instead of displaying the fallback. */
+  onError?: ImageProps["onError"];
 };
 
 /**
@@ -54,6 +56,7 @@ export default function ImageWithSkeleton({
   src,
   alt,
   style,
+  onError,
   ...rest
 }: ImageWithSkeletonProps) {
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -97,7 +100,11 @@ export default function ImageWithSkeleton({
       ].join(" ")}
       style={style}
       onLoad={() => setLoaded(true)}
-      onError={() => {
+      onError={(event) => {
+        if (onError) {
+          onError(event);
+          return;
+        }
         if (fallbackSrc && currentSrc !== fallbackSrc) {
           setLoaded(false);
           setCurrentSrc(fallbackSrc);

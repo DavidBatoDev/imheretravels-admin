@@ -41,16 +41,32 @@ export default function ReviewPhotos({
   /** Compact list-row mode: one full-height cover tile with a `+N` badge. */
   rail?: boolean;
 }) {
+  const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
   // Videos first — they're the most engaging thing to open.
   const media: MediaItem[] = [
-    ...videos.map((v) => ({ type: "video" as const, src: v.src, poster: v.poster })),
-    ...photos.map((src) => ({ type: "image" as const, src })),
+    ...videos.map((v) => ({
+      type: "video" as const,
+      src: v.src,
+      poster: v.poster && !failedImages.has(v.poster) ? v.poster : undefined,
+    })),
+    ...photos
+      .filter((src) => src.trim() && !failedImages.has(src))
+      .map((src) => ({ type: "image" as const, src })),
   ];
   const [active, setActive] = useState<number | null>(null);
   const [mounted, setMounted] = useState(false);
   const touchStartX = useRef<number | null>(null);
   const viewerRef = useRef<HTMLDivElement>(null);
   const reduce = !!useReducedMotion();
+
+  // Image error events don't expose HTTP status. Hide any failed photo (including
+  // Google's 403 responses), and keep videos playable if only their poster fails.
+  const hideFailedImage = (src: string) => {
+    setFailedImages((previous) => new Set(previous).add(src));
+    // Filtering changes gallery indexes; close the viewer to release its focus
+    // trap and scroll lock, including when the last remaining photo fails.
+    setActive(null);
+  };
 
   // Trap focus inside the viewer while it's open; focus returns to the tile that
   // opened it on close.
@@ -87,11 +103,12 @@ export default function ReviewPhotos({
    */
   const tile = (index: number, className: string, overflow = 0) => (
     <MediaTile
-      key={index}
+      key={`${media[index].type}:${media[index].src}`}
       item={media[index]}
       index={index}
       authorAlt={authorAlt}
       onOpen={setActive}
+      onImageError={hideFailedImage}
       className={className}
       overflow={overflow}
     />
@@ -113,7 +130,9 @@ export default function ReviewPhotos({
       >
         {thumb ? (
           <ImageWithSkeleton
+            key={thumb}
             src={thumb}
+            onError={() => hideFailedImage(thumb)}
             alt={`Trip ${cover.type} from ${authorAlt}`}
             fill
             sizes="160px"
@@ -247,6 +266,7 @@ export default function ReviewPhotos({
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={current.src}
+                        onError={() => hideFailedImage(current.src)}
                         alt={`Trip photo from ${authorAlt}`}
                         className="max-h-[85vh] max-w-[92vw] rounded-brand-md object-contain"
                       />
@@ -273,6 +293,7 @@ function MediaTile({
   index,
   authorAlt,
   onOpen,
+  onImageError,
   className,
   overflow = 0,
 }: {
@@ -280,6 +301,7 @@ function MediaTile({
   index: number;
   authorAlt: string;
   onOpen: (index: number) => void;
+  onImageError: (src: string) => void;
   className: string;
   overflow?: number;
 }) {
@@ -297,7 +319,9 @@ function MediaTile({
     >
       {thumb ? (
         <ImageWithSkeleton
+          key={thumb}
           src={thumb}
+          onError={() => onImageError(thumb)}
           alt={`Trip ${item.type} from ${authorAlt}`}
           fill
           sizes="120px"

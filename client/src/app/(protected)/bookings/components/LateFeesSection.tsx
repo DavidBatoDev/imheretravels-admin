@@ -306,7 +306,7 @@ export default function LateFeesSection() {
           isPaid,
           noticeStatus: noticeLink ? "sent" : "none",
           noticeLink,
-          schedulePolicy: getSchedulePolicy(reservationDate),
+          schedulePolicy: getSchedulePolicy(reservationDate, booking.tourDate),
         });
       }
     }

@@ -94,6 +94,7 @@
     "fix:manual-credit": "tsx scripts/fix-manual-credit-bookings.ts",
     "report:all-tours": "tsx scripts/report-all-tours.ts",
     "report:review-blocked": "tsx scripts/report-review-blocked.ts",
+    "report:2027-bookings": "tsx scripts/report-2027-bookings.ts",
     "set:tour-code": "tsx scripts/set-tour-code.ts",
     "seed:dev": "tsx scripts/seed-dev-from-prod.ts"
   },

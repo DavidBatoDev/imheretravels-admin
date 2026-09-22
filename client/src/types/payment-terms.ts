@@ -213,18 +213,20 @@ export const PAYMENT_PLAN_TYPE_DESCRIPTIONS: Record<PaymentPlanType, string> = {
     "Booking not allowed - Less than 3 days between reservation and tour date",
   full_payment_48hrs:
     "Immediate full payment required within 2 days of booking", // Updated from 48 hours to 2 days
-  // Instalments fall on the last Friday of each month, and the balance must be
-  // settled 2 calendar months before the tour. Where that deadline cuts off a
-  // month's last Friday, the schedule snaps back to the last Friday that still
-  // meets it (see lib/installment-schedule.ts).
+  // Instalments fall on a monthly Friday anchor — the last Friday of each
+  // month, or the second-to-last Friday for 2027+ tours reserved after the
+  // 2027 policy date — and the balance must be settled 2 calendar months
+  // before the tour. Where that deadline cuts off a month's anchor, the
+  // schedule snaps back to the latest anchor that still meets it
+  // (see lib/installment-schedule.ts).
   p1_single_installment:
-    "Balance paid in full on one last-Friday-of-month date",
+    "Balance paid in full on one monthly Friday due date",
   p2_two_installments:
-    "Balance split evenly across 2 last-Friday-of-month dates",
+    "Balance split evenly across 2 monthly Friday due dates",
   p3_three_installments:
-    "Balance split evenly across 3 last-Friday-of-month dates",
+    "Balance split evenly across 3 monthly Friday due dates",
   p4_four_installments:
-    "Balance split evenly across 4 last-Friday-of-month dates",
+    "Balance split evenly across 4 monthly Friday due dates",
   custom: "Custom payment plan configuration",
 };
 

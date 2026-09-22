@@ -1207,6 +1207,7 @@ export default function BookingDetailModal({
                           </p>
                           <SchedulePolicyBadge
                             reservationDate={currentBooking?.reservationDate}
+                            tourDate={currentBooking?.tourDate}
                           />
                         </div>
                       )}

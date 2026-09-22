@@ -11,6 +11,8 @@ import { getSchedulePolicy, type SchedulePolicy } from "@/lib/schedule-policy";
 interface SchedulePolicyBadgeProps {
   /** Raw reservation date; the policy is derived from it. */
   reservationDate?: unknown;
+  /** Raw tour date; decides the monthly anchor (last vs second-to-last Friday). */
+  tourDate?: unknown;
   /** Pre-computed policy (takes precedence over reservationDate when provided). */
   policy?: SchedulePolicy | null;
   /** Extra classes applied to the clickable trigger (e.g. layout/margins). */
@@ -24,11 +26,14 @@ interface SchedulePolicyBadgeProps {
  */
 export default function SchedulePolicyBadge({
   reservationDate,
+  tourDate,
   policy: policyProp,
   className,
 }: SchedulePolicyBadgeProps) {
   const policy =
-    policyProp !== undefined ? policyProp : getSchedulePolicy(reservationDate);
+    policyProp !== undefined
+      ? policyProp
+      : getSchedulePolicy(reservationDate, tourDate);
   if (!policy) return null;
 
   const isLegacy = policy.key === "legacy";

@@ -142,6 +142,17 @@ export const applyLateFeesDaily = onSchedule(
         const booking = bookingDoc.data();
         const bookingRef = bookingDoc.ref;
 
+        // No late fees once the tour has run (Elapsed) or the booking is
+        // cancelled — there is nothing left to nudge the guest towards.
+        const statusLower = String(booking.bookingStatus ?? "").toLowerCase();
+        if (
+          statusLower === "elapsed" ||
+          statusLower.includes("cancelled") ||
+          String(booking.reasonForCancellation ?? "").trim() !== ""
+        ) {
+          continue;
+        }
+
         for (let index = 0; index < TERM_KEYS.length; index++) {
           const termKey = TERM_KEYS[index];
           const termLabel = getTermLabel(termKey);

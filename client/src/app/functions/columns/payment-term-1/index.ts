@@ -1,5 +1,6 @@
 import { withOrder } from "../column-orders";
 import { p1AmountColumn as _p1AmountColumn } from "./p1-amount";
+import { p1AmountPaidColumn as _p1AmountPaidColumn } from "./p1-amount-paid";
 import { p1CalendarEventIdColumn as _p1CalendarEventIdColumn } from "./p1-calendar-event-id";
 import { p1CalendarEventLinkColumn as _p1CalendarEventLinkColumn } from "./p1-calendar-event-link";
 import { p1DatePaidColumn as _p1DatePaidColumn } from "./p1-date-paid";
@@ -12,6 +13,7 @@ import { p1ScheduledReminderDateColumn as _p1ScheduledReminderDateColumn } from 
 
 // Export columns with orders injected from global column-orders.ts
 export const p1AmountColumn = withOrder(_p1AmountColumn);
+export const p1AmountPaidColumn = withOrder(_p1AmountPaidColumn);
 export const p1CalendarEventIdColumn = withOrder(_p1CalendarEventIdColumn);
 export const p1CalendarEventLinkColumn = withOrder(_p1CalendarEventLinkColumn);
 export const p1DatePaidColumn = withOrder(_p1DatePaidColumn);

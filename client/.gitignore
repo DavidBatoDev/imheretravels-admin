@@ -45,3 +45,6 @@ next-env.d.ts
 
 keys
 export-prod
+
+# One-off data-fix rollback snapshots (contain full booking documents / guest PII)
+rollback-*.json

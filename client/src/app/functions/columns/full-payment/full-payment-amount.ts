@@ -1,4 +1,5 @@
 import { BookingSheetColumn } from "@/types/booking-sheet-column";
+import { hasPerSlotCash, reservationCashReceived } from "../payment-calculation-helpers";
 
 export const fullPaymentAmountColumn: BookingSheetColumn = {
   id: "fullPaymentAmount",
@@ -84,6 +85,15 @@ export const fullPaymentAmountColumn: BookingSheetColumn = {
         isRest: false,
         value: "",
       },
+      {
+        name: "reservationAmountPaid",
+        type: "number",
+        columnReference: "Reservation Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
     ],
   },
 };
@@ -111,7 +121,8 @@ export default function getFullPaymentRemainingFunction(
   originalTourCost?: number, // $AF1003
   reservationFee?: number, // $AH1003
   creditAmount?: number, // $AK1003
-  paymentCondition?: string // Payment Condition
+  paymentCondition?: string, // Payment Condition
+  reservationAmountPaid?: number | string | null,
 ): number | string {
   // if no tour package name, return ""
   if (!tourPackageName) return "";
@@ -142,8 +153,13 @@ export default function getFullPaymentRemainingFunction(
       : originalTourCost || 0;
 
   // handle reservation and credit safely
-  const resFee = reservationFee || 0;
-  const credit = creditAmount || 0;
+  // Per-slot cash model: a reservation overpayment is recorded as cash on the
+  // reservation itself, so it (not a manual credit) reduces the full payment.
+  const perSlot = hasPerSlotCash(reservationAmountPaid);
+  const resFee = perSlot
+    ? reservationCashReceived(reservationFee, reservationAmountPaid)
+    : reservationFee || 0;
+  const credit = perSlot ? 0 : creditAmount || 0;
 
   // compute remaining and round to 2 decimals
   const remaining = Math.round((baseCost - resFee - credit) * 100) / 100;

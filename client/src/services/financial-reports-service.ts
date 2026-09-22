@@ -1,17 +1,18 @@
 /**
  * Financial Reports Service
  *
- * Transforms raw booking documents from Firestore into structured
- * FinancialEvent timelines and computes aggregated report metrics.
+ * Fetches bookings and turns them into a FinancialReport. All money
+ * definitions (gross, net, refunded, expected, overdue, cancelled) live in
+ * @/lib/finance/booking-finance and are shared with the Dashboard.
  *
  * Data flow:
- *   getAllBookings() (API) → extractBookingEvents() → applyDateRange() → aggregateMetrics()
+ *   getAllBookings() (API) → extractBookingEvents() → sumEvents(range) → report
  */
 
 import { bookingService } from "./booking-service";
 import {
   FinancialEvent,
-  FinancialEventType,
+
   FinancialReport,
   FinancialReportMetrics,
   BookingFinancialSummary,
@@ -20,60 +21,22 @@ import {
   TrendGranularity,
   DateRangeFilter,
   DateRangePreset,
-  PaymentSlot,
+
 } from "@/types/financial-reports";
 
-// ---------------------------------------------------------------------------
-// Date Utilities
-// ---------------------------------------------------------------------------
+import {
+  extractBookingEvents,
+  isCancelledBooking,
+  sumEvents,
+  toDate,
+  toISODate,
+  dateInRange,
+  type RawBooking,
+} from "@/lib/finance/booking-finance";
 
-/**
- * Normalise any date-like value coming from Firestore/API to a JS Date.
- * Firestore Timestamps are serialised to JSON as {seconds, nanoseconds}.
- */
-function toDate(value: unknown): Date | null {
-  if (!value) return null;
-  if (value instanceof Date) return value;
-  if (typeof value === "string") {
-    const d = new Date(value);
-    return isNaN(d.getTime()) ? null : d;
-  }
-  if (typeof value === "number") return new Date(value);
-  // Firestore Timestamp serialised as {seconds, nanoseconds}
-  if (
-    typeof value === "object" &&
-    value !== null &&
-    "seconds" in value &&
-    typeof (value as any).seconds === "number"
-  ) {
-    return new Date((value as any).seconds * 1000);
-  }
-  // Firestore Timestamp instance (client-side)
-  if (typeof value === "object" && value !== null && "toDate" in value) {
-    return (value as any).toDate() as Date;
-  }
-  return null;
-}
-
-/** Format a Date to YYYY-MM-DD using LOCAL calendar date (not UTC) */
-function toISODate(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-/** Add N days to a date and return a new Date */
-function addDays(date: Date, n: number): Date {
-  const d = new Date(date);
-  d.setDate(d.getDate() + n);
-  return d;
-}
-
-/** Compare two YYYY-MM-DD strings */
-function dateInRange(dateStr: string, start: string, end: string): boolean {
-  return dateStr >= start && dateStr <= end;
-}
+// Re-exported so existing consumers keep working. The logic lives in
+// @/lib/finance/booking-finance so Dashboard and Reports share one definition.
+export { extractBookingEvents };
 
 // ---------------------------------------------------------------------------
 // Preset → concrete date range
@@ -144,215 +107,18 @@ export function resolveDateRangePreset(
 }
 
 // ---------------------------------------------------------------------------
-// Per-booking event extraction
-// ---------------------------------------------------------------------------
-
-interface PaymentSlotFields {
-  slot: PaymentSlot;
-  dueDate: unknown;
-  datePaid: unknown;
-  amount: unknown;
-  label: string; // e.g. "P1", "P2", …, "Full Payment"
-}
-
-function extractPaymentSlots(booking: Record<string, unknown>): PaymentSlotFields[] {
-  const slots: PaymentSlotFields[] = [];
-
-  // P1–P4
-  for (const n of [1, 2, 3, 4] as const) {
-    const slot = `p${n}` as PaymentSlot;
-    const dueDate = booking[`p${n}DueDate`];
-    const amount = booking[`p${n}Amount`];
-    if (dueDate && amount !== undefined && amount !== null && amount !== "") {
-      slots.push({
-        slot,
-        dueDate,
-        datePaid: booking[`p${n}DatePaid`],
-        amount,
-        label: `P${n}`,
-      });
-    }
-  }
-
-  // Full payment
-  if (booking.fullPaymentDueDate && booking.fullPaymentAmount) {
-    slots.push({
-      slot: "full",
-      dueDate: booking.fullPaymentDueDate,
-      datePaid: booking.fullPaymentDatePaid,
-      amount: booking.fullPaymentAmount,
-      label: "Full Payment",
-    });
-  }
-
-  return slots;
-}
-
-/**
- * Decompose one booking document into its ordered list of FinancialEvents.
- * The "today" parameter is injected for testability (defaults to actual today).
- */
-export function extractBookingEvents(
-  booking: Record<string, unknown>,
-  today: Date = new Date()
-): FinancialEvent[] {
-  const events: FinancialEvent[] = [];
-  const todayStr = toISODate(today);
-
-  const bookingId = (booking.bookingId as string) || (booking.id as string) || "";
-  const bookingCode = (booking.bookingCode as string) || bookingId;
-  const tourName =
-    (booking.tourPackageName as string) ||
-    (booking.tourName as string) ||
-    "Unknown Tour";
-
-  const makeEvent = (
-    partial: Omit<FinancialEvent, "bookingId" | "bookingCode" | "tourName" | "netRevenue">
-  ): FinancialEvent => ({
-    ...partial,
-    bookingId,
-    bookingCode,
-    tourName,
-    netRevenue: partial.grossRevenue + partial.refundedAmount, // refundedAmount is negative
-  });
-
-  // ── 1. Reservation Date → Gross Revenue = reservation fee ──────────────
-  const reservationDate = toDate(booking.reservationDate);
-  const reservationFee = Number(booking.reservationFee ?? 0);
-
-  if (reservationDate && reservationFee > 0) {
-    events.push(
-      makeEvent({
-        date: toISODate(reservationDate),
-        history: "Reservation Date",
-        eventType: "reservation",
-        grossRevenue: reservationFee,
-        expectedRevenue: 0,
-        overdueUnpaidAmount: 0,
-        refundedAmount: 0,
-        cancelledBookingsCount: 0,
-      })
-    );
-  }
-
-  // ── 2. Payment slots (P1–P4 / Full) ────────────────────────────────────
-  const slots = extractPaymentSlots(booking);
-
-  for (const slotData of slots) {
-    const dueDate = toDate(slotData.dueDate);
-    if (!dueDate) continue;
-
-    const paidDate = toDate(slotData.datePaid);
-    const amount = Number(slotData.amount ?? 0);
-    if (amount <= 0) continue;
-
-    const dueDateStr = toISODate(dueDate);
-    const isDueEventType: FinancialEventType =
-      slotData.slot === "full" ? "full_payment_due" : "px_due";
-    const isPaidEventType: FinancialEventType =
-      slotData.slot === "full" ? "full_payment_paid" : "px_paid";
-
-    // Px Due Date → Expected Revenue (only truly pending: not paid, not yet overdue)
-    const isSlotPaid = !!paidDate;
-    const overdueCheckDate = addDays(dueDate, 1);
-    const isSlotOverdue = !isSlotPaid && toISODate(overdueCheckDate) <= todayStr;
-    events.push(
-      makeEvent({
-        date: dueDateStr,
-        history: `${slotData.label} Due Date`,
-        eventType: isDueEventType,
-        paymentSlot: slotData.slot,
-        grossRevenue: 0,
-        expectedRevenue: (!isSlotPaid && !isSlotOverdue) ? amount : 0,
-        overdueUnpaidAmount: 0,
-        refundedAmount: 0,
-        cancelledBookingsCount: 0,
-      })
-    );
-
-    if (paidDate) {
-      // Paid → Gross Revenue
-      events.push(
-        makeEvent({
-          date: toISODate(paidDate),
-          history: `${slotData.label} Date Paid`,
-          eventType: isPaidEventType,
-          paymentSlot: slotData.slot,
-          grossRevenue: amount,
-          expectedRevenue: 0,
-          overdueUnpaidAmount: 0,
-          refundedAmount: 0,
-          cancelledBookingsCount: 0,
-        })
-      );
-    } else {
-      // Not paid — check if overdue (due date + 1 day has passed today)
-      const overdueDate = addDays(dueDate, 1);
-      const overdueDateStr = toISODate(overdueDate);
-
-      if (overdueDateStr <= todayStr) {
-        // Truly unpaid overdue
-        events.push(
-          makeEvent({
-            date: overdueDateStr,
-            history: `${slotData.label} Overdue`,
-            eventType: "px_overdue",
-            paymentSlot: slotData.slot,
-            grossRevenue: 0,
-            expectedRevenue: 0,
-            overdueUnpaidAmount: amount,
-            refundedAmount: 0,
-            cancelledBookingsCount: 0,
-          })
-        );
-      }
-    }
-  }
-
-  // ── 3. Cancellation → Refunded Amount ──────────────────────────────────
-  const cancellationDate = toDate(booking.cancellationRequestDate);
-  const refundableAmount = Number(booking.refundableAmount ?? booking.travelCreditIssued ?? 0);
-
-  if (cancellationDate) {
-    events.push(
-      makeEvent({
-        date: toISODate(cancellationDate),
-        history: "Cancellation Request Date",
-        eventType: "cancellation",
-        grossRevenue: 0,
-        expectedRevenue: 0,
-        overdueUnpaidAmount: 0,
-        // Stored as negative so Net Revenue = Gross + Refunded
-        refundedAmount: refundableAmount > 0 ? -refundableAmount : 0,
-        cancelledBookingsCount: 1,
-      })
-    );
-  }
-
-  // Sort chronologically
-  events.sort((a, b) => a.date.localeCompare(b.date));
-
-  return events;
-}
-
-// ---------------------------------------------------------------------------
 // Build per-booking summary
 // ---------------------------------------------------------------------------
 
 function buildBookingSummary(
-  booking: Record<string, unknown>,
+  booking: RawBooking,
   events: FinancialEvent[]
 ): BookingFinancialSummary {
   let totalGross = 0;
   let totalExpected = 0;
   let totalOverdue = 0;
   let totalRefunded = 0;
-  let isCancelled = false;
-
-  // Check bookingStatus field directly so bookings cancelled without a
-  // cancellationRequestDate are still counted in the cancellations report.
-  const rawStatus = (booking.bookingStatus as string) ?? "";
-  if (rawStatus.toLowerCase() === "cancelled") isCancelled = true;
+  let isCancelled = isCancelledBooking(booking);
 
   for (const e of events) {
     totalGross += e.grossRevenue;
@@ -467,24 +233,13 @@ function aggregateMetrics(
   allEvents: FinancialEvent[],
   dateRange: DateRangeFilter
 ): FinancialReportMetrics {
-  // Filter events to the date range for metrics
-  const rangedEvents = allEvents.filter((e) =>
-    dateInRange(e.date, dateRange.startDate, dateRange.endDate)
-  );
-
-  let totalGross = 0;
-  let totalRefunded = 0;
-  let totalOverdue = 0;
-  let totalExpected = 0;
-  let cancelledCount = 0;
-
-  for (const e of rangedEvents) {
-    totalGross += e.grossRevenue;
-    totalRefunded += Math.abs(e.refundedAmount);
-    totalOverdue += e.overdueUnpaidAmount;
-    totalExpected += e.expectedRevenue;
-    cancelledCount += e.cancelledBookingsCount;
-  }
+  // One shared aggregation (same function the Dashboard uses)
+  const totals = sumEvents(allEvents, dateRange.startDate, dateRange.endDate);
+  const totalGross = totals.grossRevenue;
+  const totalRefunded = totals.refunded;
+  const totalOverdue = totals.overdueUnpaid;
+  const totalExpected = totals.expectedRevenue;
+  const cancelledCount = totals.cancelledBookings;
 
   // Revenue by tour
   const tourMap = new Map<string, TourRevenueSummary>();
@@ -545,7 +300,7 @@ function aggregateMetrics(
 
   return {
     totalGrossRevenue: totalGross,
-    totalNetRevenue: totalGross - totalRefunded,
+    totalNetRevenue: totals.netRevenue,
     totalOverdueUnpaid: totalOverdue,
     totalExpectedRevenue: totalExpected,
     totalRefunded,
@@ -571,7 +326,7 @@ async function fetchDataBounds(): Promise<{ startDate: string; endDate: string }
   let latest: string | null = null;
 
   for (const b of rawBookings) {
-    const booking = b as Record<string, unknown>;
+    const booking = b as RawBooking;
 
     // Earliest start: reservation date
     const reservationDate = toDate(booking.reservationDate);
@@ -589,7 +344,7 @@ async function fetchDataBounds(): Promise<{ startDate: string; endDate: string }
 
     // Latest end: all payment due dates (captures expected future revenues)
     for (const n of [1, 2, 3, 4] as const) {
-      const dd = toDate((booking as Record<string, unknown>)[`p${n}DueDate`]);
+      const dd = toDate((booking as RawBooking)[`p${n}DueDate`]);
       if (dd) {
         const s = toISODate(dd);
         if (!latest || s > latest) latest = s;
@@ -624,8 +379,8 @@ export const financialReportsService = {
 
     const today = new Date();
     const summaries: BookingFinancialSummary[] = rawBookings.map((b) => {
-      const events = extractBookingEvents(b as Record<string, unknown>, today);
-      return buildBookingSummary(b as Record<string, unknown>, events);
+      const events = extractBookingEvents(b as RawBooking, today);
+      return buildBookingSummary(b as RawBooking, events);
     });
 
     // Flat list of all events (for timeline chart and overall drill-down)
@@ -660,8 +415,8 @@ export const financialReportsService = {
   ): Promise<BookingFinancialSummary | null> {
     const raw = await bookingService.getBooking(bookingDocumentId);
     if (!raw) return null;
-    const events = extractBookingEvents(raw as Record<string, unknown>);
-    return buildBookingSummary(raw as Record<string, unknown>, events);
+    const events = extractBookingEvents(raw as RawBooking);
+    return buildBookingSummary(raw as RawBooking, events);
   },
 
   /**

@@ -1,6 +1,6 @@
 import { BookingSheetColumn } from "@/types/booking-sheet-column";
 import {
-  allocateInstallmentAmountsWithPaidLocks,
+  resolveInstallmentSchedule,
   getPaymentPlanTerms,
   roundCurrency,
   toNumber,
@@ -189,6 +189,51 @@ export const p1AmountColumn: BookingSheetColumn = {
         isRest: false,
         value: "",
       },
+      {
+        name: "reservationAmountPaid",
+        type: "number",
+        columnReference: "Reservation Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "p1AmountPaid",
+        type: "number",
+        columnReference: "P1 Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "p2AmountPaid",
+        type: "number",
+        columnReference: "P2 Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "p3AmountPaid",
+        type: "number",
+        columnReference: "P3 Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "p4AmountPaid",
+        type: "number",
+        columnReference: "P4 Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
     ],
   },
 };
@@ -223,14 +268,20 @@ export default function getP1AmountFunction(
   p3DatePaid?: string | Date,
   p3Amount?: number,
   p4DatePaid?: string | Date,
-  p4Amount?: number
+  p4Amount?: number,
+  reservationAmountPaid?: number | string | null,
+  p1AmountPaid?: number | string | null,
+  p2AmountPaid?: number | string | null,
+  p3AmountPaid?: number | string | null,
+  p4AmountPaid?: number | string | null,
 ) {
   if (!p1DueDate) return "";
 
   // Automatically use discounted cost if available (from active discount events)
   const discCost = toNumber(discountedTourCost);
   const origCost = toNumber(originalTourCost);
-  const total = (discCost > 0 ? discCost : origCost) - toNumber(reservationFee);
+  const baseCost = discCost > 0 ? discCost : origCost;
+  const total = baseCost - toNumber(reservationFee);
   const credit_from = creditFrom ?? "";
   const credit_amt = toNumber(creditAmount);
 
@@ -248,13 +299,16 @@ export default function getP1AmountFunction(
   // Determine number of terms (P1–P4)
   const terms = getPaymentPlanTerms(paymentPlan);
   if (terms < 1) return "";
-  const allocations = allocateInstallmentAmountsWithPaidLocks(
-    total,
+  const allocations = resolveInstallmentSchedule(
+    baseCost,
+    reservationFee,
     terms,
     credit_from,
     credit_amt,
     [p1Amount, p2Amount, p3Amount, p4Amount],
     [p1DatePaid, p2DatePaid, p3DatePaid, p4DatePaid],
+    reservationAmountPaid,
+    [p1AmountPaid, p2AmountPaid, p3AmountPaid, p4AmountPaid],
   );
 
   return roundCurrency(allocations[0] ?? 0);

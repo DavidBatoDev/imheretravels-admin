@@ -5,6 +5,9 @@ import {
   hasPaidDate,
   roundCurrency,
   toNumber,
+  hasPerSlotCash,
+  cashReceivedForTerm,
+  reservationCashReceived,
 } from "../payment-calculation-helpers";
 
 export const remainingBalanceColumn: BookingSheetColumn = {
@@ -217,6 +220,60 @@ export const remainingBalanceColumn: BookingSheetColumn = {
         isRest: false,
         value: "",
       },
+      {
+        name: "reservationAmountPaid",
+        type: "number",
+        columnReference: "Reservation Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "p1AmountPaid",
+        type: "number",
+        columnReference: "P1 Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "p2AmountPaid",
+        type: "number",
+        columnReference: "P2 Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "p3AmountPaid",
+        type: "number",
+        columnReference: "P3 Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "p4AmountPaid",
+        type: "number",
+        columnReference: "P4 Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "fullPaymentAmountPaid",
+        type: "number",
+        columnReference: "Full Payment Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
     ],
   },
 };
@@ -273,6 +330,12 @@ export default function getRemainingBalanceFunction(
   p2LateFeesPenalty?: number | string,
   p3LateFeesPenalty?: number | string,
   p4LateFeesPenalty?: number | string,
+  reservationAmountPaid?: number | string | null,
+  p1AmountPaid?: number | string | null,
+  p2AmountPaid?: number | string | null,
+  p3AmountPaid?: number | string | null,
+  p4AmountPaid?: number | string | null,
+  fullPaymentAmountPaid?: number | string | null,
 ): number | "" {
   if (!tourPackageName) return "";
 
@@ -297,14 +360,21 @@ export default function getRemainingBalanceFunction(
     isFullPaymentPlan // full-payment-amount.ts nets any credit unconditionally
       ? creditAmt > 0
       : creditOrder === 0 || (creditOrder >= 1 && creditOrder <= terms);
-  const netCredit = creditValidForPlan ? creditAmt : 0;
+  // Per-slot cash model: cash per slot replaces the manual credit entirely.
+  const perSlot = hasPerSlotCash(
+    reservationAmountPaid, p1AmountPaid, p2AmountPaid, p3AmountPaid, p4AmountPaid, fullPaymentAmountPaid,
+  );
+  const netCredit = perSlot ? 0 : creditValidForPlan ? creditAmt : 0;
 
   // Determine which total cost to use (discounted or original)
   // Automatically use discounted cost if available (from active discount events)
   const baseCost = discCost > 0 ? discCost : origCost;
 
   // Subtract reservation fee and any applicable manual credit
-  const total = baseCost - resFee - netCredit;
+  const total =
+    baseCost -
+    (perSlot ? reservationCashReceived(reservationFee, reservationAmountPaid) : resFee) -
+    netCredit;
 
   // Total paid amount so far (treat missing amounts as 0). Full Payment and
   // P1–P4 amounts are already net of any manual credit applied to that term
@@ -312,12 +382,17 @@ export default function getRemainingBalanceFunction(
   // each is counted as-is once paid — a Reservation credit is netted out of
   // `total` above instead, since the Reservation Fee is never itself
   // discounted.
-  const paid =
-    (hasPaidDate(fullPaymentDate) ? toNumber(fullPaymentAmount) : 0) +
-    (hasPaidDate(p1DatePaid) ? toNumber(p1Amount) : 0) +
-    (hasPaidDate(p2DatePaid) ? toNumber(p2Amount) : 0) +
-    (hasPaidDate(p3DatePaid) ? toNumber(p3Amount) : 0) +
-    (hasPaidDate(p4DatePaid) ? toNumber(p4Amount) : 0);
+  const paid = perSlot
+    ? cashReceivedForTerm(fullPaymentAmount, fullPaymentAmountPaid, fullPaymentDate) +
+      cashReceivedForTerm(p1Amount, p1AmountPaid, p1DatePaid) +
+      cashReceivedForTerm(p2Amount, p2AmountPaid, p2DatePaid) +
+      cashReceivedForTerm(p3Amount, p3AmountPaid, p3DatePaid) +
+      cashReceivedForTerm(p4Amount, p4AmountPaid, p4DatePaid)
+    : (hasPaidDate(fullPaymentDate) ? toNumber(fullPaymentAmount) : 0) +
+      (hasPaidDate(p1DatePaid) ? toNumber(p1Amount) : 0) +
+      (hasPaidDate(p2DatePaid) ? toNumber(p2Amount) : 0) +
+      (hasPaidDate(p3DatePaid) ? toNumber(p3Amount) : 0) +
+      (hasPaidDate(p4DatePaid) ? toNumber(p4Amount) : 0);
 
   // All applied late fees increase total amount due.
   const totalLateFees =

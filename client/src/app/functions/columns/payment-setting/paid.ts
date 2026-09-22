@@ -4,6 +4,9 @@ import {
   hasPaidDate,
   roundCurrency,
   toNumber,
+  hasPerSlotCash,
+  cashReceivedForTerm,
+  reservationCashReceived,
 } from "../payment-calculation-helpers";
 
 export const paidColumn: BookingSheetColumn = {
@@ -180,6 +183,60 @@ export const paidColumn: BookingSheetColumn = {
         isRest: false,
         value: "",
       },
+      {
+        name: "reservationAmountPaid",
+        type: "number",
+        columnReference: "Reservation Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "p1AmountPaid",
+        type: "number",
+        columnReference: "P1 Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "p2AmountPaid",
+        type: "number",
+        columnReference: "P2 Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "p3AmountPaid",
+        type: "number",
+        columnReference: "P3 Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "p4AmountPaid",
+        type: "number",
+        columnReference: "P4 Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "fullPaymentAmountPaid",
+        type: "number",
+        columnReference: "Full Payment Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
     ],
   },
 };
@@ -204,6 +261,12 @@ export default function getTotalPaidAmountFunction(
   p2LateFeesPenalty?: number | string | null,
   p3LateFeesPenalty?: number | string | null,
   p4LateFeesPenalty?: number | string | null,
+  reservationAmountPaid?: number | string | null,
+  p1AmountPaid?: number | string | null,
+  p2AmountPaid?: number | string | null,
+  p3AmountPaid?: number | string | null,
+  p4AmountPaid?: number | string | null,
+  fullPaymentAmountPaid?: number | string | null,
 ): number | string {
   if (!tourPackageName) return "";
 
@@ -226,22 +289,39 @@ export default function getTotalPaidAmountFunction(
   const p4IsPaid = hasPaidDate(p4DatePaid);
 
   // Reservation Fee
-  const resPaid =
-    toNumber(reservationFee) +
-    (creditAppliedTo("Reservation") ? appliedCredit : 0);
+  // Per-slot cash model: when any *AmountPaid is present, cash is what
+  // arrived per slot and the legacy manual credit is ignored (it is already
+  // inside those amounts). Otherwise legacy behaviour is unchanged.
+  const perSlot = hasPerSlotCash(
+    reservationAmountPaid, p1AmountPaid, p2AmountPaid, p3AmountPaid, p4AmountPaid, fullPaymentAmountPaid,
+  );
+  const resPaid = perSlot
+    ? reservationCashReceived(reservationFee, reservationAmountPaid)
+    : toNumber(reservationFee) +
+      (creditAppliedTo("Reservation") ? appliedCredit : 0);
 
   // Full Payment — fullPaymentAmount is already net of any manual credit
   // (see getFullPaymentRemainingFunction), so it's counted as-is once paid.
-  const fullPaid = hasPaidDate(fullPaymentDate) ? toNumber(fullPaymentAmount) : 0;
+  const fullPaid = perSlot
+    ? cashReceivedForTerm(fullPaymentAmount, fullPaymentAmountPaid, fullPaymentDate)
+    : hasPaidDate(fullPaymentDate) ? toNumber(fullPaymentAmount) : 0;
 
   // Partial Payments — p1Amount..p4Amount are already net of any manual
   // credit applied to that term (see allocateInstallmentAmounts), so each is
   // counted as-is once paid. Only a "Reservation" credit is added separately
   // above, since the Reservation Fee field is never itself discounted.
-  const p1_paid = p1IsPaid ? toNumber(p1Amount) : 0;
-  const p2_paid = p2IsPaid ? toNumber(p2Amount) : 0;
-  const p3_paid = p3IsPaid ? toNumber(p3Amount) : 0;
-  const p4_paid = p4IsPaid ? toNumber(p4Amount) : 0;
+  const p1_paid = perSlot
+    ? cashReceivedForTerm(p1Amount, p1AmountPaid, p1DatePaid)
+    : p1IsPaid ? toNumber(p1Amount) : 0;
+  const p2_paid = perSlot
+    ? cashReceivedForTerm(p2Amount, p2AmountPaid, p2DatePaid)
+    : p2IsPaid ? toNumber(p2Amount) : 0;
+  const p3_paid = perSlot
+    ? cashReceivedForTerm(p3Amount, p3AmountPaid, p3DatePaid)
+    : p3IsPaid ? toNumber(p3Amount) : 0;
+  const p4_paid = perSlot
+    ? cashReceivedForTerm(p4Amount, p4AmountPaid, p4DatePaid)
+    : p4IsPaid ? toNumber(p4Amount) : 0;
 
   // Late fees are counted as paid only when an actual date-paid is present.
   const p1PenaltyPaid = hasPaidDate(p1DatePaid) ? toNumber(p1LateFeesPenalty) : 0;

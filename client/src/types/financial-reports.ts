@@ -26,6 +26,7 @@ export type FinancialEventType =
   | "px_overdue"       // Px Due Date + 1 day (only when never paid) → overdue
   | "full_payment_due" // Full Payment Due Date → expected revenue
   | "full_payment_paid"// Full Payment Date Paid → gross revenue
+  | "manual_credit"    // Overpayment on a term/reservation → gross revenue (cash received)
   | "cancellation";    // Cancellation Request Date → refunded amount
 
 // Which installment (P1–P4 or full)

@@ -136,7 +136,7 @@ import {
   isRetryableError,
 } from "@/utils/retry-computation";
 import {
-  allocateInstallmentAmountsWithPaidLocks,
+  resolveInstallmentSchedule,
   getPaymentPlanTerms,
   toNumber as toNumberSafe,
   roundCurrency,
@@ -1385,8 +1385,31 @@ export default function BookingsDataGrid({
   // (see allocateInstallmentAmounts). A typo here silently changes what a
   // customer owes, so before committing either field we compute what the
   // due amounts would become and ask the admin to confirm.
+  // Legacy manual credit plus the per-slot cash columns: editing any of these
+  // re-shapes what the guest still owes, so we preview and confirm first.
   const CREDIT_PREVIEW_COLUMNS = React.useMemo(
-    () => new Set(["manualCredit", "creditFrom"]),
+    () =>
+      new Set([
+        "manualCredit",
+        "creditFrom",
+        "reservationAmountPaid",
+        "p1AmountPaid",
+        "p2AmountPaid",
+        "p3AmountPaid",
+        "p4AmountPaid",
+      ]),
+    [],
+  );
+  const PREVIEW_COLUMN_LABELS: Record<string, string> = React.useMemo(
+    () => ({
+      manualCredit: "Manual Credit",
+      creditFrom: "Credit From",
+      reservationAmountPaid: "Reservation Amount Paid",
+      p1AmountPaid: "P1 Amount Paid",
+      p2AmountPaid: "P2 Amount Paid",
+      p3AmountPaid: "P3 Amount Paid",
+      p4AmountPaid: "P4 Amount Paid",
+    }),
     [],
   );
 
@@ -1435,22 +1458,46 @@ export default function BookingsDataGrid({
           row.p4DatePaid,
         ];
 
-        const before = allocateInstallmentAmountsWithPaidLocks(
-          total,
+        // Per-slot cash (new model). The edited column, if it is one of
+        // these, is overlaid on the row's current values.
+        const parseCash = (v: unknown) =>
+          v === "" || v === undefined || v === null ? undefined : (parseFloat(String(v)) as number);
+        const slotPaid = (id: string, current: unknown) =>
+          columnId === id ? (value === "" ? undefined : parseFloat(value) || 0) : parseCash(current);
+        const newReservationPaid = slotPaid("reservationAmountPaid", row.reservationAmountPaid);
+        const newAmountsPaid = [
+          slotPaid("p1AmountPaid", row.p1AmountPaid),
+          slotPaid("p2AmountPaid", row.p2AmountPaid),
+          slotPaid("p3AmountPaid", row.p3AmountPaid),
+          slotPaid("p4AmountPaid", row.p4AmountPaid),
+        ];
+
+        // One resolver for both models: with per-slot cash present it uses
+        // cash received; otherwise the legacy manual credit. Same function
+        // the P-amount columns run, so the preview matches what will be saved.
+        const before = resolveInstallmentSchedule(
+          baseCost,
+          row.reservationFee,
           terms,
           row.creditFrom,
           row.manualCredit,
           currentAmounts,
           paidDates,
+          parseCash(row.reservationAmountPaid),
+          [row.p1AmountPaid, row.p2AmountPaid, row.p3AmountPaid, row.p4AmountPaid].map(parseCash),
         );
-        const after = allocateInstallmentAmountsWithPaidLocks(
-          total,
+        const after = resolveInstallmentSchedule(
+          baseCost,
+          row.reservationFee,
           terms,
           newCreditFrom,
           newManualCredit,
           currentAmounts,
           paidDates,
+          newReservationPaid,
+          newAmountsPaid,
         );
+        void total;
 
         const changed = before.some(
           (v, i) => roundCurrency(v) !== roundCurrency(after[i] ?? 0),
@@ -5413,7 +5460,7 @@ export default function BookingsDataGrid({
           <DialogHeader>
             <DialogTitle>Confirm updated dues</DialogTitle>
             <DialogDescription>
-              Changing {creditPreview?.columnId === "manualCredit" ? "Manual Credit" : "Credit From"}{" "}
+              Changing {PREVIEW_COLUMN_LABELS[creditPreview?.columnId ?? ""] ?? creditPreview?.columnId}{" "}
               for <span className="font-medium">{creditPreview?.bookingLabel}</span> will change these
               term amounts:
             </DialogDescription>

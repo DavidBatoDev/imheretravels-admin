@@ -124,7 +124,7 @@ const allocateByWeight = (
     return { index, fraction: raw - floored };
   });
 
-  let remainder = totalCents - allocationsInCents.reduce((sum, cents) => sum + cents, 0);
+  const remainder = totalCents - allocationsInCents.reduce((sum, cents) => sum + cents, 0);
   if (remainder > 0) {
     const order = fractions
       .slice()
@@ -315,4 +315,136 @@ export const getAppliedManualCreditAmount = (
 
 export const roundCurrency = (value: number): number =>
   Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
+
+// ---------------------------------------------------------------------------
+// Per-slot cash model — replaces Manual Credit / Credit From
+// ---------------------------------------------------------------------------
+
+export interface CashAllocationResult {
+  /** What each term asks for. Paid terms keep their asked amount. */
+  amounts: number[];
+  /** Cash received across paid terms (sum of *AmountPaid, or asked amount when absent). */
+  cashReceived: number;
+  /** Cash received beyond the total due with no open term left to absorb it. */
+  overpaid: number;
+}
+
+/**
+ * Build the instalment schedule from what has actually been received.
+ *
+ *   totalDue     = tour cost − reservation cash (use reservationAmountPaid,
+ *                  falling back to reservationFee). A reservation overpayment
+ *                  therefore reduces every term automatically.
+ *   dueAmounts   = current pNAmount (what each term asked for)
+ *   paidAmounts  = current pNAmountPaid (what arrived); absent ⇒ assume = asked
+ *   paidDates    = pNDatePaid
+ *
+ * Rules:
+ *   - a paid term keeps its asked amount (history is not rewritten)
+ *   - open terms share (totalDue − cashReceived) evenly
+ *   - overpaying a term shrinks later terms; overpaying with no later term
+ *     left (or beyond everything owed) is reported as `overpaid` so the UI
+ *     can surface a refund / travel credit instead of silently absorbing it
+ *   - underpaying a term (partial payment) leaves the shortfall on later terms
+ *
+ * There is no clamp: an overpayment larger than one term's share flows on to
+ * the next open term, which fixes the Math.max(0, …) edge in the legacy
+ * manual-credit path.
+ */
+export const allocateFromCashReceived = (
+  totalDue: number | string | null | undefined,
+  termsInput: number,
+  dueAmounts: Array<number | string | null | undefined> = [],
+  paidAmounts: Array<number | string | null | undefined> = [],
+  paidDates: unknown[] = [],
+): CashAllocationResult => {
+  const terms = Number.isFinite(termsInput)
+    ? Math.max(0, Math.floor(termsInput))
+    : 0;
+  if (terms === 0) return { amounts: [], cashReceived: 0, overpaid: 0 };
+
+  const total = roundCurrency(toNumber(totalDue));
+  const base = splitAmountWithRemainder(total, terms);
+  const amounts = base.slice();
+  const open: number[] = [];
+  let cash = 0;
+
+  for (let i = 0; i < terms; i += 1) {
+    if (hasPaidDate(paidDates[i])) {
+      const asked = toFiniteNumberOrNull(dueAmounts[i]) ?? base[i];
+      amounts[i] = roundCurrency(asked);
+      cash += toFiniteNumberOrNull(paidAmounts[i]) ?? asked;
+    } else {
+      open.push(i);
+    }
+  }
+
+  cash = roundCurrency(cash);
+  const remaining = roundCurrency(total - cash);
+
+  if (open.length === 0) {
+    return { amounts, cashReceived: cash, overpaid: Math.max(0, -remaining) };
+  }
+
+  if (remaining <= 0) {
+    open.forEach((i) => { amounts[i] = 0; });
+    return { amounts, cashReceived: cash, overpaid: roundCurrency(-remaining) };
+  }
+
+  const split = splitAmountWithRemainder(remaining, open.length);
+  open.forEach((i, k) => { amounts[i] = split[k]; });
+  return { amounts, cashReceived: cash, overpaid: 0 };
+};
+
+/** True when any per-slot cash value is present (booking is on the new model). */
+export const hasPerSlotCash = (...values: unknown[]): boolean =>
+  values.some((v) => v !== undefined && v !== null && v !== "" && Number.isFinite(Number(v)));
+
+/** Cash that arrived for a slot: *AmountPaid if recorded, else the asked amount; 0 if unpaid. */
+export const cashReceivedForTerm = (
+  amount: unknown,
+  amountPaid: unknown,
+  datePaid: unknown,
+): number => {
+  if (!hasPaidDate(datePaid)) return 0;
+  return toFiniteNumberOrNull(amountPaid) ?? toNumber(amount);
+};
+
+/** Cash received on the reservation: reservationAmountPaid if recorded, else the fee. */
+export const reservationCashReceived = (
+  reservationFee: unknown,
+  reservationAmountPaid: unknown,
+): number => toFiniteNumberOrNull(reservationAmountPaid) ?? toNumber(reservationFee);
+
+/**
+ * The one entry point every P-amount column and the select-plan route use.
+ * Per-slot cash present → cash-based schedule (manual credit ignored: it is
+ * already inside *AmountPaid). Otherwise the legacy manual-credit allocation,
+ * unchanged.
+ */
+export const resolveInstallmentSchedule = (
+  baseCost: number | string | null | undefined,
+  reservationFee: number | string | null | undefined,
+  terms: number,
+  creditFrom: string | null | undefined,
+  creditAmount: number | string | null | undefined,
+  currentAmounts: Array<number | string | null | undefined>,
+  paidDates: unknown[],
+  reservationAmountPaid?: number | string | null,
+  amountsPaid: Array<number | string | null | undefined> = [],
+): number[] => {
+  const cost = toNumber(baseCost);
+  if (hasPerSlotCash(reservationAmountPaid, ...amountsPaid)) {
+    const totalDue = cost - reservationCashReceived(reservationFee, reservationAmountPaid);
+    return allocateFromCashReceived(totalDue, terms, currentAmounts, amountsPaid, paidDates).amounts;
+  }
+  return allocateInstallmentAmountsWithPaidLocks(
+    cost - toNumber(reservationFee),
+    terms,
+    creditFrom,
+    creditAmount,
+    currentAmounts,
+    paidDates,
+  );
+};
 

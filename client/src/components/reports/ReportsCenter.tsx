@@ -25,6 +25,7 @@ import { financialReportsService } from "@/services/financial-reports-service";
 import { FinancialReport, DateRangeFilter } from "@/types/financial-reports";
 import { useSessionDateRange } from "@/hooks/useSessionDateRange";
 import { DateRangePicker } from "@/components/reports/DateRangePicker";
+import { FINANCE_GLOSSARY } from "@/lib/finance/booking-finance";
 import {
   BarChart,
   Bar,
@@ -46,23 +47,14 @@ function formatCurrency(amount: number, currency = "£"): string {
   })}`;
 }
 
-/** Metric tooltip definitions */
-const METRIC_DEFINITIONS: Record<string, string> = {
-  "Net Revenue":
-    "Gross Revenue minus total Refunded Amounts. Represents actual money retained.",
-  "Gross Revenue":
-    "Sum of all Reservation Fees and Px payments (P1–P4) actually received within the date range.",
-  "Outstanding Balances":
-    "Truly unpaid overdue installments (past due date + 1 day, no payment received). Paid-late amounts are excluded.",
-  "Expected Revenue":
-    "Future scheduled installment amounts based on Px Due Dates falling within the date range.",
-  "Total Refunded":
-    "Sum of refundable amounts issued on Cancellation Request Dates within the date range.",
-  "Cancelled Bookings":
-    "Number of bookings with a Cancellation Request Date within the date range.",
-  "Avg. Booking Value":
-    "Net Revenue divided by the number of non-cancelled bookings in the date range.",
-};
+/**
+ * Metric tooltip definitions — one source of truth shared with the Dashboard
+ * (see @/lib/finance/booking-finance). Keys are the card titles.
+ */
+const METRIC_DEFINITIONS: Record<string, string> = Object.fromEntries(
+  FINANCE_GLOSSARY.map((t) => [t.term, t.definition])
+);
+METRIC_DEFINITIONS["Total Refunded"] = METRIC_DEFINITIONS["Refunded"];
 
 export default function ReportsCenter() {
   const [dateRange, setDateRange] = useSessionDateRange();
@@ -216,7 +208,7 @@ export default function ReportsCenter() {
                     {metrics ? formatCurrency(metrics.totalNetRevenue) : "—"}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Gross minus refunds
+                    Gross − Refunded (headline figure)
                   </p>
                 </CardContent>
               </Card>
@@ -245,12 +237,12 @@ export default function ReportsCenter() {
                     {metrics ? formatCurrency(metrics.totalGrossRevenue) : "—"}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    All payments received
+                    All cash received, dated when paid
                   </p>
                 </CardContent>
               </Card>
 
-              {/* Outstanding Balances */}
+              {/* Overdue Unpaid */}
               <Card
                 className="cursor-pointer hover:shadow-md transition-shadow"
                 onClick={() => router.push(toTransactionsUrl("overdue"))}
@@ -258,10 +250,10 @@ export default function ReportsCenter() {
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <div className="flex items-center gap-1">
                     <CardTitle className="text-sm font-medium">
-                      Outstanding Balances
+                      Overdue Unpaid
                     </CardTitle>
                     <span
-                      title={METRIC_DEFINITIONS["Outstanding Balances"]}
+                      title={METRIC_DEFINITIONS["Overdue Unpaid"]}
                       className="text-gray-400 cursor-help text-xs select-none"
                     >
                       ⓘ
@@ -279,8 +271,8 @@ export default function ReportsCenter() {
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {metrics && metrics.totalOverdueUnpaid > 0
-                      ? "Requires attention"
-                      : "All payments current"}
+                      ? "Became overdue in range, still unpaid"
+                      : "Nothing became overdue in range"}
                   </p>
                 </CardContent>
               </Card>
@@ -311,7 +303,7 @@ export default function ReportsCenter() {
                       : "—"}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Scheduled future payments
+                    Unpaid, due date still in the future
                   </p>
                 </CardContent>
               </Card>
@@ -373,11 +365,65 @@ export default function ReportsCenter() {
                     {metrics ? metrics.cancelledBookingsCount : "—"}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Within date range
+                    Cancelled within date range
+                  </p>
+                </CardContent>
+              </Card>
+
+              {/* Outstanding Balance (expected + overdue) */}
+              <Card
+                className="cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => router.push(toTransactionsUrl())}
+              >
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <div className="flex items-center gap-1">
+                    <CardTitle className="text-sm font-medium">
+                      Outstanding Balance
+                    </CardTitle>
+                    <span
+                      title={METRIC_DEFINITIONS["Outstanding Balance"]}
+                      className="text-gray-400 cursor-help text-xs select-none"
+                    >
+                      ⓘ
+                    </span>
+                  </div>
+                  <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-xl font-bold">
+                    {metrics
+                      ? formatCurrency(
+                          metrics.totalExpectedRevenue + metrics.totalOverdueUnpaid
+                        )
+                      : "—"}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Overdue Unpaid + Expected Revenue
                   </p>
                 </CardContent>
               </Card>
             </div>
+
+            {/* Definitions */}
+            <details className="rounded-lg border border-border bg-card px-4 py-3">
+              <summary className="cursor-pointer text-sm font-semibold text-gray-700 select-none">
+                How these figures are defined
+              </summary>
+              <p className="text-xs text-muted-foreground mt-2">
+                The Dashboard and every report use these same definitions, so a
+                figure that appears in two places is always the same number.
+                Every figure counts only events dated inside the selected range
+                ({dateRange.startDate} to {dateRange.endDate}).
+              </p>
+              <dl className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+                {FINANCE_GLOSSARY.map((t) => (
+                  <div key={t.term}>
+                    <dt className="text-xs font-semibold text-gray-800">{t.term}</dt>
+                    <dd className="text-xs text-muted-foreground">{t.definition}</dd>
+                  </div>
+                ))}
+              </dl>
+            </details>
 
             {/* Detailed Reports Navigation */}
             <div>

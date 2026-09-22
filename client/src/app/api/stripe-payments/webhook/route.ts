@@ -426,6 +426,9 @@ async function handleInstallmentCheckoutPaid(session: Stripe.Checkout.Session) {
         // Self-heal the stored amount to what Stripe actually charged, in
         // case it drifted from the booking's cost/credit fields since checkout.
         fullPaymentAmount: actualAmount,
+        // Per-slot cash received (new model): what actually arrived, kept
+        // separate from what was asked. See Booking.*AmountPaid.
+        fullPaymentAmountPaid: actualAmount,
 
         // Update totals with recalculated values
         paid: calculatedPaid,
@@ -597,6 +600,9 @@ async function handleInstallmentCheckoutPaid(session: Stripe.Checkout.Session) {
       // Self-heal the stored amount to what Stripe actually charged, in case
       // it drifted from the booking's cost/credit fields since checkout.
       [`${installment_id}Amount`]: actualCurrentAmount,
+      // Per-slot cash received (new model): what actually arrived, kept
+      // separate from what was asked. See Booking.*AmountPaid.
+      [`${installment_id}AmountPaid`]: actualCurrentAmount,
 
       // Update totals with recalculated values
       paid: calculatedPaid,

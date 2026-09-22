@@ -105,7 +105,8 @@ function buildDetailRows(report: FinancialReport, startDate: string, endDate: st
           (e) =>
             (e.eventType === "px_paid" ||
               e.eventType === "full_payment_paid" ||
-              e.eventType === "reservation") &&
+              e.eventType === "reservation" ||
+              e.eventType === "manual_credit") &&
             e.grossRevenue > 0
         )
         .map((e) => e.date)
@@ -130,6 +131,29 @@ function buildDetailRows(report: FinancialReport, startDate: string, endDate: st
         outstanding: 0,
         refundedAmount: 0,
         netRevenue: reservationEv.grossRevenue,
+      });
+    }
+
+    // ── Manual Credit (overpayment = cash received) ───────────────────────────
+    // Emitted by the finance module only once the schedule has been reduced by
+    // the credit, so this row and the Gross Revenue headline always agree.
+    for (const creditEv of events.filter((e) => e.eventType === "manual_credit")) {
+      if (creditEv.date < startDate || creditEv.date > endDate) continue;
+      rows.push({
+        bookingId: summary.bookingId,
+        bookingCode: summary.bookingCode,
+        tourName: summary.tourName,
+        installment: creditEv.history, // "Manual Credit (overpaid on P3)"
+        dueDate: creditEv.date,
+        paidDate: creditEv.date,
+        lastPaidDate: null,
+        amount: creditEv.grossRevenue,
+        status: "paid",
+        grossRevenue: creditEv.grossRevenue,
+        expectedRevenue: 0,
+        outstanding: 0,
+        refundedAmount: 0,
+        netRevenue: creditEv.grossRevenue,
       });
     }
 

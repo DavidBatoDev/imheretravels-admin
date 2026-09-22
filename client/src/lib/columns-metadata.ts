@@ -50,6 +50,7 @@ export const ALL_COLUMN_IDS = [
   // Full Payment
   "fullPaymentDueDate",
   "fullPaymentAmount",
+  "fullPaymentAmountPaid",
   "fullPaymentDatePaid",
 
   // Payment Term 1
@@ -63,6 +64,7 @@ export const ALL_COLUMN_IDS = [
   "p1CalendarEventLink",
   "p1DueDate",
   "p1Amount",
+  "p1AmountPaid",
   "p1DatePaid",
 
   // Payment Term 2
@@ -76,6 +78,7 @@ export const ALL_COLUMN_IDS = [
   "p2CalendarEventLink",
   "p2DueDate",
   "p2Amount",
+  "p2AmountPaid",
   "p2DatePaid",
 
   // Payment Term 3
@@ -89,6 +92,7 @@ export const ALL_COLUMN_IDS = [
   "p3CalendarEventLink",
   "p3DueDate",
   "p3Amount",
+  "p3AmountPaid",
   "p3DatePaid",
 
   // Payment Term 4
@@ -102,12 +106,15 @@ export const ALL_COLUMN_IDS = [
   "p4CalendarEventLink",
   "p4DueDate",
   "p4Amount",
+  "p4AmountPaid",
   "p4DatePaid",
 
   // Payment Details
   "reservationFee",
+  "reservationAmountPaid",
   "paid",
   "remainingBalance",
+  "overpaidAmount",
   "manualCredit",
   "creditFrom",
 

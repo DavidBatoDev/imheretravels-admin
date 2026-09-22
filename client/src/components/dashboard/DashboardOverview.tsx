@@ -47,6 +47,23 @@ import { collection, onSnapshot, query, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Booking } from "@/types/bookings";
 import { bookingService } from "@/services/booking-service";
+import {
+  extractAllEvents,
+  sumEvents,
+  monthlyNetRevenue,
+  toISODate,
+  deriveLifecycleStatus,
+  FINANCE_GLOSSARY,
+  LIFECYCLE_DEFINITIONS,
+  type LifecycleStatus,
+  type RawBooking,
+} from "@/lib/finance/booking-finance";
+
+const glossary = (term: string) =>
+  FINANCE_GLOSSARY.find((t) => t.term === term)?.definition ?? "";
+
+const money = (n: number) =>
+  n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 import { useToast } from "@/hooks/use-toast";
 
 export default function DashboardOverview() {
@@ -60,6 +77,7 @@ export default function DashboardOverview() {
     pending: 0,
     sent: 0,
     skipped: 0,
+    cancelled: 0,
   });
 
   // Fetch real booking data from Firebase
@@ -115,6 +133,7 @@ export default function DashboardOverview() {
         pending: 0,
         sent: 0,
         skipped: 0,
+        cancelled: 0,
       };
 
       paymentReminderEmails.forEach((doc) => {
@@ -123,6 +142,7 @@ export default function DashboardOverview() {
         if (status === "pending") stats.pending++;
         else if (status === "sent") stats.sent++;
         else if (status === "skipped") stats.skipped++;
+        else if (status === "cancelled") stats.cancelled++;
       });
 
       setPaymentReminderStats(stats);
@@ -136,20 +156,11 @@ export default function DashboardOverview() {
     return () => unsubscribe();
   }, []);
 
-  // Helper function to determine booking status category (same as BookingsSection)
-  const getBookingStatusCategory = (
-    status: string | null | undefined
-  ): string => {
-    if (typeof status !== "string" || status.trim() === "") return "Pending";
-
-    const statusLower = status.toLowerCase();
-    if (statusLower.includes("confirmed")) return "Confirmed";
-    if (statusLower.includes("cancelled")) return "Cancelled";
-    if (statusLower.includes("installment")) return "Pending"; // Installments are pending payments
-    if (statusLower.includes("completed")) return "Completed";
-
-    return "Pending"; // Default fallback
-  };
+  // Lifecycle state derived from the calendar + balance (shared finance module),
+  // so Completed / Elapsed flip on their own without anyone editing the row.
+  // Cancelled requires a cancellation reason (or a cancelled status text).
+  const getBookingStatusCategory = (booking: Booking): LifecycleStatus =>
+    deriveLifecycleStatus(booking as unknown as RawBooking);
 
   // Calculate metrics from real data
   const today = new Date();
@@ -162,6 +173,30 @@ export default function DashboardOverview() {
   startOfWeek.setDate(today.getDate() - today.getDay());
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
+  // Every money figure comes from the shared finance module, the same one the
+  // Reports page uses, so the two screens can never disagree. See the
+  // definitions in @/lib/finance/booking-finance.
+  const financeEvents = extractAllEvents(
+    bookings as unknown as RawBooking[],
+    today
+  );
+  const allTime = sumEvents(financeEvents);
+  const thisMonth = sumEvents(financeEvents, toISODate(startOfMonth), toISODate(today));
+  const thisWeek = sumEvents(financeEvents, toISODate(startOfWeek), toISODate(today));
+  const todayTotals = sumEvents(financeEvents, toISODate(startOfToday), toISODate(today));
+  const lastSixMonths = monthlyNetRevenue(financeEvents, 6, today);
+  const activeBookingsOwing = new Set(
+    financeEvents
+      .filter((e) => e.expectedRevenue > 0 || e.overdueUnpaidAmount > 0)
+      .map((e) => e.bookingId)
+  ).size;
+
+  const upcomingConfirmedBookings = bookings.filter(
+    (booking) =>
+      new Date(booking.tourDate) > today &&
+      getBookingStatusCategory(booking) === "Confirmed"
+  );
+
   const metrics = {
     bookingsToday: bookings.filter(
       (booking) => new Date(booking.reservationDate) >= startOfToday
@@ -173,81 +208,55 @@ export default function DashboardOverview() {
       (booking) => new Date(booking.reservationDate) >= startOfMonth
     ).length,
     totalBookings: bookings.length,
-    totalRevenue: bookings.reduce(
-      (sum, booking) => sum + (booking.paid || 0),
-      0
-    ),
-    revenueToday: bookings
-      .filter((booking) => new Date(booking.reservationDate) >= startOfToday)
-      .reduce((sum, booking) => sum + (booking.paid || 0), 0),
-    revenueThisWeek: bookings
-      .filter((booking) => new Date(booking.reservationDate) >= startOfWeek)
-      .reduce((sum, booking) => sum + (booking.paid || 0), 0),
-    revenueThisMonth: bookings
-      .filter((booking) => new Date(booking.reservationDate) >= startOfMonth)
-      .reduce((sum, booking) => sum + (booking.paid || 0), 0),
-    upcomingTours: bookings.filter(
-      (booking) =>
-        new Date(booking.tourDate) > today &&
-        getBookingStatusCategory(booking.bookingStatus) === "Confirmed"
-    ).length,
+    netRevenue: allTime.netRevenue,
+    grossRevenue: allTime.grossRevenue,
+    refunded: allTime.refunded,
+    revenueToday: todayTotals.netRevenue,
+    revenueThisWeek: thisWeek.netRevenue,
+    revenueThisMonth: thisMonth.netRevenue,
+    // Distinct departures (tour + date), not bookings on them.
+    upcomingTours: new Set(
+      upcomingConfirmedBookings.map((booking) => {
+        const d = new Date(booking.tourDate);
+        return `${booking.tourPackageName || booking.tourPackage || ""}|${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      })
+    ).size,
+    upcomingConfirmedBookings: upcomingConfirmedBookings.length,
     pendingReminders: paymentRemindersCount,
     confirmedBookings: bookings.filter(
       (booking) =>
-        getBookingStatusCategory(booking.bookingStatus) === "Confirmed"
+        getBookingStatusCategory(booking) === "Confirmed"
     ).length,
     pendingBookings: bookings.filter(
-      (booking) => getBookingStatusCategory(booking.bookingStatus) === "Pending"
+      (booking) => getBookingStatusCategory(booking) === "Pending"
     ).length,
     cancelledBookings: bookings.filter(
       (booking) =>
-        getBookingStatusCategory(booking.bookingStatus) === "Cancelled"
+        getBookingStatusCategory(booking) === "Cancelled"
     ).length,
     completedBookings: bookings.filter(
       (booking) =>
-        getBookingStatusCategory(booking.bookingStatus) === "Completed"
+        getBookingStatusCategory(booking) === "Completed"
     ).length,
-    totalPendingPayments: bookings.reduce(
-      (sum, booking) => sum + (booking.remainingBalance || 0),
+    elapsedBookings: bookings.filter(
+      (booking) => getBookingStatusCategory(booking) === "Elapsed"
+    ).length,
+    outstandingBalance: allTime.outstandingBalance,
+    overdueUnpaid: allTime.overdueUnpaid,
+    expectedRevenue: allTime.expectedRevenue,
+    bookingsWithBalance: activeBookingsOwing,
+    // Cash received beyond what was owed (per-slot cash model). A refund or
+    // travel credit waiting to happen; no pipeline exists yet, so surface it.
+    pendingRefunds: bookings.reduce(
+      (sum, booking) => sum + (Number(booking.overpaidAmount) || 0),
       0
     ),
-    averageMonthlyRevenue: (() => {
-      const monthlyTrendsData: number[] = [];
-      for (let i = 5; i >= 0; i--) {
-        const date = new Date();
-        date.setMonth(date.getMonth() - i);
-        const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
-        const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-        const monthBookings = bookings.filter((booking) => {
-          try {
-            if (!booking.reservationDate) return false;
-            let bookingDate;
-            if (booking.reservationDate instanceof Date) {
-              bookingDate = booking.reservationDate;
-            } else {
-              bookingDate = new Date(booking.reservationDate);
-            }
-            if (isNaN(bookingDate.getTime())) return false;
-            return bookingDate >= monthStart && bookingDate <= monthEnd;
-          } catch (error) {
-            return false;
-          }
-        });
-        const monthRevenue = monthBookings.reduce(
-          (sum, booking) => sum + (booking.paid || 0),
-          0
-        );
-        monthlyTrendsData.push(monthRevenue);
-      }
-      const totalRevenue = monthlyTrendsData.reduce((sum, rev) => sum + rev, 0);
-      return monthlyTrendsData.length > 0 ? totalRevenue / monthlyTrendsData.length : 0;
-    })(),
-    cancelledRevenueLoss: bookings
-      .filter(
-        (booking) =>
-          getBookingStatusCategory(booking.bookingStatus) === "Cancelled"
-      )
-      .reduce((sum, booking) => sum + (booking.paid || 0), 0),
+    bookingsOverpaid: bookings.filter(
+      (booking) => (Number(booking.overpaidAmount) || 0) > 0.009
+    ).length,
+    averageMonthlyRevenue:
+      lastSixMonths.reduce((sum, m) => sum + m.totals.netRevenue, 0) / 6,
+    cancelledRefunded: allTime.refunded,
   };
 
   // Prepare chart data with fallback for empty data
@@ -255,6 +264,7 @@ export default function DashboardOverview() {
     { name: "Confirmed", value: metrics.confirmedBookings, color: "#26D07C" },
     { name: "Pending", value: metrics.pendingBookings, color: "#FF8200" },
     { name: "Completed", value: metrics.completedBookings, color: "#685BC7" },
+    { name: "Elapsed", value: metrics.elapsedBookings, color: "#9CA3AF" },
     { name: "Cancelled", value: metrics.cancelledBookings, color: "#EF3340" },
   ].filter((item) => item.value > 0);
 
@@ -263,57 +273,28 @@ export default function DashboardOverview() {
     bookingStatusData.push({ name: "No Data", value: 1, color: "#e5e5e5" });
   }
 
-  // Monthly booking trends (last 6 months)
+  // Monthly trends (last 6 months): bookings by reservation date, net revenue
+  // by the date money moved (same buckets as Avg Monthly Net Revenue).
   const getMonthlyTrends = (): {
     month: string;
     bookings: number;
     revenue: number;
-  }[] => {
-    const trends: { month: string; bookings: number; revenue: number }[] = [];
-    for (let i = 5; i >= 0; i--) {
-      const date = new Date();
-      date.setMonth(date.getMonth() - i);
-      const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
-      const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-
-      const monthBookings = bookings.filter((booking) => {
-        try {
-          if (!booking.reservationDate) return false;
-
-          let bookingDate;
-          if (booking.reservationDate instanceof Date) {
-            bookingDate = booking.reservationDate;
-          } else {
-            bookingDate = new Date(booking.reservationDate);
-          }
-
-          // Check if date is valid
-          if (isNaN(bookingDate.getTime())) return false;
-
-          return bookingDate >= monthStart && bookingDate <= monthEnd;
-        } catch (error) {
-          console.error(
-            "Error parsing booking date:",
-            booking.reservationDate,
-            error
-          );
-          return false;
-        }
-      });
-
-      const monthRevenue = monthBookings.reduce(
-        (sum, booking) => sum + (booking.paid || 0),
-        0
+  }[] =>
+    lastSixMonths.map(({ monthStart, label, totals }) => {
+      const nextMonthStart = new Date(
+        monthStart.getFullYear(),
+        monthStart.getMonth() + 1,
+        1
       );
-
-      trends.push({
-        month: date.toLocaleDateString("en", { month: "short" }),
-        bookings: monthBookings.length,
-        revenue: monthRevenue,
-      });
-    }
-    return trends;
-  };
+      return {
+        month: label,
+        bookings: bookings.filter((booking) => {
+          const d = new Date(booking.reservationDate);
+          return !isNaN(d.getTime()) && d >= monthStart && d < nextMonthStart;
+        }).length,
+        revenue: Math.round(totals.netRevenue * 100) / 100,
+      };
+    });
 
   const monthlyTrends = getMonthlyTrends();
 
@@ -611,31 +592,37 @@ export default function DashboardOverview() {
           </CardContent>
         </Card>
 
-        {/* Total Revenue */}
+        {/* Net Revenue (all time) */}
         <Card className="relative overflow-hidden border border-border hover:border-spring-green transition-all duration-300 hover:shadow-md">
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div className="flex-1 pr-6">
-                <p className="text-[11px] sm:text-xs text-muted-foreground font-medium mb-2 uppercase tracking-wide">
-                  Total Revenue
+                <p
+                  className="text-[11px] sm:text-xs text-muted-foreground font-medium mb-2 uppercase tracking-wide cursor-help"
+                  title={glossary("Net Revenue")}
+                >
+                  Net Revenue <span className="normal-case">(all time)</span> ⓘ
                 </p>
                 {isLoading ? (
                   <Skeleton className="h-8 w-32 mb-2" />
                 ) : (
                   <p className="text-2xl sm:text-3xl font-bold text-foreground">
-                    £{metrics.totalRevenue.toLocaleString()}
+                    £{money(metrics.netRevenue)}
                   </p>
                 )}
                 {isLoading ? (
                    <Skeleton className="h-4 w-40 mt-2" />
                 ) : (
-                  <div className="flex items-center gap-3 mt-2">
+                  <div className="flex flex-col gap-1 mt-2">
                     <div className="flex items-center gap-1">
                       <FiTrendingUp className="h-3 w-3 text-spring-green" />
                       <p className="text-xs text-spring-green font-bold">
-                        This month: £{metrics.revenueThisMonth.toLocaleString()}
+                        This month: £{money(metrics.revenueThisMonth)}
                       </p>
                     </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Gross £{money(metrics.grossRevenue)} − Refunded £{money(metrics.refunded)}
+                    </p>
                   </div>
                 )}
               </div>
@@ -671,7 +658,7 @@ export default function DashboardOverview() {
                     <div className="flex items-center gap-1">
                       <FiCalendar className="h-3 w-3 text-royal-purple" />
                       <p className="text-xs text-muted-foreground">
-                        Confirmed bookings
+                        {metrics.upcomingConfirmedBookings} confirmed bookings
                       </p>
                     </div>
                   </div>
@@ -737,6 +724,17 @@ export default function DashboardOverview() {
                         </span>
                       </p>
                     </div>
+                    {paymentReminderStats.cancelled > 0 && (
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-2 rounded-full bg-crimson-red"></div>
+                        <p className="text-xs text-muted-foreground">
+                          Cancelled:{" "}
+                          <span className="text-crimson-red font-bold">
+                            {paymentReminderStats.cancelled}
+                          </span>
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -758,14 +756,17 @@ export default function DashboardOverview() {
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div className="flex-1 pr-6">
-                <p className="text-[11px] sm:text-xs text-muted-foreground font-medium mb-2 uppercase tracking-wide">
-                  Avg Monthly Revenue
+                <p
+                  className="text-[11px] sm:text-xs text-muted-foreground font-medium mb-2 uppercase tracking-wide cursor-help"
+                  title={`Average monthly Net Revenue over the last 6 calendar months, including the current month. ${glossary("Net Revenue")}`}
+                >
+                  Avg Monthly Net Revenue ⓘ
                 </p>
                 {isLoading ? (
                   <Skeleton className="h-8 w-32 mb-2" />
                 ) : (
                   <p className="text-2xl sm:text-3xl font-bold text-foreground">
-                    £{Math.round(metrics.averageMonthlyRevenue).toLocaleString()}
+                    £{money(metrics.averageMonthlyRevenue)}
                   </p>
                 )}
                 {isLoading ? (
@@ -796,8 +797,11 @@ export default function DashboardOverview() {
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div className="flex-1 pr-6">
-                <p className="text-[11px] sm:text-xs text-muted-foreground font-medium mb-2 uppercase tracking-wide">
-                  Cancelled Bookings
+                <p
+                  className="text-[11px] sm:text-xs text-muted-foreground font-medium mb-2 uppercase tracking-wide cursor-help"
+                  title={glossary("Cancelled Bookings")}
+                >
+                  Cancelled Bookings ⓘ
                 </p>
                 {isLoading ? (
                   <Skeleton className="h-8 w-16 mb-2" />
@@ -813,9 +817,9 @@ export default function DashboardOverview() {
                     <div className="flex items-center gap-1">
                       <FiXCircle className="h-3 w-3 text-crimson-red" />
                       <p className="text-xs text-muted-foreground">
-                        Lost revenue:{" "}
+                        Refunded:{" "}
                         <span className="text-crimson-red font-bold">
-                          £{metrics.cancelledRevenueLoss.toLocaleString()}
+                          £{money(metrics.cancelledRefunded)}
                         </span>
                       </p>
                     </div>
@@ -837,26 +841,56 @@ export default function DashboardOverview() {
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div className="flex-1 pr-6">
-                <p className="text-[11px] sm:text-xs text-muted-foreground font-medium mb-2 uppercase tracking-wide">
-                  Pending Payments
+                <p
+                  className="text-[11px] sm:text-xs text-muted-foreground font-medium mb-2 uppercase tracking-wide cursor-help"
+                  title={glossary("Outstanding Balance")}
+                >
+                  Outstanding Balance ⓘ
                 </p>
                 {isLoading ? (
                   <Skeleton className="h-8 w-32 mb-2" />
                 ) : (
                   <p className="text-2xl sm:text-3xl font-bold text-foreground">
-                    £{metrics.totalPendingPayments.toLocaleString()}
+                    £{money(metrics.outstandingBalance)}
                   </p>
                 )}
                 {isLoading ? (
                   <Skeleton className="h-4 w-40 mt-2" />
                 ) : (
-                  <div className="flex items-center gap-3 mt-2">
+                  <div className="flex flex-col gap-1 mt-2">
                     <div className="flex items-center gap-1">
                       <FiClock className="h-3 w-3 text-vivid-orange" />
                       <p className="text-xs text-muted-foreground">
-                        From {metrics.pendingBookings} pending bookings
+                        <span
+                          className="cursor-help"
+                          title={glossary("Overdue Unpaid")}
+                        >
+                          Overdue Unpaid{" "}
+                          <span className="text-vivid-orange font-bold">
+                            £{money(metrics.overdueUnpaid)}
+                          </span>
+                        </span>{" "}
+                        +{" "}
+                        <span
+                          className="cursor-help"
+                          title={glossary("Expected Revenue")}
+                        >
+                          Expected Revenue £{money(metrics.expectedRevenue)}
+                        </span>
                       </p>
                     </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Owed by {metrics.bookingsWithBalance} active bookings
+                    </p>
+                    {metrics.pendingRefunds > 0.009 && (
+                      <p
+                        className="text-[11px] text-crimson-red font-medium cursor-help"
+                        title="Cash received beyond what these bookings owe. There is no refund pipeline yet; these need a manual refund or travel credit."
+                      >
+                        Overpaid £{money(metrics.pendingRefunds)} on {metrics.bookingsOverpaid} booking
+                        {metrics.bookingsOverpaid === 1 ? "" : "s"} — refund or credit pending
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -970,7 +1004,14 @@ export default function DashboardOverview() {
               Booking Status Overview
             </CardTitle>
             <CardDescription className="text-muted-foreground">
-              Current distribution of booking statuses
+              <span
+                className="cursor-help"
+                title={Object.entries(LIFECYCLE_DEFINITIONS)
+                  .map(([k, v]) => `${k}: ${v}`)
+                  .join("\n")}
+              >
+                Derived from tour dates and balance, always current ⓘ
+              </span>
             </CardDescription>
           </CardHeader>
           <CardContent className="p-6">
@@ -1032,7 +1073,7 @@ export default function DashboardOverview() {
               Monthly Trends
             </CardTitle>
             <CardDescription className="text-muted-foreground">
-              Bookings and revenue over the last 6 months
+              Bookings by reservation date, net revenue by payment date (last 6 months)
             </CardDescription>
           </CardHeader>
           <CardContent className="p-6">

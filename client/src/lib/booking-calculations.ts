@@ -8,6 +8,10 @@
 import { Timestamp } from "firebase/firestore";
 
 import { computeEligibleInstallmentDates } from "./installment-schedule";
+import {
+  resolveInstallmentSchedule,
+  roundCurrency,
+} from "@/app/functions/columns/payment-calculation-helpers";
 
 // ============================================================================
 // DATE UTILITIES
@@ -642,12 +646,15 @@ export function generateInstallmentDueDates(
 }
 
 /**
- * Calculate installment amounts - matches logic from p1-amount.ts, p2-amount.ts etc.
+ * Calculate installment amounts.
  *
- * Key logic:
- * - When paymentPlan is empty/undefined, terms = 1, so P1 gets all remaining balance
- * - When paymentPlan is "P2", terms = 2, amount = total / 2
- * - Credit handling follows the same pattern as EditBookingModal
+ * The allocation itself (even split, manual-credit handling, paid-term locks)
+ * lives in ONE place: payment-calculation-helpers.ts. This function only maps
+ * booking fields onto that helper. Do not re-implement the split here — a
+ * second copy is exactly how the manual-credit bug survived the Aug 2026 fix.
+ *
+ * - When paymentPlan is empty, amounts are previews (total / n for each plan)
+ * - A manual credit reduces what the guest still owes by exactly the credit
  */
 export function calculateInstallmentAmounts(
   paymentPlan: string,
@@ -671,263 +678,18 @@ export function calculateInstallmentAmounts(
   p2DatePaid?: unknown,
   p3DatePaid?: unknown,
   p4DatePaid?: unknown,
+  // Per-slot cash model (optional; when present the manual credit is ignored)
+  reservationAmountPaid?: number | string | null,
+  p1AmountPaid?: number | string | null,
+  p2AmountPaid?: number | string | null,
+  p3AmountPaid?: number | string | null,
+  p4AmountPaid?: number | string | null,
 ): {
   p1Amount: number | "";
   p2Amount: number | "";
   p3Amount: number | "";
   p4Amount: number | "";
 } {
-  const roundCurrency = (value: number): number =>
-    Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
-
-  const splitAmountWithRemainder = (
-    totalValue: number,
-    terms: number,
-  ): number[] => {
-    if (terms <= 0) return [];
-
-    const roundedTotal = roundCurrency(totalValue);
-    if (terms === 1) return [roundedTotal];
-
-    const base = Math.trunc((roundedTotal / terms) * 100) / 100;
-    const amounts = new Array<number>(terms).fill(base);
-    const allocated = base * (terms - 1);
-    amounts[terms - 1] = roundCurrency(roundedTotal - allocated);
-
-    return amounts;
-  };
-
-  const toFiniteNumberOrNull = (value: unknown): number | null => {
-    if (typeof value === "number") {
-      return Number.isFinite(value) ? value : null;
-    }
-
-    if (typeof value === "string") {
-      const normalized = value.replace(/[^\d.-]/g, "").trim();
-      if (!normalized) return null;
-      const parsed = Number(normalized);
-      return Number.isFinite(parsed) ? parsed : null;
-    }
-
-    if (value == null) return null;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  };
-
-  const hasPaidDate = (value: unknown): boolean => {
-    if (value == null) return false;
-
-    if (
-      typeof value === "object" &&
-      (value as { type?: string })?.type === "firestore/timestamp/1.0"
-    ) {
-      return true;
-    }
-
-    if (
-      typeof value === "object" &&
-      typeof (value as { seconds?: number }).seconds === "number"
-    ) {
-      return true;
-    }
-
-    if (value instanceof Date) return !isNaN(value.getTime());
-
-    if (typeof value === "string") {
-      const normalized = value.trim().toLowerCase();
-      return (
-        normalized !== "" &&
-        normalized !== "null" &&
-        normalized !== "undefined"
-      );
-    }
-
-    return toDate(value) !== null;
-  };
-
-  const allocateByWeight = (totalValue: number, weights: number[]): number[] => {
-    if (weights.length === 0) return [];
-
-    const totalCents = Math.max(0, Math.round(roundCurrency(totalValue) * 100));
-    if (totalCents === 0) return new Array<number>(weights.length).fill(0);
-
-    const safeWeights = weights.map((weight) =>
-      Math.max(0, roundCurrency(weight)),
-    );
-    const weightSum = safeWeights.reduce((sum, weight) => sum + weight, 0);
-
-    if (weightSum <= 0) {
-      return splitAmountWithRemainder(roundCurrency(totalValue), weights.length);
-    }
-
-    const allocationsInCents = new Array<number>(weights.length).fill(0);
-    const fractions = safeWeights.map((weight, index) => {
-      const raw = (weight / weightSum) * totalCents;
-      const floored = Math.floor(raw);
-      allocationsInCents[index] = floored;
-      return { index, fraction: raw - floored };
-    });
-
-    let remainder =
-      totalCents - allocationsInCents.reduce((sum, cents) => sum + cents, 0);
-    if (remainder > 0) {
-      const order = fractions
-        .slice()
-        .sort((a, b) => b.fraction - a.fraction || a.index - b.index);
-
-      for (let i = 0; i < remainder; i += 1) {
-        const target = order[i % order.length];
-        allocationsInCents[target.index] += 1;
-      }
-    }
-
-    return allocationsInCents.map((cents) => roundCurrency(cents / 100));
-  };
-
-  const getCreditOrder = (source: string, amount: number): number => {
-    if (amount <= 0) return -1;
-    if (source === "Reservation") return 0;
-    if (source === "P1") return 1;
-    if (source === "P2") return 2;
-    if (source === "P3") return 3;
-    if (source === "P4") return 4;
-    return -1;
-  };
-
-  const allocateInstallmentAmounts = (
-    totalValue: number,
-    terms: number,
-    source: string,
-    amount: number,
-  ): number[] => {
-    const creditOrder = getCreditOrder(source, amount);
-
-    if (creditOrder === -1) {
-      return splitAmountWithRemainder(totalValue, terms);
-    }
-
-    if (creditOrder === 0) {
-      return splitAmountWithRemainder(totalValue - amount, terms);
-    }
-
-    if (creditOrder > terms) {
-      return splitAmountWithRemainder(totalValue, terms);
-    }
-
-    const noCreditAllocation = splitAmountWithRemainder(totalValue, terms);
-    const creditIndex = creditOrder - 1;
-    const allocations = new Array<number>(terms).fill(0);
-
-    for (let index = 0; index < creditIndex; index += 1) {
-      allocations[index] = noCreditAllocation[index] ?? 0;
-    }
-
-    const prefixTotal = allocations
-      .slice(0, creditIndex)
-      .reduce((sum, value) => sum + value, 0);
-    const termsAfterCredit = terms - creditOrder;
-
-    if (termsAfterCredit === 0) {
-      allocations[creditIndex] = roundCurrency(totalValue - prefixTotal);
-      return allocations;
-    }
-
-    allocations[creditIndex] = roundCurrency(amount);
-
-    const remainingTotal = roundCurrency(
-      totalValue - prefixTotal - allocations[creditIndex],
-    );
-    const suffixAllocation = splitAmountWithRemainder(
-      remainingTotal,
-      termsAfterCredit,
-    );
-
-    for (let index = 0; index < suffixAllocation.length; index += 1) {
-      allocations[creditIndex + 1 + index] = suffixAllocation[index];
-    }
-
-    const summed = roundCurrency(
-      allocations.reduce((sum, value) => sum + (Number(value) || 0), 0),
-    );
-    const diff = roundCurrency(totalValue - summed);
-    if (Math.abs(diff) > 0) {
-      allocations[terms - 1] = roundCurrency(
-        (allocations[terms - 1] ?? 0) + diff,
-      );
-    }
-
-    return allocations;
-  };
-
-  const allocateInstallmentAmountsWithPaidLocks = (
-    totalValue: number,
-    terms: number,
-    source: string,
-    amount: number,
-  ): number[] => {
-    const baseAllocations = allocateInstallmentAmounts(
-      totalValue,
-      terms,
-      source,
-      amount,
-    );
-
-    const currentAmounts = [
-      p1AmountCurrent,
-      p2AmountCurrent,
-      p3AmountCurrent,
-      p4AmountCurrent,
-    ];
-    const paidDates = [p1DatePaid, p2DatePaid, p3DatePaid, p4DatePaid];
-
-    const allocations = baseAllocations.slice(0, terms);
-    const lockedIndices: number[] = [];
-    const unlockedIndices: number[] = [];
-
-    for (let index = 0; index < terms; index += 1) {
-      const isPaid = hasPaidDate(paidDates[index]);
-      const currentAmount = toFiniteNumberOrNull(currentAmounts[index]);
-
-      if (isPaid && currentAmount != null) {
-        allocations[index] = roundCurrency(currentAmount);
-        lockedIndices.push(index);
-      } else {
-        unlockedIndices.push(index);
-      }
-    }
-
-    if (lockedIndices.length === 0) {
-      return baseAllocations;
-    }
-
-    if (unlockedIndices.length === 0) {
-      return allocations;
-    }
-
-    const lockedTotal = roundCurrency(
-      lockedIndices.reduce((sum, index) => sum + (allocations[index] ?? 0), 0),
-    );
-    const unlockedTarget = roundCurrency(totalValue - lockedTotal);
-
-    if (unlockedTarget <= 0) {
-      unlockedIndices.forEach((index) => {
-        allocations[index] = 0;
-      });
-      return allocations;
-    }
-
-    const unlockedWeights = unlockedIndices.map(
-      (index) => baseAllocations[index] ?? 0,
-    );
-    const unlockedAllocations = allocateByWeight(unlockedTarget, unlockedWeights);
-
-    unlockedIndices.forEach((index, localIndex) => {
-      allocations[index] = roundCurrency(unlockedAllocations[localIndex] ?? 0);
-    });
-
-    return allocations;
-  };
-
   const result = {
     p1Amount: "" as number | "",
     p2Amount: "" as number | "",
@@ -981,11 +743,16 @@ export function calculateInstallmentAmounts(
     P4: 4,
   };
   const terms = termsMap[paymentPlan ?? ""] ?? 1;
-  const allocations = allocateInstallmentAmountsWithPaidLocks(
-    total,
+  const allocations = resolveInstallmentSchedule(
+    baseCost,
+    reservationFee,
     terms,
     credit_from,
     credit_amt,
+    [p1AmountCurrent, p2AmountCurrent, p3AmountCurrent, p4AmountCurrent],
+    [p1DatePaid, p2DatePaid, p3DatePaid, p4DatePaid],
+    reservationAmountPaid,
+    [p1AmountPaid, p2AmountPaid, p3AmountPaid, p4AmountPaid],
   );
 
   // P1 Amount - only if p1DueDate exists or terms >= 1
@@ -1395,6 +1162,12 @@ export interface PaymentPlanUpdateInput {
   p2DatePaid?: unknown;
   p3DatePaid?: unknown;
   p4DatePaid?: unknown;
+  // Per-slot cash model
+  reservationAmountPaid?: number | string | null;
+  p1AmountPaid?: number | string | null;
+  p2AmountPaid?: number | string | null;
+  p3AmountPaid?: number | string | null;
+  p4AmountPaid?: number | string | null;
 }
 
 export interface PaymentPlanUpdateResult {
@@ -1475,6 +1248,11 @@ export function calculatePaymentPlanUpdate(
     input.p2DatePaid,
     input.p3DatePaid,
     input.p4DatePaid,
+    input.reservationAmountPaid,
+    input.p1AmountPaid,
+    input.p2AmountPaid,
+    input.p3AmountPaid,
+    input.p4AmountPaid,
   );
 
   // Calculate scheduled reminder dates

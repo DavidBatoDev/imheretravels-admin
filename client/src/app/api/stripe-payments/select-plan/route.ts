@@ -145,6 +145,12 @@ export async function POST(req: NextRequest) {
       p2DatePaid: bookingData.p2DatePaid,
       p3DatePaid: bookingData.p3DatePaid,
       p4DatePaid: bookingData.p4DatePaid,
+      // Per-slot cash model (present on migrated / Stripe-paid bookings)
+      reservationAmountPaid: bookingData.reservationAmountPaid ?? null,
+      p1AmountPaid: bookingData.p1AmountPaid ?? null,
+      p2AmountPaid: bookingData.p2AmountPaid ?? null,
+      p3AmountPaid: bookingData.p3AmountPaid ?? null,
+      p4AmountPaid: bookingData.p4AmountPaid ?? null,
     };
 
     // Calculate all payment plan fields

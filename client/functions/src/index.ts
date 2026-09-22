@@ -36,6 +36,7 @@ export { sendAbandonedBookingFollowUps } from "./scheduled-abandoned-booking-fol
 // Export price history tracking function
 export { onTourPackagePriceUpdate } from "./on-tour-package-price-update";
 export { applyLateFeesDaily } from "./scheduled-late-fees";
+export { elapseBookingsDaily } from "./scheduled-elapse-bookings"; // Daily: stamp "Elapsed" on ended tours still owing
 // Publishes tours whose scheduledPublishAt time has passed (runs every 15 min)
 export { publishScheduledTours } from "./scheduled-publish-tours";
 // Publishes destinations whose scheduledPublishAt time has passed (runs every 15 min)

@@ -386,6 +386,17 @@ export const processScheduledEmails = onSchedule(
               const termLower = term.toLowerCase();
               const paidDateVal = (bookingData as any)[`${termLower}DatePaid`];
 
+              // Tour has already run: no more payment reminders.
+              if (String(bookingData.bookingStatus ?? "").trim().toLowerCase() === "elapsed") {
+                logger.info(`Skipping email ${emailId} - booking is Elapsed (tour ended, balance owing)`);
+                await db.collection("scheduledEmails").doc(emailId).update({
+                  status: "skipped",
+                  updatedAt: Timestamp.now(),
+                  errorMessage: "Booking elapsed: tour ended with balance owing",
+                });
+                return;
+              }
+
               if (paidDateVal) {
                 const paidDateStr = formatDate(paidDateVal);
                 logger.info(

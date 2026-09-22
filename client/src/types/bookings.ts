@@ -105,8 +105,30 @@ export interface Booking {
   paid: number;
   remainingBalance: number;
   totalLateFees?: number;
+  /** @deprecated Being replaced by per-slot *AmountPaid fields (see below). */
   manualCredit?: number;
+  /** @deprecated Being replaced by per-slot *AmountPaid fields (see below). */
   creditFrom?: string;
+
+  // ── Per-slot cash received (replaces Manual Credit / Credit From) ─────────
+  // `pNAmount` is what the term ASKED for; `pNAmountPaid` is what actually
+  // arrived. An overpayment is simply paid > asked and reduces later terms;
+  // a partial payment is paid < asked. Absent = legacy booking, assume
+  // paid === asked. Overpayment with no later term to absorb it lands in
+  // `overpaidAmount` (refund / travel credit pending — no pipeline yet).
+  reservationAmountPaid?: number;
+  p1AmountPaid?: number;
+  p2AmountPaid?: number;
+  p3AmountPaid?: number;
+  p4AmountPaid?: number;
+  fullPaymentAmountPaid?: number;
+  overpaidAmount?: number;
+
+  // ── Elapsed (tour ended, balance still owing) ─────────────────────────────
+  // Stamped daily by the elapseBookingsDaily function; bookingStatus becomes
+  // "Elapsed" and the status it replaced is preserved here.
+  statusBeforeElapsed?: string;
+  elapsedAt?: Date;
 
   // Late fees (term-level)
   p1LateFeesPenalty?: number;

@@ -1,6 +1,6 @@
 import { BookingSheetColumn } from "@/types/booking-sheet-column";
 import {
-  allocateInstallmentAmountsWithPaidLocks,
+  resolveInstallmentSchedule,
   getPaymentPlanTerms,
   roundCurrency,
   toNumber,
@@ -189,6 +189,51 @@ export const p4AmountColumn: BookingSheetColumn = {
         isRest: false,
         value: "",
       },
+      {
+        name: "reservationAmountPaid",
+        type: "number",
+        columnReference: "Reservation Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "p1AmountPaid",
+        type: "number",
+        columnReference: "P1 Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "p2AmountPaid",
+        type: "number",
+        columnReference: "P2 Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "p3AmountPaid",
+        type: "number",
+        columnReference: "P3 Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "p4AmountPaid",
+        type: "number",
+        columnReference: "P4 Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
     ],
   },
 };
@@ -213,7 +258,12 @@ export default function getP4AmountFunction(
   p3DatePaid?: string | Date,
   p3Amount?: number,
   p4DatePaid?: string | Date,
-  p4Amount?: number
+  p4Amount?: number,
+  reservationAmountPaid?: number | string | null,
+  p1AmountPaid?: number | string | null,
+  p2AmountPaid?: number | string | null,
+  p3AmountPaid?: number | string | null,
+  p4AmountPaid?: number | string | null,
 ) {
   // =IF($BV1003<>"", ...)
   if (!p4DueDate) return "";
@@ -241,13 +291,16 @@ export default function getP4AmountFunction(
 
   // LET(terms, SWITCH(...))
   const terms = getPaymentPlanTerms(paymentPlan);
-  const allocations = allocateInstallmentAmountsWithPaidLocks(
-    total,
+  const allocations = resolveInstallmentSchedule(
+    baseCost,
+    reservationFee,
     terms,
     credit_from,
     credit_amt,
     [p1Amount, p2Amount, p3Amount, p4Amount],
     [p1DatePaid, p2DatePaid, p3DatePaid, p4DatePaid],
+    reservationAmountPaid,
+    [p1AmountPaid, p2AmountPaid, p3AmountPaid, p4AmountPaid],
   );
 
   // IF(terms<4,"", amount)

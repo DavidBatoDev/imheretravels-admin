@@ -4,6 +4,8 @@ import {
   hasPaidDate,
   roundCurrency,
   toNumber,
+  hasPerSlotCash,
+  cashReceivedForTerm,
 } from "../payment-calculation-helpers";
 
 export const paidTermsColumn: BookingSheetColumn = {
@@ -144,6 +146,60 @@ export const paidTermsColumn: BookingSheetColumn = {
         isRest: false,
         value: "",
       },
+      {
+        name: "reservationAmountPaid",
+        type: "number",
+        columnReference: "Reservation Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "p1AmountPaid",
+        type: "number",
+        columnReference: "P1 Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "p2AmountPaid",
+        type: "number",
+        columnReference: "P2 Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "p3AmountPaid",
+        type: "number",
+        columnReference: "P3 Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "p4AmountPaid",
+        type: "number",
+        columnReference: "P4 Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "fullPaymentAmountPaid",
+        type: "number",
+        columnReference: "Full Payment Amount Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
     ],
   },
 };
@@ -212,6 +268,12 @@ export default async function getPaidTerms(
   p4DatePaid: Date | string,
   p4Amount: number | string,
   reservationFee: number | string,
+  reservationAmountPaid?: number | string | null,
+  p1AmountPaid?: number | string | null,
+  p2AmountPaid?: number | string | null,
+  p3AmountPaid?: number | string | null,
+  p4AmountPaid?: number | string | null,
+  fullPaymentAmountPaid?: number | string | null,
 ): Promise<number | string> {
   // Return empty if no tour package selected
   if (!tourPackageName) return "";
@@ -231,32 +293,47 @@ export default async function getPaidTerms(
   const creditAppliedTo = (source: string): boolean =>
     appliedCredit > 0 && creditFromValue === source;
 
+  // Per-slot cash model: cash per slot replaces the manual credit entirely.
+  const perSlot = hasPerSlotCash(
+    reservationAmountPaid, p1AmountPaid, p2AmountPaid, p3AmountPaid, p4AmountPaid, fullPaymentAmountPaid,
+  );
+
   // Calculate each payment term (manual credit from Px requires matching date paid)
-  const fullPaid = hasPaidDate(fullPaymentDatePaid)
+  const fullPaid = perSlot
+    ? cashReceivedForTerm(fullPaymentAmount, fullPaymentAmountPaid, fullPaymentDatePaid)
+    : hasPaidDate(fullPaymentDatePaid)
     ? creditAppliedTo("Full Payment")
       ? appliedCredit
       : toNumber(fullPaymentAmount)
     : 0;
 
-  const p1Paid = hasPaidDate(p1DatePaid)
+  const p1Paid = perSlot
+    ? cashReceivedForTerm(p1Amount, p1AmountPaid, p1DatePaid)
+    : hasPaidDate(p1DatePaid)
     ? creditAppliedTo("P1")
       ? appliedCredit
       : toNumber(p1Amount)
     : 0;
 
-  const p2Paid = hasPaidDate(p2DatePaid)
+  const p2Paid = perSlot
+    ? cashReceivedForTerm(p2Amount, p2AmountPaid, p2DatePaid)
+    : hasPaidDate(p2DatePaid)
     ? creditAppliedTo("P2")
       ? appliedCredit
       : toNumber(p2Amount)
     : 0;
 
-  const p3Paid = hasPaidDate(p3DatePaid)
+  const p3Paid = perSlot
+    ? cashReceivedForTerm(p3Amount, p3AmountPaid, p3DatePaid)
+    : hasPaidDate(p3DatePaid)
     ? creditAppliedTo("P3")
       ? appliedCredit
       : toNumber(p3Amount)
     : 0;
 
-  const p4Paid = hasPaidDate(p4DatePaid)
+  const p4Paid = perSlot
+    ? cashReceivedForTerm(p4Amount, p4AmountPaid, p4DatePaid)
+    : hasPaidDate(p4DatePaid)
     ? creditAppliedTo("P4")
       ? appliedCredit
       : toNumber(p4Amount)

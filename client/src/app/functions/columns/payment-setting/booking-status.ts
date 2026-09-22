@@ -11,7 +11,7 @@ export const bookingStatusColumn: BookingSheetColumn = {
     includeInForms: false,
     color: "yellow",
     width: 168,
-    options: ["", "Confirmed", "Pending", "Cancelled", "Completed"],
+    options: ["", "Confirmed", "Pending", "Cancelled", "Completed", "Elapsed"],
     arguments: [
       {
         name: "reason",
@@ -85,6 +85,24 @@ export const bookingStatusColumn: BookingSheetColumn = {
         isRest: false,
         value: "",
       },
+      {
+        name: "tourDate",
+        type: "any",
+        columnReference: "Tour Date",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "returnDate",
+        type: "any",
+        columnReference: "Return Date",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
     ],
   },
 };
@@ -101,7 +119,9 @@ export default function bookingStatusFunction(
   p1DatePaid: any,
   p2DatePaid: any,
   p3DatePaid: any,
-  p4DatePaid: any
+  p4DatePaid: any,
+  tourDate?: any,
+  returnDate?: any,
 ): string {
   // --- 1. Handle cancellation ---
   if (reason && reason.trim() !== "") return "Cancelled";
@@ -184,6 +204,17 @@ export default function bookingStatusFunction(
       : plan === "P4"
       ? maxDate(p1, p2, p3, p4)
       : null;
+
+  // --- 6b. Elapsed: tour has ENDED and a balance is still owing ---
+  // Mirrors the daily elapseBookingsDaily stamp, so an edit to the row
+  // cannot revert a stamped "Elapsed" back to "Installment n/m".
+  // (Cancelled already returned above; a settled booking falls through.)
+  const tourEnd = toDate(returnDate) ?? toDate(tourDate);
+  if (tourEnd && rem > 0) {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (tourEnd < startOfToday) return "Elapsed";
+  }
 
   // --- 7. Compute base status ---
   let baseStatus = "";

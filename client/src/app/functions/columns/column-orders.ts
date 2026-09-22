@@ -52,7 +52,9 @@ export const COLUMN_ORDERS: Record<string, number> = {
   originalTourCost: 21,
   discountedTourCost: 22,
   reservationFee: 23,
+  reservationAmountPaid: 23.5,
   remainingBalance: 24,
+  overpaidAmount: 24.5,
 
   // ============================================================================
   // DISCOUNTS (25-26)
@@ -102,6 +104,7 @@ export const COLUMN_ORDERS: Record<string, number> = {
   // ============================================================================
   fullPaymentDueDate: 50,
   fullPaymentAmount: 51,
+  fullPaymentAmountPaid: 51.5,
   fullPaymentDatePaid: 52,
 
   // ============================================================================
@@ -113,6 +116,7 @@ export const COLUMN_ORDERS: Record<string, number> = {
   p1CalendarEventLink: 57,
   p1DueDate: 58,
   p1Amount: 59,
+  p1AmountPaid: 59.5,
   p1DatePaid: 60,
   p1LateFeesPenalty: 82,
   p1LateFeeAppliedAt: 83,
@@ -127,6 +131,7 @@ export const COLUMN_ORDERS: Record<string, number> = {
   p2CalendarEventLink: 64,
   p2DueDate: 65,
   p2Amount: 66,
+  p2AmountPaid: 66.5,
   p2DatePaid: 67,
   p2LateFeesPenalty: 86,
   p2LateFeeAppliedAt: 87,
@@ -141,6 +146,7 @@ export const COLUMN_ORDERS: Record<string, number> = {
   p3CalendarEventLink: 71,
   p3DueDate: 72,
   p3Amount: 73,
+  p3AmountPaid: 73.5,
   p3DatePaid: 74,
   p3LateFeesPenalty: 90,
   p3LateFeeAppliedAt: 91,
@@ -155,6 +161,7 @@ export const COLUMN_ORDERS: Record<string, number> = {
   p4CalendarEventLink: 78,
   p4DueDate: 79,
   p4Amount: 80,
+  p4AmountPaid: 80.5,
   p4DatePaid: 81,
   p4LateFeesPenalty: 94,
   p4LateFeeAppliedAt: 95,

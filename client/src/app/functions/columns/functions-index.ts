@@ -71,6 +71,7 @@ import bookingStatusFunction from "./payment-setting/booking-status";
 import paymentProgressFunction from "./payment-setting/payment-progress";
 import getAdminFeeFunction from "./payment-setting/admin-fee";
 import getPaidTermsFunction from "./payment-setting/paid-terms";
+import getOverpaidAmountFunction from "./payment-setting/overpaid-amount";
 import getTotalLateFeesFunction from "./payment-setting/total-late-fees";
 
 // Discount Functions
@@ -129,6 +130,7 @@ export {
   paymentProgressFunction,
   getAdminFeeFunction,
   getPaidTermsFunction,
+  getOverpaidAmountFunction,
   getTotalLateFeesFunction,
   // Discounts
   getDiscountRateFunction,
@@ -230,6 +232,7 @@ export const functionMap: Record<string, Function> = {
   paymentProgressFunction,
   getAdminFeeFunction,
   getPaidTermsFunction,
+  getOverpaidAmountFunction,
   getTotalLateFeesFunction,
 
   // Discount functions

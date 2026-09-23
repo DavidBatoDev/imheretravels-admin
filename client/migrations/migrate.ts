@@ -269,6 +269,10 @@ import {
   rollbackMigration as rollbackMigration077,
 } from "./077-reservation-email-header-bg";
 import {
+  runMigration as runMigration079,
+  rollbackMigration as rollbackMigration079,
+} from "./079-template-sweep-fixes";
+import {
   runMigration as runMigration078,
   rollbackMigration as rollbackMigration078,
 } from "./078-late-fee-notice-grace-days";
@@ -2359,6 +2363,19 @@ async function main() {
         console.log(`📊 Details: ${rrollback077.details.restored} restored, ${rrollback077.details.errors} errors`);
       }
       break;
+    case "079":
+    case "dry-run079": {
+      const isDry = command === "dry-run079" || dryRun;
+      console.log(`📊 Running migration: 079-template-sweep-fixes${isDry ? " (DRY RUN)" : ""}`);
+      const r079 = await runMigration079(isDry);
+      console.log(`\n🎯 ${r079.message}\n📊 Details: ${r079.details.updated} templates, ${r079.details.errors} errors`);
+      break;
+    }
+    case "rollback079": {
+      const rb079 = await rollbackMigration079();
+      console.log(`\n🎯 ${rb079.message}\n📊 Details: ${rb079.details.restored} restored`);
+      break;
+    }
 
     case "078":
       console.log("📊 Running migration: 078-late-fee-notice-grace-days");
@@ -2473,6 +2490,7 @@ function showHelp() {
   076                Reservation Email (Invalid): deposit is non-refundable rebooking credit, per T&C §12
   077                Reservation Email: white band behind the logo header
   078                Late Fee Notice: state the grace period (2 or 3 days) that triggered the fee
+  079                T&C sweep fixes: Pre-Departure Pack tour name + typo, reminder Stripe CTAs, transfer wording
   rollback, undo     Rollback the migration 001 (delete created tours)
   rollback002        Rollback the migration 002 (delete created tours)
   rollback003        Rollback the migration 003 (delete created tours)

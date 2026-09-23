@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { MIN_DAYS_BEFORE_TOUR } from "../../utils/bookingFlow";
 
 type UseReservationStepPresentationOptions = {
   step: number;
@@ -74,7 +75,7 @@ export const getReservationStepDescription = ({
 
       if (!canSelectStep3Plans) {
         if (availablePaymentTerm.isInvalid) {
-          return "Preview only: your selected date is very close and immediate payment terms will apply after Step 2 payment.";
+          return `This tour date is too close to book. Please choose a date at least ${MIN_DAYS_BEFORE_TOUR} days from today.`;
         }
         if (availablePaymentTerm.isLastMinute) {
           return "Preview only: full payment will be required within 48 hours after Step 2 payment.";
@@ -85,7 +86,7 @@ export const getReservationStepDescription = ({
       }
 
       if (availablePaymentTerm.isInvalid) {
-        return "Tour date too close - immediate payment required.";
+        return `This tour date is too close to book. Please choose a date at least ${MIN_DAYS_BEFORE_TOUR} days from today.`;
       }
       if (availablePaymentTerm.isLastMinute) {
         return "Full payment required within 48 hours.";

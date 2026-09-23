@@ -12,6 +12,73 @@ export type PatchNote = {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    slug: "late-fee-two-day-grace",
+    title: "Late Fees Apply 2 Days After the Due Date",
+    description:
+      "New bookings now get the automatic late fee 2 days after an instalment's due date instead of 3. Existing bookings keep the 3-day grace period.",
+    date: "2026-09-23",
+    version: "1.4.1",
+    categories: ["improvement"],
+    content: `# Late Fees Apply 2 Days After the Due Date
+
+## Summary
+
+The automatic late fee now applies **2 days** after an unpaid instalment's due date, down from 3. This only affects **new bookings**. Every booking that already exists keeps the 3-day grace period.
+
+---
+
+## The rule
+
+| Reservation date | Grace period | Fee applies from |
+|---|---|---|
+| Before **Sep 24, 2026** (Manila) | 3 days | due date + 3 days |
+| On/after **Sep 24, 2026** (Manila) | **2 days** | due date + 2 days |
+
+Nothing else changes: the fee is still a one-time **3%** of the instalment amount, applied per term (P1–P4) and only to unpaid terms, and the customer still gets the Late Fee Notice email.
+
+### Worked example
+
+A P2 of £400 is due **Fri Nov 27** and has not been paid.
+
+| | Fee eligible from | Amount |
+|---|---|---|
+| Booking reserved Sep 10, 2026 | Mon Nov 30 | £12.00 |
+| Booking reserved Oct 2, 2026 | **Sun Nov 29** | £12.00 |
+
+---
+
+## What does *not* change
+
+- **Existing bookings never move.** The grace period comes from the booking's reservation date, so no booking made before Sep 24, 2026 is charged earlier than before.
+- The nightly run (02:00 Manila), **Process Now** and **Send Notice** in the Late Fees tab, and the customer booking-status page all use the same rule, so they cannot disagree.
+- A booking with no reservation date is treated as existing (3 days).
+- \`config/late-fees\` \`graceDays\`, if it is ever set, still controls the grace period for existing bookings only.
+
+---
+
+## Customer-facing
+
+- **Terms and Conditions** (§9 Late Fees) now say the fee applies two days after the due date, or three days for bookings made before Sep 24, 2026.
+- The **Late Fee Notice** email now tells the customer which rule applied: *"a one-time late fee of 3% is added when an instalment is still unpaid 2 days after its due date"* (3 days for existing bookings). Migration \`078\` adds this to the live template.
+
+---
+
+## Files Changed
+
+| File | Change |
+|---|---|
+| \`lib/late-fee-policy.ts\` | New: grace-period policy by reservation date (\`getLateFeeGraceDays\`) |
+| \`functions/src/late-fee-policy.ts\` | Mirror of the policy for Cloud Functions |
+| \`functions/src/scheduled-late-fees.ts\` | Nightly run uses per-booking grace; passes \`graceDays\` to the email |
+| \`api/late-fees/process-now\` | Per-booking grace; passes \`graceDays\` to the email |
+| \`api/late-fees/send-notice\` | Per-booking grace; passes \`graceDays\` to the email |
+| \`booking-status/[bookingDocumentId]\` | Customer page fee gate uses per-booking grace |
+| \`migrations/078-late-fee-notice-grace-days.ts\` | **New.** Adds the grace-period sentence to the live Late Fee Notice template |
+| \`functions/emails/latePaymentNotice.html\` | Repo copy of the template, same sentence |
+| \`www/data/termsAndConditions.ts\` | Late-fee clause: two days (three for bookings before Sep 24, 2026) |
+`,
+  },
+  {
     slug: "second-to-last-friday-2027",
     title: "Second-to-Last Friday Due Dates for 2027 Tours",
     description:

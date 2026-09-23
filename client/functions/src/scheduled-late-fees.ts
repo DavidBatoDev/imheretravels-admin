@@ -5,6 +5,7 @@ import { logger } from "firebase-functions";
 import EmailTemplateService from "./email-template-service";
 import GmailApiService from "./gmail-api-service";
 import { buildBookingStatusUrl } from "./booking-status-url";
+import { getLateFeeGraceDays } from "./late-fee-policy";
 
 if (getApps().length === 0) {
   initializeApp();
@@ -112,7 +113,6 @@ export const applyLateFeesDaily = onSchedule(
       }
 
       const penaltyPercent = Number(config.penaltyPercent ?? 3);
-      const graceDays = Number(config.graceDays ?? 3);
       const now = new Date();
 
       const templateSnap = await db
@@ -141,6 +141,11 @@ export const applyLateFeesDaily = onSchedule(
       for (const bookingDoc of bookingsSnap.docs) {
         const booking = bookingDoc.data();
         const bookingRef = bookingDoc.ref;
+
+        const graceDays = getLateFeeGraceDays(
+          booking.reservationDate,
+          config.graceDays,
+        );
 
         // No late fees once the tour has run (Elapsed) or the booking is
         // cancelled — there is nothing left to nudge the guest towards.
@@ -209,6 +214,7 @@ export const applyLateFeesDaily = onSchedule(
               timeZone: "Asia/Manila",
             }),
             daysOverdue,
+            graceDays,
             updatedRemainingBalance: formatGBP(updatedRemainingBalance),
             bookingStatusUrl,
           };

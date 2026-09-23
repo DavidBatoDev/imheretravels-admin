@@ -15,6 +15,7 @@ import {
 import { db } from "@/lib/firebase";
 import EmailTemplateService from "@/services/email-template-service";
 import GmailApiService from "@/lib/gmail/gmail-api-service";
+import { getLateFeeGraceDays } from "@/lib/late-fee-policy";
 
 type TermKey = "p1" | "p2" | "p3" | "p4";
 
@@ -168,7 +169,10 @@ export async function POST(request: NextRequest) {
     const configSnap = await getDoc(doc(db, "config", "late-fees"));
     const config = (configSnap.data() || {}) as LateFeesConfig;
     const penaltyPercent = Number(config.penaltyPercent ?? 3);
-    const graceDays = Number(config.graceDays ?? 3);
+    const graceDays = getLateFeeGraceDays(
+      booking.reservationDate,
+      config.graceDays,
+    );
 
     const graceCutoff = new Date(dueDate.getTime());
     graceCutoff.setDate(graceCutoff.getDate() + graceDays);
@@ -278,6 +282,7 @@ export async function POST(request: NextRequest) {
         timeZone: "Asia/Manila",
       }),
       daysOverdue,
+      graceDays,
       updatedRemainingBalance: formatGBP(remainingBalance),
       bookingStatusUrl,
     };

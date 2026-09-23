@@ -268,6 +268,10 @@ import {
   runMigration as runMigration077,
   rollbackMigration as rollbackMigration077,
 } from "./077-reservation-email-header-bg";
+import {
+  runMigration as runMigration078,
+  rollbackMigration as rollbackMigration078,
+} from "./078-late-fee-notice-grace-days";
 import migration034 from "./034-initialize-columns-metadata";
 
 // ============================================================================
@@ -2356,6 +2360,34 @@ async function main() {
       }
       break;
 
+    case "078":
+      console.log("📊 Running migration: 078-late-fee-notice-grace-days");
+      const r078 = await runMigration078(dryRun);
+      console.log(`
+🎯 ${r078.message}`);
+      if (r078.details) {
+        console.log(`📊 Details: ${r078.details.updated} updated, ${r078.details.errors} errors`);
+      }
+      break;
+    case "dry-run078":
+      console.log("🔍 Running migration in DRY RUN mode: 078-late-fee-notice-grace-days");
+      const rdryrun078 = await runMigration078(true);
+      console.log(`
+🎯 ${rdryrun078.message}`);
+      if (rdryrun078.details) {
+        console.log(`📊 Details: ${rdryrun078.details.updated} would be updated, ${rdryrun078.details.errors} errors`);
+      }
+      break;
+    case "rollback078":
+      console.log("↩️ Rolling back migration: 078-late-fee-notice-grace-days");
+      const rrollback078 = await rollbackMigration078();
+      console.log(`
+🎯 ${rrollback078.message}`);
+      if (rrollback078.details) {
+        console.log(`📊 Details: ${rrollback078.details.restored} restored, ${rrollback078.details.errors} errors`);
+      }
+      break;
+
     case "revalidate": {
       const url =
         process.env.WWW_REVALIDATE_URL ||
@@ -2440,6 +2472,7 @@ function showHelp() {
   075                Reservation Email: redesign to match the automated Reservation Confirmed email
   076                Reservation Email (Invalid): deposit is non-refundable rebooking credit, per T&C §12
   077                Reservation Email: white band behind the logo header
+  078                Late Fee Notice: state the grace period (2 or 3 days) that triggered the fee
   rollback, undo     Rollback the migration 001 (delete created tours)
   rollback002        Rollback the migration 002 (delete created tours)
   rollback003        Rollback the migration 003 (delete created tours)

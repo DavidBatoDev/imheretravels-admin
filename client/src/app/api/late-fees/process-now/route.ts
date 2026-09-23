@@ -14,6 +14,7 @@ import {
 import { db } from "@/lib/firebase";
 import EmailTemplateService from "@/services/email-template-service";
 import GmailApiService from "@/lib/gmail/gmail-api-service";
+import { getLateFeeGraceDays } from "@/lib/late-fee-policy";
 
 type LateFeesConfig = {
   enabled?: boolean;
@@ -132,7 +133,6 @@ export async function POST() {
     }
 
     const penaltyPercent = Number(config.penaltyPercent ?? 3);
-    const graceDays = Number(config.graceDays ?? 3);
     const now = new Date();
 
     const templateSnapshot = await getDocs(
@@ -164,6 +164,11 @@ export async function POST() {
     for (const bookingDoc of bookingsSnapshot.docs) {
       const booking = bookingDoc.data() as Record<string, any>;
       const bookingRef = bookingDoc.ref;
+
+      const graceDays = getLateFeeGraceDays(
+        booking.reservationDate,
+        config.graceDays,
+      );
 
       for (let index = 0; index < TERM_KEYS.length; index++) {
         const termKey = TERM_KEYS[index];
@@ -223,6 +228,7 @@ export async function POST() {
             timeZone: "Asia/Manila",
           }),
           daysOverdue,
+          graceDays,
           updatedRemainingBalance: formatGBP(updatedRemainingBalance),
           bookingStatusUrl,
         };

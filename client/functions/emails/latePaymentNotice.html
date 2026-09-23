@@ -40,6 +40,22 @@
           reservation.
         </p>
 
+        {% if graceDays %}
+        <!-- late-fee-grace-days -->
+        <p
+          style="
+            font-size: 15px;
+            color: #555555;
+            margin: 0 0 16px 0;
+            line-height: 1.6;
+          "
+        >
+          Under our Terms and Conditions, a one-time late fee of 3% is added
+          when an instalment is still unpaid
+          <strong>{{ graceDays }} days</strong> after its due date.
+        </p>
+        {% endif %}
+
         <table style="border-collapse: collapse; width: 100%; margin: 16px 0">
           <tr>
             <td

@@ -48,10 +48,8 @@ import {
   getPaymentCondition,
 } from "@/lib/booking-calculations";
 import PayNowModal from "@/components/booking-status/PayNowModal";
+import { getLateFeeGraceDays } from "@/lib/late-fee-policy";
 
-// Grace period (days) after an instalment's due date before a late fee is valid.
-// Mirrors the late-fee engine's code default (config/late-fees graceDays ?? 3).
-const LATE_FEE_GRACE_DAYS = 3;
 
 interface PaymentTokenData {
   token: string;
@@ -995,11 +993,9 @@ export default function BookingStatusPage() {
       // the fee is settled history). This prevents a stray/erroneous penalty from
       // ever showing a customer a fee on a payment that is not actually overdue.
       const dueDateForFee = getDateFromValue(dueDate);
+      const graceDays = getLateFeeGraceDays(booking.reservationDate);
       const graceCutoff = dueDateForFee
-        ? new Date(
-            dueDateForFee.getTime() +
-              LATE_FEE_GRACE_DAYS * 24 * 60 * 60 * 1000,
-          )
+        ? new Date(dueDateForFee.getTime() + graceDays * 24 * 60 * 60 * 1000)
         : null;
       const isPastGrace = !!graceCutoff && new Date() >= graceCutoff;
       const penalty =

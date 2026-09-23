@@ -50,6 +50,14 @@ const getEligibleLastFridayDates = (
   return computeEligibleInstallmentDatesLocal(reservationDate, tourDate);
 };
 
+/**
+ * Minimum number of days between today and the tour start for a date to be
+ * bookable. Mirrors the sheet's Payment Condition rule (payment-condition.ts /
+ * booking-calculations.ts getPaymentCondition): fewer than 3 days with no
+ * instalment date is an "Invalid Booking", so the form must not offer it.
+ */
+export const MIN_DAYS_BEFORE_TOUR = 3;
+
 export const calculateDaysBetween = (
   tourDateStr: string,
   fromDate: Date = new Date(),
@@ -74,7 +82,9 @@ export const isTourAllDatesTooSoon = (
 
   return (
     validDates.length > 0 &&
-    validDates.every((date) => calculateDaysBetween(date, fromDate) < 2)
+    validDates.every(
+      (date) => calculateDaysBetween(date, fromDate) < MIN_DAYS_BEFORE_TOUR,
+    )
   );
 };
 
@@ -89,12 +99,12 @@ export const getAvailablePaymentTermForDate = (
 
   // Match payment-condition.ts logic:
   // eligible=0 & days<3 => Invalid Booking
-  if (eligibleCount === 0 && daysBetween < 3) {
+  if (eligibleCount === 0 && daysBetween < MIN_DAYS_BEFORE_TOUR) {
     return { term: "invalid", isLastMinute: false, isInvalid: true };
   }
 
   // eligible=0 & days>=3 => Last Minute Booking
-  if (eligibleCount === 0 && daysBetween >= 3) {
+  if (eligibleCount === 0 && daysBetween >= MIN_DAYS_BEFORE_TOUR) {
     return { term: "full_payment", isLastMinute: true, isInvalid: false };
   }
 

@@ -27,9 +27,18 @@ describe("bookingFlow utilities", () => {
       ),
     ).toBe(true);
 
+    // 1 and 2 days out: both under the 3-day minimum (sheet "Invalid Booking" rule).
     expect(
       isTourAllDatesTooSoon(
         { travelDates: ["2026-03-11", "2026-03-12"] },
+        fromDate,
+      ),
+    ).toBe(true);
+
+    // 3 days out is the first bookable date.
+    expect(
+      isTourAllDatesTooSoon(
+        { travelDates: ["2026-03-12", "2026-03-13"] },
         fromDate,
       ),
     ).toBe(false);

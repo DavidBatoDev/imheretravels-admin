@@ -27,6 +27,7 @@ import Step1PersonalReservationSection from "./components/Step1PersonalReservati
 import ReservationTourSelectionSidebarCard from "./components/ReservationTourSelectionSidebarCard";
 import {
   calculateDaysBetween,
+  MIN_DAYS_BEFORE_TOUR,
   isTourAllDatesTooSoon,
 } from "./utils/bookingFlow";
 import {
@@ -476,7 +477,7 @@ const Page = () => {
 
   const tourDateOptions = (tourDates ?? []).map((d: string) => {
     const daysBetween = calculateDaysBetween(d);
-    const isInvalid = daysBetween < 2;
+    const isInvalid = daysBetween < MIN_DAYS_BEFORE_TOUR;
 
     const dateObj = new Date(d);
     const formattedDate = dateObj.toLocaleDateString("en-US", {
@@ -490,7 +491,7 @@ const Page = () => {
       value: d,
       disabled: isInvalid,
       description: isInvalid
-        ? "Too soon! Please choose a date at least 2 days from today"
+        ? `Too soon! Please choose a date at least ${MIN_DAYS_BEFORE_TOUR} days from today`
         : undefined,
     };
   });

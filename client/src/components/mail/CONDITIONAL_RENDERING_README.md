@@ -101,7 +101,7 @@ Variables are referenced using double curly braces: `{{ variableName }}`
 {% if availablePaymentTerms === "Full payment required within 48hrs" %}
 <!-- Show urgent payment requirement -->
 <h3>⚠️ Final Payment Required Within 48 Hours</h3>
-<p>Your tour is less than 30 days away...</p>
+<p>Your tour departs on {{ tourDate }}, so there is no longer time for a monthly payment plan...</p>
 {% endif %}
 ```
 

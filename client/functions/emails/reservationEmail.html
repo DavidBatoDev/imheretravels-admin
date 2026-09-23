@@ -1,1259 +1,369 @@
 <html>
-  <body>
-    <!-- reservationEmailTemplate.html - Nunjucks Version -->
-    <div
-      style="
-        font-family: Arial, sans-serif;
-        padding: 20px;
-        background-color: #f4f4f4;
-        margin: 0;
-      "
-    >
-      <div
-        class="email-header"
-        style="width: 100%; margin: 0 auto; margin-bottom: 10px"
-      >
-        <img
-          src="{% if tourPackageCoverImage %}{{ tourPackageCoverImage }}{% else %}https://imheretravels.com/wp-content/uploads/2024/05/siargao-header-1.webp{% endif %}"
-          alt="ImHereTravels Banner"
-          style="
-            width: 100%;
-            max-width: 636px;
-            height: auto;
-            display: block;
-            margin: 0 auto;
-          "
-        />
-      </div>
-      <div
-        class="email-container"
-        style="
-          max-width: 600px;
-          margin: 0 auto;
-          background-color: #ffffff;
-          padding: 20px;
-          border-radius: 8px;
-          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        "
-      >
-        <p style="font-size: 16px; color: #333333">
-          Hi <strong>{{ fullName }}</strong>,
-        </p>
-        <!-- Refund Details (for Invalid bookings) -->
-        {% if availablePaymentTerms == "Invalid" %}
-        <!-- Custom Thank You Message for Invalid Booking -->
-        <p style="font-size: 16px; color: #333333">
-          Thank you for choosing ImHereTravels. We truly appreciate your
-          interest in our
-          <strong>{{ tourPackage }}</strong>.
-        </p>
-        <!-- Refund Details Section -->
-        <h3 style="color: red">Refund Details for Your Booking</h3>
-        <p style="font-size: 16px">
-          Unfortunately, we're unable to process your booking because the tour
-          is scheduled to begin within 48 hours. Due to the limited time, we're
-          not able to complete the necessary arrangements to ensure a smooth and
-          quality travel experience for you.
-        </p>
-        <p style="font-size: 16px">
-          We'd love to help you explore other options. You may rebook a
-          different tour with a later start date by reaching out to us directly,
-          and we'll be happy to assist.
-        </p>
-        <p style="font-size: 16px; color: #333333">
-          Regarding your deposit of
-          <strong style="color: red">£{{ reservationFee }}</strong>, please let
-          us know your preferred refund method. Kindly send us your bank details
-          so we can process the refund promptly.
-        </p>
-        <p style="font-size: 16px">
-          Thank you for your understanding, and we hope to assist you on your
-          next adventure.
-        </p>
-        <p style="font-size: 16px; color: #333333">Best regards,</p>
-        <p style="font-size: 16px; color: #333333">
-          <strong>The ImHereTravels Team</strong>
-        </p>
-        <div style="text-align: left; margin-top: 20px">
-          <img
-            src="https://imheretravels.com/wp-content/uploads/2025/04/ImHereTravels-Logo.png"
-            alt="ImHereTravels Logo"
-            style="width: 120px; height: auto; display: block"
-          />
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- reservationEmail.html — Reservation Email (post-deposit), migration 075 redesign (marker: "migration 075 redesign") -->
+    <!-- Mirrors the design of the automated "Reservation Confirmed" template (C8PKdv5BgAlTSFCm6wS3). -->
+    <div style="font-family: Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 0;">
+        <!-- Header with Logo -->
+        <div class="header" style="text-align: center; padding: 20px;">
+            <img
+                src="https://firebasestorage.googleapis.com/v0/b/imheretravels-a3f81.firebasestorage.app/o/images%2F1768292814673_%F0%9F%9A%A3%20Logo%20Center%20(Row%20For%20Content%20Columns).png?alt=media&token=476fb69b-4cd5-4c56-901a-9190c15685f0"
+                alt="ImHereTravels Logo"
+                style="width: 90%; max-width: 550px; height: auto; display: block; margin: 0 auto;" />
         </div>
-        {% endif %}
-        <!-- Payment Terms Rendering: generic thank-you when none of the special cases apply -->
-        {% if availablePaymentTerms != "Invalid" and availablePaymentTerms !=
-        "Full payment required within 48hrs" and availablePaymentTerms != "P1"
-        and availablePaymentTerms != "P2" and availablePaymentTerms != "P3" and
-        availablePaymentTerms != "P4" %}
-        <p style="font-size: 16px; color: #333333">
-          Thank you for booking with
-          <strong style="color: red">ImHereTravels!</strong>
-        </p>
-        <p style="font-size: 16px; color: #333333">
-          Your deposit of
-          <span style="color: red">
-            <strong>£{{ reservationFee }}</strong>
-          </span>
-          has been received, and we're thrilled to have you join us for an
-          unforgettable adventure!
-        </p>
-        {% endif %}
-        <!-- Final Payment Scenario -->
-        {% if availablePaymentTerms == "Full payment required within 48hrs" %}
-        <p style="font-size: 16px; color: #333333">
-          Thank you for booking with
-          <strong style="color: red">ImHereTravels!</strong>
-        </p>
-        <p style="font-size: 16px; color: #333333">
-          We're holding your spot for <strong>{{ tourPackage }}</strong>, but
-          your reservation isn't confirmed yet.
-        </p>
-        <!-- Booking Details -->
-        <h2 style="color: red; font-size: 24px; margin-top: 0">
-          Booking Details
-        </h2>
-        <table
-          cellpadding="5"
-          style="
-            border-collapse: collapse;
-            width: 100%;
-            max-width: 600px;
-            color: #333333;
-            margin-bottom: 20px;
-          "
-        >
-          <tr>
-            <td>
-              <strong>Traveler Name:</strong>
-            </td>
-            <td>{{ fullName }}</td>
-          </tr>
-          <!-- Conditional rendering for Main Booker -->
-          {% if bookingType == "Group Booking" or bookingType == "Duo Booking"
-          %}
-          <tr>
-            <td>
-              <strong>Main Booker:</strong>
-            </td>
-            <td>{{ mainBooker }}</td>
-          </tr>
-          {% endif %}
-          <tr>
-            <td>
-              <strong>Tour Name:</strong>
-            </td>
-            <td>{{ tourPackage }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Tour Date:</strong>
-            </td>
-            <td>{{ tourDate }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Return Date:</strong>
-            </td>
-            <td>{{ returnDate }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Tour Duration:</strong>
-            </td>
-            <td>{{ tourDuration }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Booking Type:</strong>
-            </td>
-            <td>{{ bookingType }}</td>
-          </tr>
-          <!-- Conditional rendering for Booking ID and Group ID -->
-          {% if bookingType == "Group Booking" or bookingType == "Duo Booking"
-          %}
-          <tr>
-            <td>
-              <strong>Booking ID:</strong>
-            </td>
-            <td>{{ bookingId }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Group ID:</strong>
-            </td>
-            <td>{{ groupId }}</td>
-          </tr>
-          {% endif %}
-        </table>
-        <p style="font-size: 16px; color: #333333">
-          We've received your deposit of
-          <span style="color: red">
-            <strong>£{{ reservationFee }}</strong>
-          </span>
-          — thank you! You're now ready for the next step to finalize your
-          booking.
-        </p>
-        <h3 style="font-size: 18px; color: red; margin-top: 20px">
-          ⚠️ Final Payment Required Within 48 Hours
-        </h3>
-        <p style="font-size: 16px; color: #333333">
-          Your tour is less than 30 days away, so monthly payment plans are no
-          longer available. To secure your spot, the remaining balance must be
-          fully paid within 48 hours.
-        </p>
-        <!-- Discount Highlight -->
-        {% if hasDiscount %}
-        <div
-          style="
-            background-color: #d4edda;
-            border-left: 4px solid #28a745;
-            padding: 15px 20px;
-            margin: 20px 0;
-            border-radius: 5px;
-          "
-        >
-          <p
-            style="
-              font-size: 16px;
-              color: #155724;
-              margin: 0;
-              font-weight: bold;
-            "
-          >
-            {{ eventName }} Discount Applied!
-          </p>
+        <!-- Hero Image -->
+        <div style="width: 100%; margin: 0 auto;">
+            <img
+                src="{% if tourPackageCoverImage %}{{ tourPackageCoverImage }}{% else %}https://firebasestorage.googleapis.com/v0/b/imheretravels-a3f81.firebasestorage.app/o/images%2F1767334951959_b0f582526af6adb523ad1036d0b0a6ff3437ea61.jpg?alt=media&token=c56af73d-0bfa-492d-8680-e1588d72d1b6{% endif %}"
+                alt="ImHereTravels Banner"
+                style="width: 100%; max-width: 636px; height: 300px; object-fit: cover; object-position: 50% 85%; display: block; margin: 0 auto;" />
         </div>
-        {% endif %}
-        <div style="padding: 20px; border-radius: 5px; margin-bottom: 20px">
-          <table
-            style="
-              width: 100%;
-              font-size: 16px;
-              border-collapse: collapse;
-              table-layout: fixed;
-              border: 1px solid black;
-            "
-          >
-            <thead style="background-color: #f2f2f2">
-              <tr>
-                <th
-                  align="left"
-                  style="padding: 10px; width: 35%; border: 1px solid black"
-                >
-                  Payment Terms
-                </th>
-                <th
-                  align="left"
-                  style="padding: 10px; width: 30%; border: 1px solid black"
-                >
-                  Amount
-                </th>
-                <th
-                  align="left"
-                  style="padding: 10px; width: 35%; border: 1px solid black"
-                >
-                  Due Date(s)
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td style="padding: 10px; border: 1px solid black">
-                  Full payment
-                </td>
-                <td style="padding: 10px; border: 1px solid black">
-                  £{{ remainingBalance }} {% if hasDiscount %}
-                  <br />
-                  <span style="color: #28a745; font-size: 13px"
-                    >After {{ discountDisplayText }} off</span
-                  >
-                  {% endif %}
-                </td>
-                <td style="padding: 10px; border: 1px solid black">
-                  {{ fullPaymentDueDate }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <p style="font-size: 14px; font-style: italic; color: #333333">
-            Note: All deposits are non-refundable. Please settle the full
-            balance on or before the due date to avoid cancellations. Don't
-            forget to send us a proof of payment/screenshot to confirm your
-            booking.
-          </p>
-          {% if availablePaymentTerms != "Full payment required within 48hrs" %}
-          <p
-            style="
-              font-size: 14px;
-              color: #c0392b;
-              font-weight: bold;
-              margin-top: 8px;
-              padding: 10px;
-              background-color: #fdf2f2;
-              border-left: 4px solid #c0392b;
-              border-radius: 4px;
-            "
-          >
-            ⚠️ Important: Your full tour balance must be received no later than
-            <strong>{{ finalPaymentDeadline }}</strong> — 2 months before your
-            departure date. Any outstanding balance after this date may result
-            in your booking being cancelled.
-          </p>
-          {% endif %}
+
+        <div class="email-container" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 30px 20px;">
+
+            {% set isGroup = bookingType == "Group Booking" or bookingType == "Duo Booking" %}
+            {% set isLastMinute = availablePaymentTerms == "Full payment required within 48hrs" %}
+            {% set isPlan = availablePaymentTerms == "P1" or availablePaymentTerms == "P2" or availablePaymentTerms == "P3" or availablePaymentTerms == "P4" %}
+            {% set payUrl = bookingStatusUrl if bookingStatusUrl else ("https://admin.imheretravels.com/booking-status/" + accessToken if accessToken else "") %}
+
+            {% if availablePaymentTerms == "Invalid" %}
+            <!-- ============================ INVALID BOOKING ============================ -->
+            <div style="text-align: center; margin-bottom: 25px;">
+                <h2 style="color: #333333; margin: 0 0 10px 0; font-size: 24px;">We couldn't process this booking</h2>
+            </div>
+            <p style="font-size: 15px; color: #666666; margin: 0 0 15px 0;">Hi <strong>{{ fullName }}</strong>,</p>
+            <p style="font-size: 15px; color: #666666; margin: 0 0 25px 0;">
+                Thank you for choosing <strong style="color: #e74c3c">ImHereTravels!</strong>
+                We truly appreciate your interest in <strong>{{ tourPackage }}</strong>.
+            </p>
+            <div style="background-color: #fdf2f2; padding: 20px; border-radius: 12px; margin: 25px 0; border-left: 5px solid #c0392b;">
+                <h3 style="color: #c0392b; margin: 0 0 12px 0; font-size: 16px; font-weight: bold;">About Your Booking and Deposit</h3>
+                <p style="font-size: 14px; color: #333333; margin: 0 0 12px 0;">
+                    Unfortunately, we're unable to process your booking because the tour is scheduled to begin in
+                    less than 3 days. Due to the limited time, we're not able to complete the necessary arrangements
+                    to ensure a smooth and quality travel experience for you.
+                </p>
+                <p style="font-size: 14px; color: #333333; margin: 0 0 12px 0;">
+                    <!-- migration076: deposit is non-refundable rebooking credit -->
+                    In line with our
+                    <a href="https://www.imheretravels.com/terms-and-conditions" target="_blank" style="color: #c0392b;">Terms and Conditions</a>,
+                    your deposit of <strong style="color: #e74c3c">£{{ reservationFee }}</strong> is non-refundable
+                    &mdash; but it isn't lost. We'll hold it as credit towards a rebooking on any of our tours with a
+                    later start date.
+                </p>
+                <p style="font-size: 14px; color: #333333; margin: 0;">
+                    Simply reply to this email and we'll help you find a new date and apply your deposit to it.
+                </p>
+            </div>
+            <p style="font-size: 15px; color: #666666; margin: 25px 0 10px 0;">
+                Thank you for your understanding, and we look forward to welcoming you on your next adventure.
+            </p>
+
+            {% else %}
+            <!-- ============================ DEPOSIT RECEIVED ============================ -->
+            <div style="text-align: center; margin-bottom: 25px;">
+                <h2 style="color: #333333; margin: 0 0 10px 0; font-size: 24px;">
+                    {% if isLastMinute %}Your spot is on hold{% else %}Your deposit is received{% endif %}
+                    <span style="display: inline-block; background-color: {% if isLastMinute %}#ff9800{% else %}#4caf50{% endif %}; color: white; width: 28px; height: 28px; border-radius: 50%; text-align: center; line-height: 28px; margin-left: 8px; font-size: 16px; font-weight: bold;">{% if isLastMinute %}!{% else %}✓{% endif %}</span>
+                </h2>
+            </div>
+            <p style="font-size: 15px; color: #666666; margin: 0 0 15px 0;">Hi <strong>{{ fullName }}</strong>,</p>
+            <p style="font-size: 15px; color: #666666; margin: 0 0 25px 0;">
+                Thank you for booking with <strong style="color: #e74c3c">ImHereTravels!</strong>
+                {% if isLastMinute %}
+                We're holding your spot for <strong>{{ tourPackage }}</strong>, but your reservation isn't confirmed yet.
+                {% elif availablePaymentTerms == "P1" %}
+                We've received your deposit of <strong style="color: #e74c3c">£{{ reservationFee }}</strong> and your
+                spot on <strong>{{ tourPackage }}</strong> is nearly secured. We just need the remaining balance to
+                finalize your booking.
+                {% elif isPlan %}
+                We've received your deposit of <strong style="color: #e74c3c">£{{ reservationFee }}</strong> and your
+                spot on <strong>{{ tourPackage }}</strong> is almost confirmed. You can now choose how to pay the
+                balance.
+                {% else %}
+                Your deposit of <strong style="color: #e74c3c">£{{ reservationFee }}</strong> has been received, and
+                we're thrilled to have you join us for <strong>{{ tourPackage }}</strong>.
+                {% endif %}
+            </p>
+
+            <!-- Booking Details -->
+            <div style="background-color: #f5f5f5; padding: 20px; border-radius: 12px; margin: 25px 0; border-left: 5px solid #e74c3c;">
+                <h3 style="color: #333333; margin: 0 0 15px 0; font-size: 16px; font-weight: bold;">Booking Details</h3>
+                <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                    <tr style="border-bottom: 1px solid #e0e0e0;">
+                        <td style="padding: 10px 0; color: #666666; font-weight: 500;">Traveler Name</td>
+                        <td style="padding: 10px 0; color: #333333; text-align: right;">{{ fullName }}</td>
+                    </tr>
+                    {% if isGroup and mainBooker %}
+                    <tr style="border-bottom: 1px solid #e0e0e0;">
+                        <td style="padding: 10px 0; color: #666666; font-weight: 500;">Main Booker</td>
+                        <td style="padding: 10px 0; color: #333333; text-align: right;">{{ mainBooker }}</td>
+                    </tr>
+                    {% endif %}
+                    <tr style="border-bottom: 1px solid #e0e0e0;">
+                        <td style="padding: 10px 0; color: #666666; font-weight: 500;">Tour Name</td>
+                        <td style="padding: 10px 0; color: #333333; text-align: right;">{{ tourPackage }}</td>
+                    </tr>
+                    <tr style="border-bottom: 1px solid #e0e0e0;">
+                        <td style="padding: 10px 0; color: #666666; font-weight: 500;">Tour Date</td>
+                        <td style="padding: 10px 0; color: #333333; text-align: right;">{{ tourDate }}</td>
+                    </tr>
+                    {% if returnDate %}
+                    <tr style="border-bottom: 1px solid #e0e0e0;">
+                        <td style="padding: 10px 0; color: #666666; font-weight: 500;">Return Date</td>
+                        <td style="padding: 10px 0; color: #333333; text-align: right;">{{ returnDate }}</td>
+                    </tr>
+                    {% endif %}
+                    <tr style="border-bottom: 1px solid #e0e0e0;">
+                        <td style="padding: 10px 0; color: #666666; font-weight: 500;">Tour Duration</td>
+                        <td style="padding: 10px 0; color: #333333; text-align: right;">{{ tourDuration }}</td>
+                    </tr>
+                    <tr style="{% if bookingId or (isGroup and groupId) %}border-bottom: 1px solid #e0e0e0;{% endif %}">
+                        <td style="padding: 10px 0; color: #666666; font-weight: 500;">Booking Type</td>
+                        <td style="padding: 10px 0; color: #333333; text-align: right;">{{ bookingType }}</td>
+                    </tr>
+                    {% if bookingId %}
+                    <tr style="{% if isGroup and groupId %}border-bottom: 1px solid #e0e0e0;{% endif %}">
+                        <td style="padding: 10px 0; color: #666666; font-weight: 500;">Booking ID</td>
+                        <td style="padding: 10px 0; color: #333333; text-align: right;">{{ bookingId }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if isGroup and groupId %}
+                    <tr>
+                        <td style="padding: 10px 0; color: #666666; font-weight: 500;">Group ID</td>
+                        <td style="padding: 10px 0; color: #333333; text-align: right;">{{ groupId }}</td>
+                    </tr>
+                    {% endif %}
+                </table>
+            </div>
+
+            <!-- Payment Summary -->
+            <div style="background-color: #f5f5f5; padding: 20px; border-radius: 12px; margin: 25px 0; border-left: 5px solid #4caf50;">
+                <h3 style="color: #333333; margin: 0 0 15px 0; font-size: 16px; font-weight: bold;">Payment Summary</h3>
+                <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                    {% if hasDiscount %}
+                    <tr style="border-bottom: 1px solid #e0e0e0;">
+                        <td style="padding: 10px 0; color: #666666; font-weight: 500; width: 50%;">Tour Cost</td>
+                        <td style="padding: 10px 0; color: #333333; text-align: right;">
+                            <span style="text-decoration: line-through; color: #999999;">£{{ originalTourCost }}</span>
+                            &nbsp;<strong>£{{ discountedTourCost }}</strong><br />
+                            <span style="color: #4caf50; font-size: 12px;">{{ eventName }} — {{ discountDisplayText }} off, you save £{{ discountSavings }}</span>
+                        </td>
+                    </tr>
+                    {% endif %}
+                    <tr style="border-bottom: 1px solid #e0e0e0;">
+                        <td style="padding: 10px 0; color: #666666; font-weight: 500; width: 50%;">Deposit Received</td>
+                        <td style="padding: 10px 0; color: #4caf50; font-weight: bold; text-align: right;">£{{ reservationFee }}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px 0; color: #666666; font-weight: 500;">Balance Due</td>
+                        <td style="padding: 10px 0; color: #e74c3c; font-weight: bold; text-align: right;">£{{ remainingBalance }}</td>
+                    </tr>
+                </table>
+            </div>
+
+            {% if isLastMinute %}
+            <!-- Final payment within 48 hours -->
+            <div style="background-color: #fdf2f2; padding: 15px 20px; border-radius: 12px; margin: 25px 0; border-left: 5px solid #c0392b;">
+                <h4 style="color: #c0392b; margin: 0 0 8px 0; font-size: 14px; font-weight: bold;">⚠️ Final Payment Required Within 48 Hours</h4>
+                <p style="font-size: 13px; color: #333333; margin: 0;">
+                    Your tour departs on <strong>{{ tourDate }}</strong>, so there is no longer time for a monthly
+                    payment plan &mdash; in line with our
+                    <a href="https://www.imheretravels.com/terms-and-conditions" target="_blank" style="color: #c0392b;">Terms and Conditions</a>,
+                    the full balance is due no later than 2 months before departure. To secure your spot, the
+                    remaining balance must be fully paid within 48 hours.
+                </p>
+            </div>
+            {% endif %}
+
+            {% if isLastMinute or isPlan %}
+            <!-- Payment Plan(s) -->
+            <div style="margin: 25px 0;">
+                <h3 style="color: #333333; font-size: 16px; margin: 0 0 8px 0; font-weight: bold;">
+                    {% if isLastMinute %}Your Payment Terms{% elif availablePaymentTerms == "P1" %}Final Payment Due Soon{% else %}Choose Your Payment Plan{% endif %}
+                </h3>
+                <p style="font-size: 14px; color: #666666; margin: 0 0 15px 0;">
+                    {% if isLastMinute %}
+                    The remaining balance is due in full by the date below.
+                    {% elif availablePaymentTerms == "P1" %}
+                    There is only one available payment plan for your tour, so the remaining balance must be paid in
+                    full on <strong>{{ p1DueDate }}</strong>.
+                    {% else %}
+                    Based on your tour schedule, you have
+                    {% if availablePaymentTerms == "P2" %}2{% elif availablePaymentTerms == "P3" %}3{% else %}4{% endif %}
+                    available payment plans. Pick the one that works best for you on your booking status page.
+                    {% endif %}
+                </p>
+                <table style="width: 100%; border-collapse: collapse; font-size: 14px; border: 1px solid #e0e0e0;">
+                    <thead>
+                        <tr style="background-color: #f5f5f5;">
+                            <th align="left" style="padding: 10px; color: #333333; border-bottom: 1px solid #e0e0e0;">Payment Terms</th>
+                            <th align="left" style="padding: 10px; color: #333333; border-bottom: 1px solid #e0e0e0;">Amount</th>
+                            <th align="left" style="padding: 10px; color: #333333; border-bottom: 1px solid #e0e0e0;">Due Date(s)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if isLastMinute %}
+                        <tr>
+                            <td style="padding: 10px; color: #333333;">Full payment</td>
+                            <td style="padding: 10px; color: #333333;">£{{ remainingBalance }}</td>
+                            <td style="padding: 10px; color: #333333;">{{ fullPaymentDueDate }}</td>
+                        </tr>
+                        {% else %}
+                        <tr style="{% if availablePaymentTerms != "P1" %}border-bottom: 1px solid #e0e0e0;{% endif %}">
+                            <td style="padding: 10px; color: #333333;">P1 – Full payment</td>
+                            <td style="padding: 10px; color: #333333;">£{{ p1Amount }}</td>
+                            <td style="padding: 10px; color: #333333;">{{ p1DueDate }}</td>
+                        </tr>
+                        {% if availablePaymentTerms == "P2" or availablePaymentTerms == "P3" or availablePaymentTerms == "P4" %}
+                        <tr style="{% if availablePaymentTerms != "P2" %}border-bottom: 1px solid #e0e0e0;{% endif %}">
+                            <td style="padding: 10px; color: #333333;">P2 – Two payments</td>
+                            <td style="padding: 10px; color: #333333;">£{{ p2Amount }} /month</td>
+                            <td style="padding: 10px; color: #333333;">{{ p2DueDate }}</td>
+                        </tr>
+                        {% endif %}
+                        {% if availablePaymentTerms == "P3" or availablePaymentTerms == "P4" %}
+                        <tr style="{% if availablePaymentTerms != "P3" %}border-bottom: 1px solid #e0e0e0;{% endif %}">
+                            <td style="padding: 10px; color: #333333;">P3 – Three payments</td>
+                            <td style="padding: 10px; color: #333333;">£{{ p3Amount }} /month</td>
+                            <td style="padding: 10px; color: #333333;">{{ p3DueDate }}</td>
+                        </tr>
+                        {% endif %}
+                        {% if availablePaymentTerms == "P4" %}
+                        <tr>
+                            <td style="padding: 10px; color: #333333;">P4 – Four payments</td>
+                            <td style="padding: 10px; color: #333333;">£{{ p4Amount }} /month</td>
+                            <td style="padding: 10px; color: #333333;">{{ p4DueDate }}</td>
+                        </tr>
+                        {% endif %}
+                        {% endif %}
+                    </tbody>
+                </table>
+                <p style="font-size: 12px; font-style: italic; color: #666666; margin: 10px 0 0 0;">
+                    Note: All deposits are non-refundable. Please settle the full balance on or before the due date to
+                    avoid cancellations.
+                </p>
+            </div>
+            {% endif %}
+
+            {% if payUrl %}
+            <!-- Booking Status CTA -->
+            <div style="background-color: #fff9e6; padding: 25px 20px; border-radius: 12px; margin: 25px 0; text-align: center; border-left: 5px solid #ff9800;">
+                <h3 style="color: #333333; margin: 0 0 10px 0; font-size: 16px; font-weight: bold;">
+                    {% if isLastMinute or availablePaymentTerms == "P1" %}Pay Your Balance Online{% else %}Choose Your Plan &amp; Pay Online{% endif %}
+                </h3>
+                <p style="font-size: 13px; color: #666666; margin: 0 0 20px 0;">
+                    {% if isLastMinute or availablePaymentTerms == "P1" %}
+                    Open your booking status page to pay the remaining balance securely by card and track your booking anytime.
+                    {% else %}
+                    Open your booking status page to select your payment plan, pay securely by card and track your
+                    booking anytime.
+                    {% endif %}
+                </p>
+                <a href="{{ payUrl }}" target="_blank" style="display: inline-block; background-color: #e74c3c; color: white; padding: 14px 35px; text-decoration: none; border-radius: 25px; font-weight: bold; font-size: 14px; margin-top: 5px;">
+                    View Booking Status &amp; Pay Online
+                </a>
+            </div>
+            {% endif %}
+
+            {% if isPlan and finalPaymentDeadline %}
+            <!-- Payment Policy Notice -->
+            <div style="background-color: #fdf2f2; padding: 15px 20px; border-radius: 12px; margin: 25px 0; border-left: 5px solid #c0392b;">
+                <h4 style="color: #c0392b; margin: 0 0 8px 0; font-size: 14px; font-weight: bold;">⚠️ Final Payment Deadline</h4>
+                <p style="font-size: 13px; color: #333333; margin: 0;">
+                    Your full tour balance must be received no later than
+                    <strong>{{ finalPaymentDeadline }}</strong> — 2 months before your departure date, in line with our
+                    <a href="https://www.imheretravels.com/terms-and-conditions" target="_blank" style="color: #c0392b;">Terms and Conditions</a>.
+                    Any outstanding balance after this date may result in your booking being cancelled.
+                </p>
+            </div>
+            {% endif %}
+
+            <!-- Important Information -->
+            <div style="background-color: #fff9e6; padding: 15px 20px; border-radius: 12px; margin: 25px 0; border-left: 5px solid #ffc107;">
+                <h4 style="color: #333333; margin: 0 0 10px 0; font-size: 14px; font-weight: bold;">📌 Important Note</h4>
+                <p style="font-size: 13px; color: #666666; margin: 0;">
+                    Due to high customer demand, the booking status page might not be updated in real-time.
+                    Our team is continuously updating booking statuses. Please allow some time for recent
+                    changes to reflect. For urgent inquiries, contact our support team directly.
+                </p>
+            </div>
+
+            <!-- Next Steps -->
+            <div style="margin: 25px 0;">
+                <h3 style="color: #333333; font-size: 16px; margin: 0 0 15px 0; font-weight: bold;">What's Next?</h3>
+                <ul style="line-height: 1.8; color: #666666; margin: 0; padding-left: 20px; font-size: 14px;">
+                    {% if isLastMinute %}
+                    <li>Pay the remaining balance within 48 hours to secure your spot</li>
+                    {% elif availablePaymentTerms == "P1" %}
+                    <li>Pay the remaining balance by <strong>{{ p1DueDate }}</strong> to confirm your booking</li>
+                    {% elif isPlan %}
+                    <li>Choose your payment plan on your booking status page</li>
+                    <li>Complete your payments according to the schedule you pick</li>
+                    {% endif %}
+                    <li>Save this email for your records</li>
+                    <li>Use the link above to check your booking status anytime</li>
+                    <li>Check your email for pre-departure information closer to your tour date</li>
+                    <li>Contact us if you have any questions or concerns</li>
+                </ul>
+            </div>
+            {% endif %}
+
+            <!-- Contact Information -->
+            <div style="background-color: #f5f5f5; padding: 20px; border-radius: 12px; margin: 25px 0; text-align: center;">
+                <h4 style="color: #333333; margin: 0 0 12px 0; font-size: 14px; font-weight: bold;">Need Help?</h4>
+                <p style="font-size: 13px; color: #666666; margin: 5px 0;">
+                    Email us at <a href="mailto:bella@imheretravels.com" style="color: #e74c3c; text-decoration: none;">bella@imheretravels.com</a>
+                </p>
+                <p style="font-size: 13px; color: #666666; margin: 5px 0;">or call us at +63 998 247 6847</p>
+            </div>
+
+            <!-- Closing Message -->
+            {% if availablePaymentTerms != "Invalid" %}
+            <p style="font-size: 15px; color: #666666; margin: 25px 0 10px 0;">
+                We can't wait to welcome you to {{ tourPackage }} — it's going to be an unforgettable adventure!
+            </p>
+            {% endif %}
+            <p style="font-size: 15px; color: #666666; margin: 10px 0;">Best regards,</p>
+            <p style="font-size: 15px; color: #333333; margin: 10px 0;"><strong>The ImHereTravels Team</strong></p>
         </div>
-        {% endif %}
-        <!-- P1 Payment Scenario -->
-        {% if availablePaymentTerms == "P1" %}
-        <p style="font-size: 16px; color: #333333">
-          Thank you for booking with
-          <strong style="color: red">ImHereTravels!</strong>
-        </p>
-        <p style="font-size: 16px; color: #333333">
-          We've received your deposit of
-          <span style="color: red">
-            <strong>£{{ reservationFee }}</strong>
-          </span>
-          — and your spot is nearly secured! We just need the remaining balance
-          to finalize your booking.
-        </p>
-        <!-- Booking Details for P1 -->
-        <h2 style="color: red; font-size: 24px; margin-top: 0">
-          Booking Details
-        </h2>
-        <table
-          cellpadding="5"
-          style="
-            border-collapse: collapse;
-            width: 100%;
-            max-width: 600px;
-            color: #333333;
-            margin-bottom: 20px;
-          "
-        >
-          <tr>
-            <td>
-              <strong>Traveler Name:</strong>
-            </td>
-            <td>{{ fullName }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Tour Name:</strong>
-            </td>
-            <td>{{ tourPackage }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Tour Date:</strong>
-            </td>
-            <td>{{ tourDate }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Return Date:</strong>
-            </td>
-            <td>{{ returnDate }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Tour Duration:</strong>
-            </td>
-            <td>{{ tourDuration }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Booking Type:</strong>
-            </td>
-            <td>{{ bookingType }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Booking ID:</strong>
-            </td>
-            <td>{{ bookingId }}</td>
-          </tr>
-          {% if bookingType == "Group Booking" or bookingType == "Duo Booking"
-          %}
-          <tr>
-            <td>
-              <strong>Group ID:</strong>
-            </td>
-            <td>{{ groupId }}</td>
-          </tr>
-          {% endif %}
-        </table>
-        <!-- Payment Terms for P1 -->
-        <h3 style="font-size: 20px; color: red">Final Payment Due Soon</h3>
-        <p style="font-size: 16px; color: #333333">
-          There is only one available payment plan for your tour, so the
-          remaining balance must be paid in full on
-          <strong>{{ p1DueDate }}</strong>.
-        </p>
-        <!-- Discount Highlight -->
-        {% if hasDiscount %}
-        <div
-          style="
-            background-color: #d4edda;
-            border-left: 4px solid #28a745;
-            padding: 15px 20px;
-            margin: 20px 0;
-            border-radius: 5px;
-          "
-        >
-          <p
-            style="
-              font-size: 16px;
-              color: #155724;
-              margin: 0;
-              font-weight: bold;
-            "
-          >
-            {{ eventName }} Discount Applied!
-          </p>
+
+        <!-- Footer -->
+        <div style="max-width: 600px; margin: 0 auto; background-color: #1C1F2A; padding: 32px 40px; text-align: center; color: #999; font-size: 12px;">
+            <div style="margin-bottom: 15px;">
+                <p style="color: #ffffff; font-weight: bold; margin: 0 0 5px 0;">The I'm Here Travels Team</p>
+                <p style="margin: 0;">Creating unforgettable travel experiences</p>
+            </div>
+            <div style="margin: 15px 0; text-align: center;">
+                <a href="https://instagram.com/imheretravels" style="display: inline-block; margin: 0 8px;">
+                    <img src="https://firebasestorage.googleapis.com/v0/b/imheretravels-a3f81.firebasestorage.app/o/images%2F1769577611985_instagram-icon.png?alt=media&token=26e11a52-4b1b-4323-bca0-8ffb3b8889ab" alt="Instagram" style="width: 20px; height: 20px; display: inline-block;">
+                </a>
+                <a href="https://www.facebook.com/profile.php?id=100089932897402" style="display: inline-block; margin: 0 8px;">
+                    <img src="https://firebasestorage.googleapis.com/v0/b/imheretravels-a3f81.firebasestorage.app/o/images%2F1769578187350_facebook-icon.png?alt=media&token=0d59a081-d764-463a-8949-533dab620dc0" alt="Facebook" style="width: 20px; height: 20px; display: inline-block;">
+                </a>
+                <a href="https://www.tiktok.com/@imheretravels" style="display: inline-block; margin: 0 8px;">
+                    <img src="https://firebasestorage.googleapis.com/v0/b/imheretravels-a3f81.firebasestorage.app/o/images%2F1769577615216_tiktok-icon.png?alt=media&token=2d2d9e95-52c5-4cf7-8906-7377ad7957d8" alt="TikTok" style="width: 20px; height: 20px; display: inline-block;">
+                </a>
+                <a href="https://imheretravels.com" style="display: inline-block; margin: 0 8px;">
+                    <img src="https://firebasestorage.googleapis.com/v0/b/imheretravels-a3f81.firebasestorage.app/o/images%2F1769577613602_link-icon.png?alt=media&token=2a058d58-eaf7-4f53-bdea-845b2409764d" alt="Website" style="width: 20px; height: 20px; display: inline-block;">
+                </a>
+            </div>
+            <p style="color: #ffffff; margin: 15px 0 0 0;">© {% if currentYear %}{{ currentYear }}{% else %}2026{% endif %} I'm Here Travels. All rights reserved.</p>
         </div>
-        {% endif %}
-        <div style="padding: 20px; border-radius: 5px; margin-bottom: 20px">
-          <table
-            style="
-              width: 100%;
-              font-size: 16px;
-              border-collapse: collapse;
-              table-layout: fixed;
-              border: 1px solid black;
-            "
-          >
-            <thead style="background-color: #f2f2f2">
-              <tr>
-                <th
-                  align="left"
-                  style="padding: 10px; width: 35%; border: 1px solid black"
-                >
-                  Payment Terms
-                </th>
-                <th
-                  align="left"
-                  style="padding: 10px; width: 30%; border: 1px solid black"
-                >
-                  Amount
-                </th>
-                <th
-                  align="left"
-                  style="padding: 10px; width: 35%; border: 1px solid black"
-                >
-                  Due Date(s)
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td style="padding: 10px; border: 1px solid black">
-                  P1 – Full payment
-                </td>
-                <td style="padding: 10px; border: 1px solid black">
-                  £{{ p1Amount }} {% if hasDiscount %}
-                  <br />
-                  <span style="color: #28a745; font-size: 13px"
-                    >After {{ discountDisplayText }} off</span
-                  >
-                  {% endif %}
-                </td>
-                <td style="padding: 10px; border: 1px solid black">
-                  {{ p1DueDate }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <p style="font-size: 14px; font-style: italic; color: #333333">
-            Note: All deposits are non-refundable. Please settle the full
-            balance on or before the due date to avoid cancellations. Don't
-            forget to send us a proof of payment/screenshot to confirm your
-            booking.
-          </p>
-          {% if availablePaymentTerms != "Full payment required within 48hrs" %}
-          <p
-            style="
-              font-size: 14px;
-              color: #c0392b;
-              font-weight: bold;
-              margin-top: 8px;
-              padding: 10px;
-              background-color: #fdf2f2;
-              border-left: 4px solid #c0392b;
-              border-radius: 4px;
-            "
-          >
-            ⚠️ Important: Your full tour balance must be received no later than
-            <strong>{{ finalPaymentDeadline }}</strong> — 2 months before your
-            departure date. Any outstanding balance after this date may result
-            in your booking being cancelled.
-          </p>
-          {% endif %}
-        </div>
-        {% endif %}
-        <!-- P2 Payment Scenario -->
-        {% if availablePaymentTerms == "P2" %}
-        <p style="font-size: 16px; color: #333333">
-          Thank you for booking with
-          <strong style="color: red">ImHereTravels!</strong>
-        </p>
-        <p style="font-size: 16px; color: #333333">
-          We've received your deposit of
-          <span style="color: red">
-            <strong>£{{ reservationFee }}</strong> </span
-          >, and your spot is almost confirmed. You now have the option to pay
-          the balance in full or in two monthly payments.
-        </p>
-        <!-- Booking Details for P2 -->
-        <h2 style="color: red; font-size: 24px; margin-top: 0">
-          Booking Details
-        </h2>
-        <table
-          cellpadding="5"
-          style="
-            border-collapse: collapse;
-            width: 100%;
-            max-width: 600px;
-            color: #333333;
-            margin-bottom: 20px;
-          "
-        >
-          <tr>
-            <td>
-              <strong>Traveler Name:</strong>
-            </td>
-            <td>{{ fullName }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Tour Name:</strong>
-            </td>
-            <td>{{ tourPackage }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Tour Date:</strong>
-            </td>
-            <td>{{ tourDate }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Return Date:</strong>
-            </td>
-            <td>{{ returnDate }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Tour Duration:</strong>
-            </td>
-            <td>{{ tourDuration }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Booking Type:</strong>
-            </td>
-            <td>{{ bookingType }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Booking ID:</strong>
-            </td>
-            <td>{{ bookingId }}</td>
-          </tr>
-          {% if bookingType == "Group Booking" or bookingType == "Duo Booking"
-          %}
-          <tr>
-            <td>
-              <strong>Group ID:</strong>
-            </td>
-            <td>{{ groupId }}</td>
-          </tr>
-          {% endif %}
-        </table>
-        <!-- Payment Plan Details for P2 -->
-        <h3 style="font-size: 20px; color: red">Choose Your Payment Plan</h3>
-        <p style="font-size: 16px; color: #333333">
-          Based on your tour schedule, you have 2 available payment plans. You
-          can choose the payment plan that works best for you.
-        </p>
-        <!-- Discount Highlight -->
-        {% if hasDiscount %}
-        <div
-          style="
-            background-color: #d4edda;
-            border-left: 4px solid #28a745;
-            padding: 15px 20px;
-            margin: 20px 0;
-            border-radius: 5px;
-          "
-        >
-          <p
-            style="
-              font-size: 16px;
-              color: #155724;
-              margin: 0;
-              font-weight: bold;
-            "
-          >
-            {{ eventName }} Discount Applied!
-          </p>
-        </div>
-        {% endif %}
-        <div style="padding: 20px; border-radius: 5px; margin-bottom: 20px">
-          <table
-            style="
-              width: 100%;
-              font-size: 16px;
-              border-collapse: collapse;
-              table-layout: fixed;
-              border: 1px solid black;
-            "
-          >
-            <thead style="background-color: #f2f2f2">
-              <tr>
-                <th
-                  align="left"
-                  style="padding: 10px; width: 35%; border: 1px solid black"
-                >
-                  Payment Terms
-                </th>
-                <th
-                  align="left"
-                  style="padding: 10px; width: 30%; border: 1px solid black"
-                >
-                  Amount
-                </th>
-                <th
-                  align="left"
-                  style="padding: 10px; width: 35%; border: 1px solid black"
-                >
-                  Due Date(s)
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td style="padding: 10px; border: 1px solid black">
-                  P1 – Full payment
-                </td>
-                <td style="padding: 10px; border: 1px solid black">
-                  £{{ p1Amount }} {% if hasDiscount %}
-                  <br />
-                  <span style="color: #28a745; font-size: 13px"
-                    >After {{ discountDisplayText }} off</span
-                  >
-                  {% endif %}
-                </td>
-                <td style="padding: 10px; border: 1px solid black">
-                  {{ p1DueDate }}
-                </td>
-              </tr>
-              <tr>
-                <td style="padding: 10px; border: 1px solid black">
-                  P2 – Two payments
-                </td>
-                <td style="padding: 10px; border: 1px solid black">
-                  £{{ p2Amount }} /month {% if hasDiscount %}
-                  <br />
-                  <span style="color: #28a745; font-size: 13px"
-                    >After {{ discountDisplayText }} off</span
-                  >
-                  {% endif %}
-                </td>
-                <td style="padding: 10px; border: 1px solid black">
-                  {{ p2DueDate }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <p style="font-size: 14px; font-style: italic; color: #333333">
-            Note: All deposits are non-refundable. Please settle the full
-            balance on or before the due date to avoid cancellations. Don't
-            forget to send us a proof of payment/screenshot to confirm your
-            booking.
-          </p>
-          {% if availablePaymentTerms != "Full payment required within 48hrs" %}
-          <p
-            style="
-              font-size: 14px;
-              color: #c0392b;
-              font-weight: bold;
-              margin-top: 8px;
-              padding: 10px;
-              background-color: #fdf2f2;
-              border-left: 4px solid #c0392b;
-              border-radius: 4px;
-            "
-          >
-            ⚠️ Important: Your full tour balance must be received no later than
-            <strong>{{ finalPaymentDeadline }}</strong> — 2 months before your
-            departure date. Any outstanding balance after this date may result
-            in your booking being cancelled.
-          </p>
-          {% endif %}
-        </div>
-        {% endif %}
-        <!-- P3 Payment Scenario -->
-        {% if availablePaymentTerms == "P3" %}
-        <p style="font-size: 16px; color: #333333">
-          Thank you for booking with
-          <strong style="color: red">ImHereTravels!</strong>
-        </p>
-        <p style="font-size: 16px; color: #333333">
-          We've received your deposit of
-          <span style="color: red">
-            <strong>£{{ reservationFee }}</strong> </span
-          >, and your spot is almost confirmed. You now have the option to pay
-          the balance in full or in three monthly payments.
-        </p>
-        <!-- Booking Details for P3 -->
-        <h2 style="color: red; font-size: 24px; margin-top: 0">
-          Booking Details
-        </h2>
-        <table
-          cellpadding="5"
-          style="
-            border-collapse: collapse;
-            width: 100%;
-            max-width: 600px;
-            color: #333333;
-            margin-bottom: 20px;
-          "
-        >
-          <tr>
-            <td>
-              <strong>Traveler Name:</strong>
-            </td>
-            <td>{{ fullName }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Tour Name:</strong>
-            </td>
-            <td>{{ tourPackage }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Tour Date:</strong>
-            </td>
-            <td>{{ tourDate }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Return Date:</strong>
-            </td>
-            <td>{{ returnDate }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Tour Duration:</strong>
-            </td>
-            <td>{{ tourDuration }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Booking Type:</strong>
-            </td>
-            <td>{{ bookingType }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Booking ID:</strong>
-            </td>
-            <td>{{ bookingId }}</td>
-          </tr>
-          {% if bookingType == "Group Booking" or bookingType == "Duo Booking"
-          %}
-          <tr>
-            <td>
-              <strong>Group ID:</strong>
-            </td>
-            <td>{{ groupId }}</td>
-          </tr>
-          {% endif %}
-        </table>
-        <!-- Payment Plan Details for P3 -->
-        <h3 style="font-size: 20px; color: red">Choose Your Payment Plan</h3>
-        <p style="font-size: 16px; color: #333333">
-          Based on your tour schedule, you have 3 available payment plans. You
-          can choose the payment plan that works best for you.
-        </p>
-        <!-- Discount Highlight -->
-        {% if hasDiscount %}
-        <div
-          style="
-            background-color: #d4edda;
-            border-left: 4px solid #28a745;
-            padding: 15px 20px;
-            margin: 20px 0;
-            border-radius: 5px;
-          "
-        >
-          <p
-            style="
-              font-size: 16px;
-              color: #155724;
-              margin: 0;
-              font-weight: bold;
-            "
-          >
-            {{ eventName }} Discount Applied!
-          </p>
-        </div>
-        {% endif %}
-        <div style="padding: 20px; border-radius: 5px; margin-bottom: 20px">
-          <table
-            style="
-              width: 100%;
-              font-size: 16px;
-              border-collapse: collapse;
-              table-layout: fixed;
-              border: 1px solid black;
-            "
-          >
-            <thead style="background-color: #f2f2f2">
-              <tr>
-                <th
-                  align="left"
-                  style="padding: 10px; width: 35%; border: 1px solid black"
-                >
-                  Payment Terms
-                </th>
-                <th
-                  align="left"
-                  style="padding: 10px; width: 30%; border: 1px solid black"
-                >
-                  Amount
-                </th>
-                <th
-                  align="left"
-                  style="padding: 10px; width: 35%; border: 1px solid black"
-                >
-                  Due Date(s)
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td style="padding: 10px; border: 1px solid black">
-                  P1 – Full payment
-                </td>
-                <td style="padding: 10px; border: 1px solid black">
-                  £{{ p1Amount }} {% if hasDiscount %}
-                  <br />
-                  <span style="color: #28a745; font-size: 13px"
-                    >After {{ discountDisplayText }} off</span
-                  >
-                  {% endif %}
-                </td>
-                <td style="padding: 10px; border: 1px solid black">
-                  {{ p1DueDate }}
-                </td>
-              </tr>
-              <tr>
-                <td style="padding: 10px; border: 1px solid black">
-                  P2 – Two payments
-                </td>
-                <td style="padding: 10px; border: 1px solid black">
-                  £{{ p2Amount }} /month {% if hasDiscount %}
-                  <br />
-                  <span style="color: #28a745; font-size: 13px"
-                    >After {{ discountDisplayText }} off</span
-                  >
-                  {% endif %}
-                </td>
-                <td style="padding: 10px; border: 1px solid black">
-                  {{ p2DueDate }}
-                </td>
-              </tr>
-              <tr>
-                <td style="padding: 10px; border: 1px solid black">
-                  P3 – Three payments
-                </td>
-                <td style="padding: 10px; border: 1px solid black">
-                  £{{ p3Amount }} /month {% if hasDiscount %}
-                  <br />
-                  <span style="color: #28a745; font-size: 13px"
-                    >After {{ discountDisplayText }} off</span
-                  >
-                  {% endif %}
-                </td>
-                <td style="padding: 10px; border: 1px solid black">
-                  {{ p3DueDate }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <p style="font-size: 14px; font-style: italic; color: #333333">
-            Note: All deposits are non-refundable. Please settle the full
-            balance on or before the due date to avoid cancellations. Don't
-            forget to send us a proof of payment/screenshot to confirm your
-            booking.
-          </p>
-          {% if availablePaymentTerms != "Full payment required within 48hrs" %}
-          <p
-            style="
-              font-size: 14px;
-              color: #c0392b;
-              font-weight: bold;
-              margin-top: 8px;
-              padding: 10px;
-              background-color: #fdf2f2;
-              border-left: 4px solid #c0392b;
-              border-radius: 4px;
-            "
-          >
-            ⚠️ Important: Your full tour balance must be received no later than
-            <strong>{{ finalPaymentDeadline }}</strong> — 2 months before your
-            departure date. Any outstanding balance after this date may result
-            in your booking being cancelled.
-          </p>
-          {% endif %}
-        </div>
-        {% endif %}
-        <!-- P4 Payment Scenario -->
-        {% if availablePaymentTerms == "P4" %}
-        <p style="font-size: 16px; color: #333333">
-          Thank you for booking with
-          <strong style="color: red">ImHereTravels!</strong>
-        </p>
-        <p style="font-size: 16px; color: #333333">
-          We've received your deposit of
-          <span style="color: red">
-            <strong>£{{ reservationFee }}</strong> </span
-          >, and your spot is almost confirmed. You now have the option to pay
-          the balance in full or in four monthly payments.
-        </p>
-        <!-- Booking Details for P4 -->
-        <h2 style="color: red; font-size: 24px; margin-top: 0">
-          Booking Details
-        </h2>
-        <table
-          cellpadding="5"
-          style="
-            border-collapse: collapse;
-            width: 100%;
-            max-width: 600px;
-            color: #333333;
-            margin-bottom: 20px;
-          "
-        >
-          <tr>
-            <td>
-              <strong>Traveler Name:</strong>
-            </td>
-            <td>{{ fullName }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Tour Name:</strong>
-            </td>
-            <td>{{ tourPackage }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Tour Date:</strong>
-            </td>
-            <td>{{ tourDate }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Return Date:</strong>
-            </td>
-            <td>{{ returnDate }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Tour Duration:</strong>
-            </td>
-            <td>{{ tourDuration }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Booking Type:</strong>
-            </td>
-            <td>{{ bookingType }}</td>
-          </tr>
-          <tr>
-            <td>
-              <strong>Booking ID:</strong>
-            </td>
-            <td>{{ bookingId }}</td>
-          </tr>
-          {% if bookingType == "Group Booking" or bookingType == "Duo Booking"
-          %}
-          <tr>
-            <td>
-              <strong>Group ID:</strong>
-            </td>
-            <td>{{ groupId }}</td>
-          </tr>
-          {% endif %}
-        </table>
-        <!-- Payment Plan Details for P4 -->
-        <h3 style="font-size: 20px; color: red">Choose Your Payment Plan</h3>
-        <p style="font-size: 16px; color: #333333">
-          Based on your tour schedule, you have 4 available payment plans. You
-          can choose the payment plan that works best for you.
-        </p>
-        <!-- Discount Highlight -->
-        {% if hasDiscount %}
-        <div
-          style="
-            background-color: #d4edda;
-            border-left: 4px solid #28a745;
-            padding: 15px 20px;
-            margin: 20px 0;
-            border-radius: 5px;
-          "
-        >
-          <p
-            style="
-              font-size: 16px;
-              color: #155724;
-              margin: 0;
-              font-weight: bold;
-            "
-          >
-            {{ eventName }} Discount Applied!
-          </p>
-        </div>
-        {% endif %}
-        <div style="padding: 20px; border-radius: 5px; margin-bottom: 20px">
-          <table
-            style="
-              width: 100%;
-              font-size: 16px;
-              border-collapse: collapse;
-              table-layout: fixed;
-              border: 1px solid black;
-            "
-          >
-            <thead style="background-color: #f2f2f2">
-              <tr>
-                <th
-                  align="left"
-                  style="padding: 10px; width: 35%; border: 1px solid black"
-                >
-                  Payment Terms
-                </th>
-                <th
-                  align="left"
-                  style="padding: 10px; width: 30%; border: 1px solid black"
-                >
-                  Amount
-                </th>
-                <th
-                  align="left"
-                  style="padding: 10px; width: 35%; border: 1px solid black"
-                >
-                  Due Date(s)
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td style="padding: 10px; border: 1px solid black">
-                  P1 – Full payment
-                </td>
-                <td style="padding: 10px; border: 1px solid black">
-                  £{{ p1Amount }} {% if hasDiscount %}
-                  <br />
-                  <span style="color: #28a745; font-size: 13px"
-                    >After {{ discountDisplayText }} off</span
-                  >
-                  {% endif %}
-                </td>
-                <td style="padding: 10px; border: 1px solid black">
-                  {{ p1DueDate }}
-                </td>
-              </tr>
-              <tr>
-                <td style="padding: 10px; border: 1px solid black">
-                  P2 – Two payments
-                </td>
-                <td style="padding: 10px; border: 1px solid black">
-                  £{{ p2Amount }} /month {% if hasDiscount %}
-                  <br />
-                  <span style="color: #28a745; font-size: 13px"
-                    >After {{ discountDisplayText }} off</span
-                  >
-                  {% endif %}
-                </td>
-                <td style="padding: 10px; border: 1px solid black">
-                  {{ p2DueDate }}
-                </td>
-              </tr>
-              <tr>
-                <td style="padding: 10px; border: 1px solid black">
-                  P3 – Three payments
-                </td>
-                <td style="padding: 10px; border: 1px solid black">
-                  £{{ p3Amount }} /month {% if hasDiscount %}
-                  <br />
-                  <span style="color: #28a745; font-size: 13px"
-                    >After {{ discountDisplayText }} off</span
-                  >
-                  {% endif %}
-                </td>
-                <td style="padding: 10px; border: 1px solid black">
-                  {{ p3DueDate }}
-                </td>
-              </tr>
-              <tr>
-                <td style="padding: 10px; border: 1px solid black">
-                  P4 – Four payments
-                </td>
-                <td style="padding: 10px; border: 1px solid black">
-                  £{{ p4Amount }} /month {% if hasDiscount %}
-                  <br />
-                  <span style="color: #28a745; font-size: 13px"
-                    >After {{ discountDisplayText }} off</span
-                  >
-                  {% endif %}
-                </td>
-                <td style="padding: 10px; border: 1px solid black">
-                  {{ p4DueDate }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <p style="font-size: 14px; font-style: italic; color: #333333">
-            Note: All deposits are non-refundable. Please settle the full
-            balance on or before the due date to avoid cancellations. Don't
-            forget to send us a proof of payment/screenshot to confirm your
-            booking.
-          </p>
-          {% if availablePaymentTerms != "Full payment required within 48hrs" %}
-          <p
-            style="
-              font-size: 14px;
-              color: #c0392b;
-              font-weight: bold;
-              margin-top: 8px;
-              padding: 10px;
-              background-color: #fdf2f2;
-              border-left: 4px solid #c0392b;
-              border-radius: 4px;
-            "
-          >
-            ⚠️ Important: Your full tour balance must be received no later than
-            <strong>{{ finalPaymentDeadline }}</strong> — 2 months before your
-            departure date. Any outstanding balance after this date may result
-            in your booking being cancelled.
-          </p>
-          {% endif %}
-        </div>
-        {% endif %}
-        <!-- Payment Methods (shown for any non-Invalid scenario) -->
-        {% if availablePaymentTerms != "Invalid" %}
-        <h3 style="font-size: 20px; color: red">Choose Your Payment Method</h3>
-        <div
-          style="
-            background-color: #fff9c4;
-            padding: 20px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-          "
-        >
-          <ul
-            style="
-              font-size: 16px;
-              color: #333333;
-              margin-bottom: 20px;
-              list-style-type: disc;
-              padding-left: 20px;
-            "
-          >
-            <li>
-              <strong>PM3 – Stripe Payment (Credit/Debit Cards)</strong>:<br />
-              {% if bookingStatusUrl %}<a
-                href="{{ bookingStatusUrl }}"
-                target="_blank"
-                style="
-                  background-color: #28a745;
-                  color: white;
-                  text-decoration: none;
-                  font-weight: bold;
-                  padding: 8px 16px;
-                  border-radius: 4px;
-                  display: inline-block;
-                  margin-top: 5px;
-                "
-              >
-                Pay securely online with Stripe
-              </a>{% else %}<span style="font-size: 13px; color: #666666;">Your payment link will be sent to you separately.</span>{% endif %}
-            </li>
-          </ul>
-          {% if accessToken %}
-          <p
-            style="
-              font-size: 16px;
-              color: #333333;
-              margin-top: 15px;
-              padding-top: 15px;
-              border-top: 1px solid #ddd;
-            "
-          >
-            Or you can Select your desired plan here, view booking status and
-            pay with this link:
-            <br />
-            <a
-              href="https://admin.imheretravels.com/booking-status/{{ accessToken }}"
-              target="_blank"
-              style="
-                background-color: #e74c3c;
-                color: white;
-                text-decoration: none;
-                font-weight: bold;
-                padding: 10px 20px;
-                border-radius: 4px;
-                display: inline-block;
-                margin-top: 10px;
-              "
-            >
-              View Booking Status & Pay Online
-            </a>
-          </p>
-          {% endif %}
-        </div>
-        <p style="font-size: 16px; color: #333333">
-          We can't wait to welcome you to {{ tourPackage }} — it's going to be
-          an unforgettable adventure!
-        </p>
-        <p style="font-size: 16px; color: #333333">Best regards,</p>
-        <p style="font-size: 16px; color: #333333">
-          <strong>The ImHereTravels Team</strong>
-        </p>
-        <div style="text-align: left; margin-top: 20px">
-          <img
-            src="https://imheretravels.com/wp-content/uploads/2025/04/ImHereTravels-Logo.png"
-            alt="ImHereTravels Logo"
-            style="width: 120px; height: auto; display: block"
-          />
-        </div>
-        {% endif %}
-        <p style="font-size: 12px; color: #666666; text-align: center">
-          You can reply to this email if you have any questions — we'll get back
-          to you soon.
-        </p>
-        <!-- Optional action buttons kept commented for later use -->
-        <!--
-                                                                                <div style="text-align: center; margin-top: 20px;">
-                                                                                    <a href="https://imheretravels.com/pre-departure-information/"
-                                                                                    style="display: inline-block; background-color: #f13340; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 50px; font-size: 16px; font-weight: bold;">
-                                                                                    Check Pre-departure Info
-                                                                                    </a>
-                                                                                </div>
-                                                                            <div style="text-align: center; margin-top: 20px;">
-                                                                                <a href="mailto:bella@imhere@gmail.com?subject=Re:%20My%20ImHereTravels%20Booking"
-                                                                                style="display: inline-block; background-color: #f13340; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 50px; font-size: 16px; font-weight: bold;">
-                                                                                Reply to This Email
-                                                                                </a>
-                                                                            </div>
-                                                                        -->
-      </div>
     </div>
-  </body>
+</body>
+
 </html>

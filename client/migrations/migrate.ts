@@ -248,6 +248,22 @@ import {
   runMigration as runMigration072,
   rollbackMigration as rollbackMigration072,
 } from "./072-final-payment-deadline-section";
+import {
+  runMigration as runMigration073,
+  rollbackMigration as rollbackMigration073,
+} from "./073-reservation-email-terms-alignment";
+import {
+  runMigration as runMigration074,
+  rollbackMigration as rollbackMigration074,
+} from "./074-reservation-email-images-and-pay-cta";
+import {
+  runMigration as runMigration075,
+  rollbackMigration as rollbackMigration075,
+} from "./075-reservation-email-redesign";
+import {
+  runMigration as runMigration076,
+  rollbackMigration as rollbackMigration076,
+} from "./076-invalid-booking-deposit-credit";
 import migration034 from "./034-initialize-columns-metadata";
 
 // ============================================================================
@@ -2200,6 +2216,114 @@ async function main() {
         );
       }
       break;
+    case "073":
+      console.log("📊 Running migration: 073-reservation-email-terms-alignment");
+      const r073 = await runMigration073(dryRun);
+      console.log(`
+🎯 ${r073.message}`);
+      if (r073.details) {
+        console.log(`📊 Details: ${r073.details.updated} updated, ${r073.details.errors} errors`);
+      }
+      break;
+    case "dry-run073":
+      console.log("🔍 Running migration in DRY RUN mode: 073-reservation-email-terms-alignment");
+      const rdryrun073 = await runMigration073(true);
+      console.log(`
+🎯 ${rdryrun073.message}`);
+      if (rdryrun073.details) {
+        console.log(`📊 Details: ${rdryrun073.details.updated} would be updated`);
+      }
+      break;
+    case "rollback073":
+      console.log("↩️ Rolling back migration: 073-reservation-email-terms-alignment");
+      const rrollback073 = await rollbackMigration073();
+      console.log(`
+🎯 ${rrollback073.message}`);
+      if (rrollback073.details) {
+        console.log(`📊 Details: ${rrollback073.details.restored} restored, ${rrollback073.details.errors} errors`);
+      }
+      break;
+    case "074":
+      console.log("📊 Running migration: 074-reservation-email-images-and-pay-cta");
+      const r074 = await runMigration074(dryRun);
+      console.log(`
+🎯 ${r074.message}`);
+      if (r074.details) {
+        console.log(`📊 Details: ${r074.details.updated} updated, ${r074.details.errors} errors`);
+      }
+      break;
+    case "dry-run074":
+      console.log("🔍 Running migration in DRY RUN mode: 074-reservation-email-images-and-pay-cta");
+      const rdryrun074 = await runMigration074(true);
+      console.log(`
+🎯 ${rdryrun074.message}`);
+      if (rdryrun074.details) {
+        console.log(`📊 Details: ${rdryrun074.details.updated} would be updated`);
+      }
+      break;
+    case "rollback074":
+      console.log("↩️ Rolling back migration: 074-reservation-email-images-and-pay-cta");
+      const rrollback074 = await rollbackMigration074();
+      console.log(`
+🎯 ${rrollback074.message}`);
+      if (rrollback074.details) {
+        console.log(`📊 Details: ${rrollback074.details.restored} restored, ${rrollback074.details.errors} errors`);
+      }
+      break;
+    case "075":
+      console.log("📊 Running migration: 075-reservation-email-redesign");
+      const r075 = await runMigration075(dryRun);
+      console.log(`
+🎯 ${r075.message}`);
+      if (r075.details) {
+        console.log(`📊 Details: ${r075.details.updated} updated, ${r075.details.errors} errors`);
+      }
+      break;
+    case "dry-run075":
+      console.log("🔍 Running migration in DRY RUN mode: 075-reservation-email-redesign");
+      const rdryrun075 = await runMigration075(true);
+      console.log(`
+🎯 ${rdryrun075.message}`);
+      if (rdryrun075.details) {
+        console.log(`📊 Details: ${rdryrun075.details.updated} would be updated`);
+      }
+      break;
+    case "rollback075":
+      console.log("↩️ Rolling back migration: 075-reservation-email-redesign");
+      const rrollback075 = await rollbackMigration075();
+      console.log(`
+🎯 ${rrollback075.message}`);
+      if (rrollback075.details) {
+        console.log(`📊 Details: ${rrollback075.details.restored} restored, ${rrollback075.details.errors} errors`);
+      }
+      break;
+    case "076":
+      console.log("📊 Running migration: 076-invalid-booking-deposit-credit");
+      const r076 = await runMigration076(dryRun);
+      console.log(`
+🎯 ${r076.message}`);
+      if (r076.details) {
+        console.log(`📊 Details: ${r076.details.updated} updated, ${r076.details.errors} errors`);
+      }
+      break;
+    case "dry-run076":
+      console.log("🔍 Running migration in DRY RUN mode: 076-invalid-booking-deposit-credit");
+      const rdryrun076 = await runMigration076(true);
+      console.log(`
+🎯 ${rdryrun076.message}`);
+      if (rdryrun076.details) {
+        console.log(`📊 Details: ${rdryrun076.details.updated} would be updated`);
+      }
+      break;
+    case "rollback076":
+      console.log("↩️ Rolling back migration: 076-invalid-booking-deposit-credit");
+      const rrollback076 = await rollbackMigration076();
+      console.log(`
+🎯 ${rrollback076.message}`);
+      if (rrollback076.details) {
+        console.log(`📊 Details: ${rrollback076.details.restored} restored, ${rrollback076.details.errors} errors`);
+      }
+      break;
 
     case "revalidate": {
       const url =
@@ -2280,6 +2404,10 @@ function showHelp() {
   070                Upload the updated "Reservation Confirmed" email template
   071                Repoint "Pay securely online" buttons to the booking status page
   072                Add the Final Payment Deadline section to Reservation Confirmed
+  073                Align Reservation Email 48hrs/Invalid wording with the Terms and Conditions
+  074                Reservation Email: fix broken logo/banner, drop duplicate Stripe CTA
+  075                Reservation Email: redesign to match the automated Reservation Confirmed email
+  076                Reservation Email (Invalid): deposit is non-refundable rebooking credit, per T&C §12
   rollback, undo     Rollback the migration 001 (delete created tours)
   rollback002        Rollback the migration 002 (delete created tours)
   rollback003        Rollback the migration 003 (delete created tours)

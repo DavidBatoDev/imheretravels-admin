@@ -500,6 +500,7 @@ export const onGenerateEmailDraftChanged = onDocumentUpdated(
           // The traveller pays from their own booking status page, which knows
           // who they are and what is actually due.
           bookingStatusUrl: buildBookingStatusUrl(accessToken),
+          currentYear: new Date().getFullYear(),
         };
 
         // Process template content

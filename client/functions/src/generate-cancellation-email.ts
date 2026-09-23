@@ -20,6 +20,60 @@ function getGmailDraftUrl(draftId: string, messageId: string): string {
   return `https://mail.google.com/mail/u/0/#drafts?compose=${messageId}`;
 }
 
+/**
+ * Calendar day (Asia/Manila, where the business runs) of a Firestore Timestamp,
+ * Date or date string, as a UTC-midnight epoch. null when it can't be read.
+ */
+function toManilaDayMs(value: any): number | null {
+  if (!value) return null;
+  let d: Date | null = null;
+  if (typeof value === "object" && typeof value.toDate === "function") {
+    d = value.toDate();
+  } else if (typeof value === "object" && value._seconds) {
+    d = new Date(value._seconds * 1000);
+  } else if (value instanceof Date) {
+    d = value;
+  } else if (typeof value === "string" && value.trim() !== "") {
+    d = new Date(value.trim());
+  }
+  if (!d || isNaN(d.getTime())) return null;
+  const manila = new Date(d.getTime() + 8 * 60 * 60 * 1000);
+  return Date.UTC(
+    manila.getUTCFullYear(),
+    manila.getUTCMonth(),
+    manila.getUTCDate(),
+  );
+}
+
+/**
+ * Days between the cancellation request and the tour start. Zero or negative
+ * means the guest cancelled on or after the start date. `known` is false when
+ * neither the dates nor the scenario text give a number — the template must
+ * then say nothing about timing rather than guess.
+ */
+export function resolveDaysBeforeTour(
+  cancellationRequestDate: any,
+  tourDate: any,
+  cancellationScenario: string,
+): { days: number; known: boolean } {
+  const cancelDay = toManilaDayMs(cancellationRequestDate);
+  const tourDay = toManilaDayMs(tourDate);
+  if (cancelDay !== null && tourDay !== null) {
+    return {
+      days: Math.round((tourDay - cancelDay) / (24 * 60 * 60 * 1000)),
+      known: true,
+    };
+  }
+  // Fallback: "Guest Cancel Late (-3 days before tour)". The sign matters —
+  // the old /(\d+)/ read "-3" as 3 and put an after-start cancellation in the
+  // "Late" window.
+  const m = String(cancellationScenario || "").match(
+    /(-?\d+)\s+days\s+before\s+tour/,
+  );
+  if (m) return { days: parseInt(m[1], 10), known: true };
+  return { days: 0, known: false };
+}
+
 // Helper function to format dates like Google Sheets: "Dec 2, 2025"
 function formatDateLikeSheets(dateValue: any): string {
   if (!dateValue) return "";
@@ -298,15 +352,14 @@ export const onGenerateCancellationDraftChanged = onDocumentUpdated(
         const paymentPlan = bookingData.paymentPlan || "";
         const reasonForCancellation = bookingData.reasonForCancellation || "";
 
-        // Extract days before tour from cancellationScenario
-        // Format: "Guest Cancel Early (Full Payment) (125 days before tour)"
-        let daysBeforeTour = 0;
-        const daysMatch = cancellationScenario.match(
-          /(\d+)\s+days\s+before\s+tour/,
-        );
-        if (daysMatch) {
-          daysBeforeTour = parseInt(daysMatch[1]);
-        }
+        // Days before tour: from the dates, else from the scenario text.
+        const { days: daysBeforeTour, known: daysKnown } =
+          resolveDaysBeforeTour(
+            cancellationRequestDate,
+            tourDateRaw,
+            cancellationScenario,
+          );
+        const cancelledAfterTourStart = daysKnown && daysBeforeTour <= 0;
 
         // Determine timing window
         let timingWindow = "N/A";
@@ -316,6 +369,8 @@ export const onGenerateCancellationDraftChanged = onDocumentUpdated(
           timingWindow = "Mid-Range";
         } else if (daysBeforeTour > 0) {
           timingWindow = "Late";
+        } else if (cancelledAfterTourStart) {
+          timingWindow = "After Tour Start";
         }
 
         // Determine who initiated cancellation
@@ -377,6 +432,8 @@ export const onGenerateCancellationDraftChanged = onDocumentUpdated(
           supplierCostsCommitted: Number(supplierCostsCommitted).toFixed(2),
           // Contextual variables
           daysBeforeTour,
+          daysKnown,
+          cancelledAfterTourStart,
           timingWindow,
           initiatedBy,
           paymentPlan,

@@ -273,6 +273,10 @@ import {
   rollbackMigration as rollbackMigration079,
 } from "./079-template-sweep-fixes";
 import {
+  runMigration as runMigration080,
+  rollbackMigration as rollbackMigration080,
+} from "./080-cancellation-after-tour-start";
+import {
   runMigration as runMigration078,
   rollbackMigration as rollbackMigration078,
 } from "./078-late-fee-notice-grace-days";
@@ -2371,6 +2375,18 @@ async function main() {
       console.log(`\n🎯 ${r079.message}\n📊 Details: ${r079.details.updated} templates, ${r079.details.errors} errors`);
       break;
     }
+    case "080":
+    case "dry-run080": {
+      const isDry080 = command === "dry-run080" || dryRun;
+      const r080 = await runMigration080(isDry080);
+      console.log(`\n🎯 ${r080.message}\n📊 Details: ${r080.details.updated} updated, ${r080.details.errors} errors`);
+      break;
+    }
+    case "rollback080": {
+      const rb080 = await rollbackMigration080();
+      console.log(`\n🎯 ${rb080.message}`);
+      break;
+    }
     case "rollback079": {
       const rb079 = await rollbackMigration079();
       console.log(`\n🎯 ${rb079.message}\n📊 Details: ${rb079.details.restored} restored`);
@@ -2491,6 +2507,7 @@ function showHelp() {
   077                Reservation Email: white band behind the logo header
   078                Late Fee Notice: state the grace period (2 or 3 days) that triggered the fee
   079                T&C sweep fixes: Pre-Departure Pack tour name + typo, reminder Stripe CTAs, transfer wording
+  080                Cancellation Email: wording for cancellations on/after tour start (needs functions deploy)
   rollback, undo     Rollback the migration 001 (delete created tours)
   rollback002        Rollback the migration 002 (delete created tours)
   rollback003        Rollback the migration 003 (delete created tours)

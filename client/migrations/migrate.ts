@@ -264,6 +264,10 @@ import {
   runMigration as runMigration076,
   rollbackMigration as rollbackMigration076,
 } from "./076-invalid-booking-deposit-credit";
+import {
+  runMigration as runMigration077,
+  rollbackMigration as rollbackMigration077,
+} from "./077-reservation-email-header-bg";
 import migration034 from "./034-initialize-columns-metadata";
 
 // ============================================================================
@@ -2324,6 +2328,33 @@ async function main() {
         console.log(`📊 Details: ${rrollback076.details.restored} restored, ${rrollback076.details.errors} errors`);
       }
       break;
+    case "077":
+      console.log("📊 Running migration: 077-reservation-email-header-bg");
+      const r077 = await runMigration077(dryRun);
+      console.log(`
+🎯 ${r077.message}`);
+      if (r077.details) {
+        console.log(`📊 Details: ${r077.details.updated} updated, ${r077.details.errors} errors`);
+      }
+      break;
+    case "dry-run077":
+      console.log("🔍 Running migration in DRY RUN mode: 077-reservation-email-header-bg");
+      const rdryrun077 = await runMigration077(true);
+      console.log(`
+🎯 ${rdryrun077.message}`);
+      if (rdryrun077.details) {
+        console.log(`📊 Details: ${rdryrun077.details.updated} would be updated`);
+      }
+      break;
+    case "rollback077":
+      console.log("↩️ Rolling back migration: 077-reservation-email-header-bg");
+      const rrollback077 = await rollbackMigration077();
+      console.log(`
+🎯 ${rrollback077.message}`);
+      if (rrollback077.details) {
+        console.log(`📊 Details: ${rrollback077.details.restored} restored, ${rrollback077.details.errors} errors`);
+      }
+      break;
 
     case "revalidate": {
       const url =
@@ -2408,6 +2439,7 @@ function showHelp() {
   074                Reservation Email: fix broken logo/banner, drop duplicate Stripe CTA
   075                Reservation Email: redesign to match the automated Reservation Confirmed email
   076                Reservation Email (Invalid): deposit is non-refundable rebooking credit, per T&C §12
+  077                Reservation Email: white band behind the logo header
   rollback, undo     Rollback the migration 001 (delete created tours)
   rollback002        Rollback the migration 002 (delete created tours)
   rollback003        Rollback the migration 003 (delete created tours)

@@ -9,6 +9,7 @@ import {
   cashReceivedForTerm,
   reservationCashReceived,
 } from "../payment-calculation-helpers";
+import { addOnTotals } from "@/lib/finance/add-ons";
 
 export const remainingBalanceColumn: BookingSheetColumn = {
   id: "remainingBalance",
@@ -274,6 +275,15 @@ export const remainingBalanceColumn: BookingSheetColumn = {
         isRest: false,
         value: "",
       },
+      {
+        name: "addOns",
+        type: "any",
+        columnReference: "Add-ons",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
     ],
   },
 };
@@ -336,6 +346,7 @@ export default function getRemainingBalanceFunction(
   p3AmountPaid?: number | string | null,
   p4AmountPaid?: number | string | null,
   fullPaymentAmountPaid?: number | string | null,
+  addOns?: unknown,
 ): number | "" {
   if (!tourPackageName) return "";
 
@@ -408,14 +419,19 @@ export default function getRemainingBalanceFunction(
     (hasPaidDate(p3DatePaid) ? toNumber(p3LateFeesPenalty) : 0) +
     (hasPaidDate(p4DatePaid) ? toNumber(p4LateFeesPenalty) : 0);
 
-  const totalDue = total + totalLateFees;
+  // Add-ons are separate line items: each adds its price to what is owed,
+  // and counts as paid once it has a date paid.
+  const addOns_ = addOnTotals(addOns);
+
+  const totalDue = total + totalLateFees + addOns_.total;
 
   // Remaining balance - round to 2 decimal places
-  const remaining = roundCurrency(totalDue - (paid + paidLateFees));
+  const remaining = roundCurrency(totalDue - (paid + paidLateFees + addOns_.paid));
 
   // Special rule for P1 plan
   if (paymentPlan === "P1" && hasPaidDate(p1DatePaid)) {
-    return 0;
+    // Tour fully settled by P1; only unpaid add-ons can still be owed.
+    return roundCurrency(addOns_.unpaid);
   }
 
   // Ensure non-negative balance

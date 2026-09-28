@@ -67,6 +67,28 @@ describe("column registry — per-slot cash columns are live", () => {
     expect(unresolvedOther, `new dangling argument references on ${name}`).toEqual([]);
   });
 
+  it.each([
+    ["Add-ons", "string"],
+    ["On Hold", "boolean"],
+    ["On Hold Reason", "string"],
+  ] as const)("%s exists as an editable %s column", (name, type) => {
+    const col = byName.get(name);
+    expect(col, `${name} missing from allBookingSheetColumns`).toBeDefined();
+    expect(col!.data.dataType).toBe(type);
+    expect(col!.data.includeInForms).toBe(true);
+    expect(col!.data.order).toBeTypeOf("number");
+  });
+
+  it.each([
+    ["Booking Status", "On Hold"],
+    ["Remaining Balance", "Add-ons"],
+    ["Paid", "Add-ons"],
+  ] as const)("%s reads %s, and that reference resolves", (fn, ref) => {
+    const refs = (byName.get(fn)!.data.arguments ?? []).map((a) => a.columnReference);
+    expect(refs).toContain(ref);
+    expect(byName.has(ref)).toBe(true);
+  });
+
   it("each *Amount Paid column sits right after its *Amount column", () => {
     const order = (n: string) => byName.get(n)!.data.order!;
     for (const n of ["P1", "P2", "P3", "P4"]) expect(order(`${n} Amount Paid`)).toBeGreaterThan(order(`${n} Amount`));

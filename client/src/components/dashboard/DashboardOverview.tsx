@@ -241,6 +241,9 @@ export default function DashboardOverview() {
     elapsedBookings: bookings.filter(
       (booking) => getBookingStatusCategory(booking) === "Elapsed"
     ).length,
+    onHoldBookings: bookings.filter(
+      (booking) => getBookingStatusCategory(booking) === "On Hold"
+    ).length,
     outstandingBalance: allTime.outstandingBalance,
     overdueUnpaid: allTime.overdueUnpaid,
     expectedRevenue: allTime.expectedRevenue,
@@ -265,6 +268,7 @@ export default function DashboardOverview() {
     { name: "Pending", value: metrics.pendingBookings, color: "#FF8200" },
     { name: "Completed", value: metrics.completedBookings, color: "#685BC7" },
     { name: "Elapsed", value: metrics.elapsedBookings, color: "#9CA3AF" },
+    { name: "On Hold", value: metrics.onHoldBookings, color: "#0EA5E9" },
     { name: "Cancelled", value: metrics.cancelledBookings, color: "#EF3340" },
   ].filter((item) => item.value > 0);
 

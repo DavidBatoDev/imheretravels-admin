@@ -62,6 +62,8 @@ export const elapseBookingsDaily = onSchedule(
         status.toLowerCase().includes("cancelled");
       if (cancelled) continue;
       if (status.trim().toLowerCase() === "elapsed") continue;
+      // On Hold: the guest is moving to an unconfirmed date, nothing is due.
+      if (b.onHold === true) continue;
 
       const end = asDate(b.returnDate) ?? asDate(b.tourDate);
       if (!end || !(end < startOfToday)) continue;

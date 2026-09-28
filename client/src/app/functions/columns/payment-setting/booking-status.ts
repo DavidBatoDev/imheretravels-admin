@@ -103,6 +103,15 @@ export const bookingStatusColumn: BookingSheetColumn = {
         isRest: false,
         value: "",
       },
+      {
+        name: "onHold",
+        type: "boolean",
+        columnReference: "On Hold",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
     ],
   },
 };
@@ -122,9 +131,15 @@ export default function bookingStatusFunction(
   p4DatePaid: any,
   tourDate?: any,
   returnDate?: any,
+  onHold?: boolean | string | null,
 ): string {
   // --- 1. Handle cancellation ---
   if (reason && reason.trim() !== "") return "Cancelled";
+
+  // --- 1b. On Hold: guest moving to an unconfirmed date ---
+  // Beats every payment-derived status (incl. Elapsed) until an admin
+  // unticks it; only Cancelled wins over it.
+  if (onHold === true || onHold === "true") return "On Hold";
 
   // --- 2. Normalize plan & balance ---
   const plan = (paymentPlan || "").trim();

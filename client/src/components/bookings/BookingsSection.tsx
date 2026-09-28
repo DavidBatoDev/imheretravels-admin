@@ -605,6 +605,8 @@ export default function BookingsSection() {
     if (typeof status !== "string" || status.trim() === "") return "Pending";
 
     const statusLower = status.toLowerCase();
+    if (statusLower.includes("on hold")) return "On Hold";
+    if (statusLower.includes("elapsed")) return "Elapsed";
     if (statusLower.includes("confirmed")) return "Confirmed";
     if (statusLower.includes("cancelled")) return "Cancelled";
     if (statusLower.includes("installment")) return "Pending"; // Installments are pending payments
@@ -621,6 +623,8 @@ export default function BookingsSection() {
     "Pending",
     "Cancelled",
     "Completed",
+    "On Hold",
+    "Elapsed",
   ];
 
   // Status categories selected in the export settings popover.
@@ -808,8 +812,16 @@ export default function BookingsSection() {
     const completedBookings = bookings.filter(
       (b) => getBookingStatusCategory(b.bookingStatus) === "Completed",
     ).length;
+    const onHoldBookings = bookings.filter(
+      (b) => getBookingStatusCategory(b.bookingStatus) === "On Hold",
+    ).length;
+    const elapsedBookings = bookings.filter(
+      (b) => getBookingStatusCategory(b.bookingStatus) === "Elapsed",
+    ).length;
 
     return {
+      onHoldBookings,
+      elapsedBookings,
       totalBookings,
       confirmedBookings,
       pendingBookings,
@@ -819,6 +831,8 @@ export default function BookingsSection() {
   }, [bookings]);
 
   const {
+    onHoldBookings,
+    elapsedBookings,
     totalBookings,
     confirmedBookings,
     pendingBookings,
@@ -873,6 +887,10 @@ export default function BookingsSection() {
         return "bg-crimson-red/20";
       case "Completed":
         return "bg-blue-500/20";
+      case "On Hold":
+        return "bg-vivid-orange/20";
+      case "Elapsed":
+        return "bg-gray-300/50";
       default:
         return "bg-gray-200";
     }
@@ -1508,6 +1526,28 @@ export default function BookingsSection() {
                           Cancelled:{" "}
                           <span className="text-crimson-red font-bold">
                             {cancelledBookings}
+                          </span>
+                        </p>
+                      </div>
+                    )}
+                    {onHoldBookings > 0 && (
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-2 rounded-full bg-vivid-orange"></div>
+                        <p className="text-xs text-muted-foreground">
+                          On Hold:{" "}
+                          <span className="text-vivid-orange font-bold">
+                            {onHoldBookings}
+                          </span>
+                        </p>
+                      </div>
+                    )}
+                    {elapsedBookings > 0 && (
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-2 rounded-full bg-gray-400"></div>
+                        <p className="text-xs text-muted-foreground">
+                          Elapsed:{" "}
+                          <span className="text-gray-500 font-bold">
+                            {elapsedBookings}
                           </span>
                         </p>
                       </div>

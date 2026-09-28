@@ -39,6 +39,7 @@ async function main() {
     const status = String(b.bookingStatus ?? "");
     if (String(b.reasonForCancellation ?? "").trim() || status.toLowerCase().includes("cancelled")) continue;
     if (status.trim().toLowerCase() === "elapsed") continue;
+    if (b.onHold === true) continue; // On Hold: date being rearranged
     const end = toDate(b.returnDate) ?? toDate(b.tourDate);
     if (!end || !(end < startOfToday)) continue;
     const owed = Number(b.remainingBalance) || 0;

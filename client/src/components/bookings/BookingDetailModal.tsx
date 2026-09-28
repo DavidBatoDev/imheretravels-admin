@@ -55,6 +55,7 @@ import { ExternalLink, Copy } from "lucide-react";
 import type { Booking } from "@/types/bookings";
 import { SheetColumn } from "@/types/sheet-management";
 import { allBookingSheetColumns } from "@/app/functions/columns";
+import { formatAddOnsSummary } from "@/lib/finance/add-ons";
 import { functionMap } from "@/app/functions/columns/functions-index";
 import { bookingService } from "@/services/booking-service";
 import { getSchedulePolicy } from "@/lib/schedule-policy";
@@ -674,6 +675,8 @@ export default function BookingDetailModal({
 
     const value = (currentBooking as any)[column.id];
     if (value === null || value === undefined) return null;
+
+    if (column.id === "addOns") return formatAddOnsSummary(value) || null;
 
     // Special handling for tourDate - it's a select type but stores Timestamp
     if (column.id === "tourDate") {

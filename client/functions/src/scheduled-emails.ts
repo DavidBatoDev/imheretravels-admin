@@ -386,6 +386,19 @@ export const processScheduledEmails = onSchedule(
               const termLower = term.toLowerCase();
               const paidDateVal = (bookingData as any)[`${termLower}DatePaid`];
 
+              // On Hold (moving to an unconfirmed date): no reminders. Marked
+              // skipped; when a new date is set the admin toggles Enable
+              // Payment Reminder off/on, which rebuilds the schedule.
+              if ((bookingData as any).onHold === true) {
+                logger.info(`Skipping email ${emailId} - booking is On Hold`);
+                await db.collection("scheduledEmails").doc(emailId).update({
+                  status: "skipped",
+                  updatedAt: Timestamp.now(),
+                  errorMessage: "Booking on hold: new tour date not confirmed",
+                });
+                return;
+              }
+
               // Tour has already run: no more payment reminders.
               if (String(bookingData.bookingStatus ?? "").trim().toLowerCase() === "elapsed") {
                 logger.info(`Skipping email ${emailId} - booking is Elapsed (tour ended, balance owing)`);

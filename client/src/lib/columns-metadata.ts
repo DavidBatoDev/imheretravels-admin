@@ -115,6 +115,9 @@ export const ALL_COLUMN_IDS = [
   "paid",
   "remainingBalance",
   "overpaidAmount",
+  "addOns",
+  "onHold",
+  "onHoldReason",
   "manualCredit",
   "creditFrom",
 

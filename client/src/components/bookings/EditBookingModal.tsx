@@ -65,6 +65,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
+import { AddOnsEditor } from "@/components/bookings/AddOnsEditor";
 import type { Booking } from "@/types/bookings";
 import type { TourPackage, PricingHistoryEntry } from "@/types/tours";
 import { SheetColumn, TypeScriptFunction } from "@/types/sheet-management";
@@ -2460,6 +2461,27 @@ export default function EditBookingModal({
       );
 
       const fieldId = `field-${column.id}`;
+
+      // Itemised add-ons: edited as a list, saved as one array write.
+      if (column.id === "addOns") {
+        return (
+          <AddOnsEditor
+            value={formData.addOns}
+            disabled={isComputing}
+            onSave={(next) => {
+              if (!booking?.id) return;
+              setIsSaving(true);
+              debouncedSaveIndicator();
+              batchedWriter.queueFieldUpdate(booking.id, "addOns", next);
+              const updatedData = { ...formData, addOns: next };
+              setFormData(updatedData);
+              executeDirectDependents("addOns", updatedData).then((finalData) => {
+                if (finalData) setFormData(finalData);
+              });
+            }}
+          />
+        );
+      }
 
       switch (column.dataType) {
         case "boolean":

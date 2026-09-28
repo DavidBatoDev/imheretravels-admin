@@ -8,6 +8,7 @@ import {
   cashReceivedForTerm,
   reservationCashReceived,
 } from "../payment-calculation-helpers";
+import { addOnTotals } from "@/lib/finance/add-ons";
 
 export const paidColumn: BookingSheetColumn = {
   id: "paid",
@@ -237,6 +238,15 @@ export const paidColumn: BookingSheetColumn = {
         isRest: false,
         value: "",
       },
+      {
+        name: "addOns",
+        type: "any",
+        columnReference: "Add-ons",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
     ],
   },
 };
@@ -267,6 +277,7 @@ export default function getTotalPaidAmountFunction(
   p3AmountPaid?: number | string | null,
   p4AmountPaid?: number | string | null,
   fullPaymentAmountPaid?: number | string | null,
+  addOns?: unknown,
 ): number | string {
   if (!tourPackageName) return "";
 
@@ -341,5 +352,6 @@ export default function getTotalPaidAmountFunction(
     p3PenaltyPaid +
     p4PenaltyPaid;
 
-  return roundCurrency(totalPaid);
+  // Paid add-ons (private room, supplements…) are cash received too.
+  return roundCurrency(totalPaid + addOnTotals(addOns).paid);
 }

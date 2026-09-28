@@ -75,6 +75,8 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Label } from "@/components/ui/label";
+import { AddOnsEditor } from "@/components/bookings/AddOnsEditor";
+import { addOnTotals, formatAddOnsSummary } from "@/lib/finance/add-ons";
 import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
@@ -628,6 +630,13 @@ export default function BookingsDataGrid({
     before: number[];
     after: number[];
     resolve: (confirmed: boolean) => void;
+  } | null>(null);
+
+  // Itemised add-ons editor (opened from the "Add-ons" cell).
+  const [addOnsDialog, setAddOnsDialog] = useState<{
+    rowId: string;
+    label: string;
+    value: unknown;
   } | null>(null);
 
   const [internalDateRangeFilters, setInternalDateRangeFilters] = useState<
@@ -3490,7 +3499,47 @@ export default function BookingsDataGrid({
       };
 
       // Add column-specific properties
-      if (col.dataType === "boolean") {
+      if (col.id === "addOns") {
+        // Itemised list: never edited as text. Cell shows a summary and opens
+        // the add-ons editor; saving writes the array and recomputes
+        // Remaining Balance / Paid / Booking Status.
+        baseColumn.renderCell = ({ row, column }) => {
+          if ((row as any)._isEmptyRow) {
+            return renderEmptyRowCell(
+              column,
+              (row as any)._isFirstEmptyRow,
+              (row as any)._shouldShowAddButton,
+            );
+          }
+          const t = addOnTotals((row as any).addOns);
+          const money = (n: number) =>
+            `£${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+          return (
+            <button
+              type="button"
+              className="h-8 w-full flex items-center px-2 text-left text-xs truncate hover:bg-muted/50"
+              title={formatAddOnsSummary((row as any).addOns) || "Add an extra paid on top of the tour"}
+              onClick={() =>
+                setAddOnsDialog({
+                  rowId: row.id,
+                  label: String((row as any).bookingId || (row as any).fullName || row.id),
+                  value: (row as any).addOns,
+                })
+              }
+            >
+              {t.count === 0 ? (
+                <span className="text-muted-foreground">+ Add</span>
+              ) : (
+                <span>
+                  {t.count} item{t.count === 1 ? "" : "s"} · {money(t.total)}
+                  {t.unpaid > 0 ? ` · ${money(t.unpaid)} unpaid` : ""}
+                </span>
+              )}
+            </button>
+          );
+        };
+        baseColumn.editable = false;
+      } else if (col.dataType === "boolean") {
         // Always render checkbox input for boolean columns
         baseColumn.renderCell = ({ row, column }) => {
           const cellValue = !!row[column.key as keyof SheetData];
@@ -5447,6 +5496,36 @@ export default function BookingsDataGrid({
 
       {/* Manual Credit / Credit From preview — shows the resulting P1–P4 due
           amounts before the edit is committed to Firestore. */}
+      <Dialog
+        open={addOnsDialog !== null}
+        onOpenChange={(open) => {
+          if (!open) setAddOnsDialog(null);
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Add-ons</DialogTitle>
+            <DialogDescription>
+              Extras paid on top of the tour for{" "}
+              <span className="font-medium">{addOnsDialog?.label}</span>. Leave
+              the date empty if it hasn't been paid yet.
+            </DialogDescription>
+          </DialogHeader>
+          {addOnsDialog && (
+            <AddOnsEditor
+              value={addOnsDialog.value}
+              onCancel={() => setAddOnsDialog(null)}
+              onSave={async (next) => {
+                const { rowId } = addOnsDialog;
+                setAddOnsDialog(null);
+                batchedWriter.queueFieldUpdate(rowId, "addOns", next);
+                await recomputeDirectDependentsForRow(rowId, "addOns", next);
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Dialog
         open={creditPreview !== null}
         onOpenChange={(open) => {

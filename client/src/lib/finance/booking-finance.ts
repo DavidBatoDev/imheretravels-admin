@@ -42,6 +42,7 @@ import type {
   FinancialEventType,
   PaymentSlot,
 } from "@/types/financial-reports";
+import { addOnTotals, normalizeAddOns, parseAddOnDate } from "./add-ons";
 
 // ---------------------------------------------------------------------------
 // Glossary shown in the UI
@@ -87,6 +88,16 @@ export const FINANCE_GLOSSARY: FinanceTerm[] = [
     term: "Cancelled Bookings",
     definition:
       "Bookings whose status is cancelled, dated on their cancellation request date. Retained = what they paid minus what was refunded.",
+  },
+  {
+    term: "Add-ons",
+    definition:
+      "Itemised extras paid on top of the tour, such as a private room. Each adds its price to what the guest owes and counts as Gross Revenue on the date it was paid.",
+  },
+  {
+    term: "On Hold",
+    definition:
+      "Bookings moving to a date that isn't confirmed yet. Money already paid still counts; their balance is left out of Overdue and Expected until a new date is set.",
   },
   {
     term: "Date range",
@@ -150,6 +161,7 @@ export function dateInRange(dateStr: string, start: string, end: string): boolea
 
 export type LifecycleStatus =
   | "Cancelled" // customer gave a cancellation reason (or status says cancelled)
+  | "On Hold" // admin ticked On Hold: guest moving to an unconfirmed date
   | "Completed" // tour has ended AND nothing is owed
   | "Elapsed" // tour has ENDED AND something is still owed
   | "Confirmed" // nothing owed, tour still ahead
@@ -157,6 +169,7 @@ export type LifecycleStatus =
 
 export const LIFECYCLE_DEFINITIONS: Record<LifecycleStatus, string> = {
   Cancelled: "The customer cancelled. Requires a cancellation reason on the booking.",
+  "On Hold": "The guest is moving to another date that isn't confirmed yet. Never Elapsed, no late fees or reminders, balance not counted as owed until a new date is set.",
   Completed: "The tour has ended and the balance is zero. The guest travelled and paid in full.",
   Elapsed: "The tour has ended but a balance is still owing. Expired without being settled. The status it had before is kept in statusBeforeElapsed.",
   Confirmed: "Paid in full, tour still ahead.",
@@ -181,6 +194,7 @@ export function deriveLifecycleStatus(
   const status = String(booking.bookingStatus ?? "").toLowerCase();
   const reason = String(booking.reasonForCancellation ?? "").trim();
   if (reason || status.includes("cancelled")) return "Cancelled";
+  if (isOnHoldBooking(booking)) return "On Hold";
 
   const num = (v: unknown) => Number(v) || 0;
   const paid = (amount: unknown, amountPaid: unknown, date: unknown): number => {
@@ -202,7 +216,9 @@ export function deriveLifecycleStatus(
       (s, n) => s + paid(booking[`p${n}Amount`], booking[`p${n}AmountPaid`], booking[`p${n}DatePaid`]),
       0
     );
-  const owed = Math.round((cost + num(booking.totalLateFees) - cash) * 100) / 100;
+  const addOns = addOnTotals(booking.addOns);
+  const owed =
+    Math.round((cost + num(booking.totalLateFees) + addOns.total - cash - addOns.paid) * 100) / 100;
   const settled = cost > 0 && owed <= 0.009;
 
   if (settled) return hasTourEnded(booking, today) ? "Completed" : "Confirmed";
@@ -229,6 +245,11 @@ export function isCancelledBooking(booking: RawBooking): boolean {
   return String(booking.bookingStatus ?? "")
     .toLowerCase()
     .includes("cancelled");
+}
+
+/** On Hold = admin ticked "On Hold" (guest moving to an unconfirmed date). */
+export function isOnHoldBooking(booking: RawBooking): boolean {
+  return booking.onHold === true || booking.onHold === "true";
 }
 
 /**
@@ -264,6 +285,15 @@ export function usesPerSlotCash(booking: RawBooking): boolean {
   ].some((k) => booking[k] !== undefined && booking[k] !== null && booking[k] !== "");
 }
 
+const present = (v: unknown) => v !== undefined && v !== null && v !== "";
+
+/**
+ * A slot is included when it is SCHEDULED (due date + asked amount) OR when
+ * cash is EVIDENCED on it (date paid + amount paid). The second case covers
+ * payments recorded by hand without the asked amount / due date filled in
+ * (e.g. a Revolut balance typed into Full Payment on a P1 booking): that cash
+ * must still reach the reports.
+ */
 function extractPaymentSlots(booking: RawBooking): PaymentSlotFields[] {
   const slots: PaymentSlotFields[] = [];
 
@@ -271,7 +301,9 @@ function extractPaymentSlots(booking: RawBooking): PaymentSlotFields[] {
     const slot = `p${n}` as PaymentSlot;
     const dueDate = booking[`p${n}DueDate`];
     const amount = booking[`p${n}Amount`];
-    if (dueDate && amount !== undefined && amount !== null && amount !== "") {
+    const scheduled = !!dueDate && present(amount);
+    const evidenced = !!toDate(booking[`p${n}DatePaid`]) && present(booking[`p${n}AmountPaid`]);
+    if (scheduled || evidenced) {
       slots.push({
         slot,
         dueDate,
@@ -283,7 +315,10 @@ function extractPaymentSlots(booking: RawBooking): PaymentSlotFields[] {
     }
   }
 
-  if (booking.fullPaymentDueDate && booking.fullPaymentAmount) {
+  const fullScheduled = !!booking.fullPaymentDueDate && !!booking.fullPaymentAmount;
+  const fullEvidenced =
+    !!toDate(booking.fullPaymentDatePaid) && present(booking.fullPaymentAmountPaid);
+  if (fullScheduled || fullEvidenced) {
     slots.push({
       slot: "full",
       dueDate: booking.fullPaymentDueDate,
@@ -361,6 +396,7 @@ export function extractBookingEvents(
   const events: FinancialEvent[] = [];
   const todayStr = toISODate(today);
   const cancelled = isCancelledBooking(booking);
+  const onHold = !cancelled && isOnHoldBooking(booking);
 
   const bookingId = (booking.bookingId as string) || (booking.id as string) || "";
   const bookingCode = (booking.bookingCode as string) || bookingId;
@@ -405,49 +441,47 @@ export function extractBookingEvents(
   // ── 2. Payment slots (P1–P4 / Full) ────────────────────────────────────
   for (const slotData of extractPaymentSlots(booking)) {
     const dueDate = toDate(slotData.dueDate);
-    if (!dueDate) continue;
-
     const paidDate = toDate(slotData.datePaid);
-    const amount = Number(slotData.amount ?? 0);
-    if (amount <= 0) continue;
+    const amount = Number(slotData.amount ?? 0) || 0;
+    // Cash received on this term: per-slot AmountPaid when recorded, else
+    // the asked amount (legacy assumption paid === asked).
+    const cashPaid = present(slotData.amountPaid) ? Number(slotData.amountPaid) || 0 : amount;
 
-    const dueDateStr = toISODate(dueDate);
+    const scheduled = !!dueDate && amount > 0;
+    const evidenced = !!paidDate && cashPaid > 0;
+    if (!scheduled && !evidenced) continue;
+
     const dueEventType: FinancialEventType =
       slotData.slot === "full" ? "full_payment_due" : "px_due";
     const paidEventType: FinancialEventType =
       slotData.slot === "full" ? "full_payment_paid" : "px_paid";
 
     const isSlotPaid = !!paidDate;
-    const overdueDate = addDays(dueDate, 1);
-    const overdueDateStr = toISODate(overdueDate);
-    const isSlotOverdue = !isSlotPaid && overdueDateStr <= todayStr;
+    const overdueDateStr = dueDate ? toISODate(addDays(dueDate, 1)) : "";
+    const isSlotOverdue = scheduled && !isSlotPaid && overdueDateStr <= todayStr;
 
-    // Nothing more is expected from, or overdue on, a cancelled booking.
-    const stillOwed = !isSlotPaid && !cancelled;
+    // Nothing more is expected from, or overdue on, a cancelled booking or
+    // one On Hold (no date yet, so nothing is due).
+    const stillOwed = !isSlotPaid && !cancelled && !onHold;
 
-    // Due date → Expected Revenue (only truly pending: unpaid, not yet overdue, not cancelled)
-    events.push(
-      makeEvent({
-        date: dueDateStr,
-        history: `${slotData.label} Due Date`,
-        eventType: dueEventType,
-        paymentSlot: slotData.slot,
-        grossRevenue: 0,
-        expectedRevenue: stillOwed && !isSlotOverdue ? amount : 0,
-        overdueUnpaidAmount: 0,
-        refundedAmount: 0,
-        cancelledBookingsCount: 0,
-      })
-    );
+    // Due date → Expected Revenue (only truly pending: unpaid, not yet overdue, not cancelled/on hold)
+    if (scheduled) {
+      events.push(
+        makeEvent({
+          date: toISODate(dueDate!),
+          history: `${slotData.label} Due Date`,
+          eventType: dueEventType,
+          paymentSlot: slotData.slot,
+          grossRevenue: 0,
+          expectedRevenue: stillOwed && !isSlotOverdue ? amount : 0,
+          overdueUnpaidAmount: 0,
+          refundedAmount: 0,
+          cancelledBookingsCount: 0,
+        })
+      );
+    }
 
     if (paidDate) {
-      // Cash received on this term: per-slot AmountPaid when recorded, else
-      // the asked amount (legacy assumption paid === asked).
-      const paidRaw = slotData.amountPaid;
-      const cashPaid =
-        paidRaw === undefined || paidRaw === null || paidRaw === ""
-          ? amount
-          : Number(paidRaw) || 0;
       events.push(
         makeEvent({
           date: toISODate(paidDate),
@@ -496,6 +530,46 @@ export function extractBookingEvents(
   // overpayment is then already inside *AmountPaid and counted above.
   const creditEvent = usesPerSlotCash(booking) ? null : manualCreditAsCash(booking);
   if (creditEvent) events.push(makeEvent(creditEvent));
+
+  // ── 2c. Add-ons (private room, supplements…) ───────────────────────────
+  // Paid → Gross Revenue dated the day it was paid. Unpaid → owed, payable
+  // by the tour date: Expected until then, Overdue from the day after.
+  // Nothing is owed on a cancelled or On Hold booking.
+  const tourDateForAddOns = toDate(booking.tourDate);
+  for (const addOn of normalizeAddOns(booking.addOns)) {
+    if (addOn.amount <= 0) continue;
+    const paidOn = parseAddOnDate(addOn.datePaid);
+    const label = `Add-on: ${addOn.item || "Item"}`;
+    if (paidOn) {
+      events.push(
+        makeEvent({
+          date: toISODate(paidOn),
+          history: label,
+          eventType: "add_on_paid",
+          grossRevenue: addOn.amount,
+          expectedRevenue: 0,
+          overdueUnpaidAmount: 0,
+          refundedAmount: 0,
+          cancelledBookingsCount: 0,
+        })
+      );
+    } else if (!cancelled && !onHold && tourDateForAddOns) {
+      const overdueOn = toISODate(addDays(tourDateForAddOns, 1));
+      const overdue = overdueOn <= todayStr;
+      events.push(
+        makeEvent({
+          date: overdue ? overdueOn : toISODate(tourDateForAddOns),
+          history: `${label} (unpaid)`,
+          eventType: "add_on_due",
+          grossRevenue: 0,
+          expectedRevenue: overdue ? 0 : addOn.amount,
+          overdueUnpaidAmount: overdue ? addOn.amount : 0,
+          refundedAmount: 0,
+          cancelledBookingsCount: 0,
+        })
+      );
+    }
+  }
 
   // ── 3. Cancellation → Refunded Amount ──────────────────────────────────
   const cancellationDate = getCancellationDate(booking);

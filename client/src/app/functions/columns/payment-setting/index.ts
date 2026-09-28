@@ -16,6 +16,9 @@ import { remainingBalanceColumn as _remainingBalanceColumn } from "./remaining-b
 import { overpaidAmountColumn as _overpaidAmountColumn } from "./overpaid-amount";
 import { reservationFeeColumn as _reservationFeeColumn } from "./reservation-fee";
 import { reservationAmountPaidColumn as _reservationAmountPaidColumn } from "./reservation-amount-paid";
+import { addOnsColumn as _addOnsColumn } from "./add-ons";
+import { onHoldColumn as _onHoldColumn } from "./on-hold";
+import { onHoldReasonColumn as _onHoldReasonColumn } from "./on-hold-reason";
 import { sentInitialReminderLinkColumn as _sentInitialReminderLinkColumn } from "./sent-initial-reminder-link";
 import { totalLateFeesColumn as _totalLateFeesColumn } from "./total-late-fees";
 
@@ -41,6 +44,9 @@ export const remainingBalanceColumn = withOrder(_remainingBalanceColumn);
 export const overpaidAmountColumn = withOrder(_overpaidAmountColumn);
 export const reservationFeeColumn = withOrder(_reservationFeeColumn);
 export const reservationAmountPaidColumn = withOrder(_reservationAmountPaidColumn);
+export const addOnsColumn = withOrder(_addOnsColumn);
+export const onHoldColumn = withOrder(_onHoldColumn);
+export const onHoldReasonColumn = withOrder(_onHoldReasonColumn);
 export const sentInitialReminderLinkColumn = withOrder(
   _sentInitialReminderLinkColumn,
 );

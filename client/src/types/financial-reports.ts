@@ -27,6 +27,8 @@ export type FinancialEventType =
   | "full_payment_due" // Full Payment Due Date → expected revenue
   | "full_payment_paid"// Full Payment Date Paid → gross revenue
   | "manual_credit"    // Overpayment on a term/reservation → gross revenue (cash received)
+  | "add_on_paid"      // Add-on (private room, supplement…) paid → gross revenue
+  | "add_on_due"       // Add-on not yet paid → expected (before tour) / overdue (after)
   | "cancellation";    // Cancellation Request Date → refunded amount
 
 // Which installment (P1–P4 or full)

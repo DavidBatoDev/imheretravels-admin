@@ -1,4 +1,5 @@
 import { Timestamp } from "firebase/firestore";
+import type { BookingAddOn } from "@/lib/finance/add-ons";
 
 // Payment token data for installment tracking
 export interface PaymentTokenData {
@@ -129,6 +130,15 @@ export interface Booking {
   // "Elapsed" and the status it replaced is preserved here.
   statusBeforeElapsed?: string;
   elapsedAt?: Date;
+
+  // ── On Hold (moving to an unconfirmed date) ───────────────────────────────
+  // Ticked by an admin. While true the booking is never Elapsed, gets no late
+  // fees or reminders, and its balance is excluded from Overdue/Expected.
+  onHold?: boolean;
+  onHoldReason?: string;
+
+  // ── Add-ons: itemised extras on top of the tour (see lib/finance/add-ons) ─
+  addOns?: BookingAddOn[];
 
   // Late fees (term-level)
   p1LateFeesPenalty?: number;

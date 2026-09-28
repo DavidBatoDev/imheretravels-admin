@@ -152,6 +152,8 @@ export const applyLateFeesDaily = onSchedule(
         // cancelled — there is nothing left to nudge the guest towards.
         const statusLower = String(booking.bookingStatus ?? "").toLowerCase();
         if (
+          booking.onHold === true ||
+          statusLower === "on hold" ||
           statusLower === "elapsed" ||
           statusLower.includes("cancelled") ||
           String(booking.reasonForCancellation ?? "").trim() !== ""

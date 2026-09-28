@@ -88,6 +88,7 @@ export const COLUMN_ORDERS: Record<string, number> = {
   // ============================================================================
   adminFee: 38,
   paid: 39,
+  addOns: 39.3,
   paidTerms: 40,
   totalLateFees: 40.5,
   manualCredit: 41,
@@ -95,6 +96,8 @@ export const COLUMN_ORDERS: Record<string, number> = {
   paymentPlan: 43,
   paymentMethod: 44,
   enablePaymentReminder: 45,
+  onHold: 46.2,
+  onHoldReason: 46.4,
   sentInitialReminderLink: 46,
   bookingStatus: 47,
   paymentProgress: 48,

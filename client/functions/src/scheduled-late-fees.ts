@@ -5,7 +5,7 @@ import { logger } from "firebase-functions";
 import EmailTemplateService from "./email-template-service";
 import GmailApiService from "./gmail-api-service";
 import { buildBookingStatusUrl } from "./booking-status-url";
-import { getLateFeeGraceDays } from "./late-fee-policy";
+import { getLateFeeGraceDays, isDueDateChargeable } from "./late-fee-policy";
 
 if (getApps().length === 0) {
   initializeApp();
@@ -16,6 +16,7 @@ type LateFeesConfig = {
   enabled?: boolean;
   penaltyPercent?: number;
   graceDays?: number;
+  chargeDueFrom?: any;
   effectiveDate?: any;
 };
 
@@ -165,7 +166,12 @@ export const applyLateFeesDaily = onSchedule(
           const dueDate = parseTermDueDate(booking[`${termKey}DueDate`], index);
           const datePaid = asDate(booking[`${termKey}DatePaid`]);
 
-          if (!dueDate || termAmount <= 0 || datePaid) {
+          if (
+            !dueDate ||
+            termAmount <= 0 ||
+            datePaid ||
+            !isDueDateChargeable(dueDate, config.chargeDueFrom)
+          ) {
             continue;
           }
 
@@ -253,6 +259,7 @@ export const applyLateFeesDaily = onSchedule(
 
             if (
               !freshDueDate ||
+              !isDueDateChargeable(freshDueDate, config.chargeDueFrom) ||
               freshDatePaid ||
               freshPenalty > 0 ||
               freshAppliedAt

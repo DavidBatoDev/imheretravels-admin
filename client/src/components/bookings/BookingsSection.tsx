@@ -78,6 +78,10 @@ import { BsCalendar3, BsCalendarEvent, BsPersonCheck } from "react-icons/bs";
 import { IoWallet } from "react-icons/io5";
 import { HiTrendingUp } from "react-icons/hi";
 import type { Booking } from "@/types/bookings";
+import {
+  checkOverduePayments,
+  getFinalBalanceDeadline,
+} from "@/lib/booking-overdue";
 import { SheetColumn } from "@/types/sheet-management";
 import {
   toCsv,
@@ -933,113 +937,6 @@ export default function BookingsSection() {
     return 0;
   };
 
-  // Check if booking has overdue payments
-  const checkOverduePayments = (booking: Booking): { hasOverdue: boolean; message: string } => {
-    // Don't show warnings for cancelled bookings
-    if (booking.bookingStatus?.toLowerCase() === 'cancelled') {
-      return { hasOverdue: false, message: "" };
-    }
-
-    const now = new Date();
-
-    // Helper to check if a date is overdue
-    const isOverdue = (dueDate: any): boolean => {
-      if (!dueDate) return false;
-      
-      let date: Date | null = null;
-      // Handle Firestore timestamps
-      if (typeof dueDate === 'object' && dueDate?.toDate && typeof dueDate.toDate === 'function') {
-        date = dueDate.toDate();
-      } else if (dueDate instanceof Date) {
-        date = dueDate;
-      } else if (typeof dueDate === 'string') {
-        date = new Date(dueDate);
-      }
-      
-      if (!date || isNaN(date.getTime())) return false;
-      return date < now;
-    };
-
-    // Helper to check if payment is made
-    const isPaid = (datePaid: any): boolean => {
-      if (!datePaid) return false;
-      if (typeof datePaid === 'object' && datePaid?.toDate) return true;
-      if (datePaid instanceof Date && !isNaN(datePaid.getTime())) return true;
-      if (typeof datePaid === 'string' && datePaid.trim() !== '') return true;
-      return false;
-    };
-
-    const paymentPlan = (booking.availablePaymentTerms || booking.paymentPlan || "").toUpperCase();
-
-    // Check Full Payment
-    if (paymentPlan.includes("FULL PAYMENT")) {
-      if (isOverdue(booking.fullPaymentDueDate) && !isPaid(booking.fullPaymentDatePaid)) {
-        return { hasOverdue: true, message: "Full payment is overdue" };
-      }
-    }
-
-    // Check P1 - Check if the field exists rather than relying on plan string
-    if (booking.p1DueDate) {
-      if (isOverdue(booking.p1DueDate) && !isPaid(booking.p1DatePaid)) {
-        return { hasOverdue: true, message: "P1 installment is overdue" };
-      }
-    }
-
-    // Check P2
-    if (booking.p2DueDate) {
-      if (isOverdue(booking.p2DueDate) && !isPaid(booking.p2DatePaid)) {
-        return { hasOverdue: true, message: "P2 installment is overdue" };
-      }
-    }
-
-    // Check P3
-    if (booking.p3DueDate) {
-      if (isOverdue(booking.p3DueDate) && !isPaid(booking.p3DatePaid)) {
-        return { hasOverdue: true, message: "P3 installment is overdue" };
-      }
-    }
-
-    // Check P4
-    if (booking.p4DueDate) {
-      if (isOverdue(booking.p4DueDate) && !isPaid(booking.p4DatePaid)) {
-        return { hasOverdue: true, message: "P4 installment is overdue" };
-      }
-    }
-
-    // Check if the final 2-month balance deadline has passed and booking isn't fully paid
-    const progress = calculatePaymentProgress(booking);
-    if (progress < 100) {
-      const finalDeadline = getFinalBalanceDeadline(booking);
-      if (finalDeadline && finalDeadline.date < now) {
-        return { hasOverdue: true, message: `Full balance was due by ${finalDeadline.label} (2 months before tour)` };
-      }
-    }
-
-    return { hasOverdue: false, message: "" };
-  };
-
-  // Compute the final balance deadline (tourDate - 2 calendar months).
-  // Returns a { date, label } object or null if tourDate cannot be resolved.
-  const getFinalBalanceDeadline = (booking: Booking): { date: Date; label: string } | null => {
-    const raw: any = booking.tourDate;
-    if (!raw) return null;
-
-    let d: Date | null = null;
-    if (typeof raw.toDate === "function") d = raw.toDate();
-    else if (raw._seconds) d = new Date(raw._seconds * 1000);
-    else if (raw.seconds) d = new Date(raw.seconds * 1000);
-    else if (raw instanceof Date) d = raw;
-
-    if (!d || isNaN(d.getTime())) return null;
-
-    const deadline = new Date(d.getFullYear(), d.getMonth() - 2, d.getDate());
-    const label = deadline.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-    return { date: deadline, label };
-  };
 
   // Get active filters count
   const getActiveFiltersCount = () => {

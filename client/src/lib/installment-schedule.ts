@@ -217,3 +217,43 @@ export function computeEligibleInstallmentDatesLocal(
     toCivilUTC(tour),
   ).map(fromCivilUTC);
 }
+
+/**
+ * Parses the "Installment Dates Override" column: an approved, per-booking
+ * exception to the rule above, as comma-separated ISO dates
+ * ("2026-07-31, 2026-08-28, 2026-09-04"). Returns local-midnight dates in
+ * ascending order, or null when blank or when any entry is not a valid
+ * yyyy-mm-dd date (a malformed override is ignored, never half-applied).
+ * At most MAX_INSTALLMENT_TERMS dates are used.
+ */
+export function parseInstallmentDatesOverride(value: unknown): Date[] | null {
+  if (typeof value !== "string" || value.trim() === "") return null;
+
+  const dates: Date[] = [];
+  for (const part of value.split(",")) {
+    const m = part.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return null;
+    const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    const date = new Date(y, mo - 1, d);
+    if (date.getMonth() !== mo - 1 || date.getDate() !== d) return null;
+    dates.push(date);
+  }
+
+  dates.sort((a, b) => a.getTime() - b.getTime());
+  return dates.slice(0, MAX_INSTALLMENT_TERMS);
+}
+
+/**
+ * The instalment dates a booking actually uses: the approved override when one
+ * is set, otherwise the rule. Local-midnight in, local-midnight out.
+ */
+export function resolveInstallmentDatesLocal(
+  res: Date,
+  tour: Date,
+  installmentDatesOverride?: unknown,
+): Date[] {
+  return (
+    parseInstallmentDatesOverride(installmentDatesOverride) ??
+    computeEligibleInstallmentDatesLocal(res, tour)
+  );
+}

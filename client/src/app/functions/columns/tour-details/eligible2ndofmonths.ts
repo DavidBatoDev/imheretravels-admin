@@ -1,4 +1,4 @@
-import { computeEligibleInstallmentDatesLocal } from "@/lib/installment-schedule";
+import { resolveInstallmentDatesLocal } from "@/lib/installment-schedule";
 import { BookingSheetColumn } from "@/types/booking-sheet-column";
 
 export const eligible2ndofmonthsColumn: BookingSheetColumn = {
@@ -32,6 +32,15 @@ export const eligible2ndofmonthsColumn: BookingSheetColumn = {
         isRest: false,
         value: "",
       },
+      {
+        name: "installmentDatesOverride",
+        type: "string",
+        columnReference: "Installment Dates Override",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
     ],
   },
 };
@@ -45,12 +54,14 @@ export const eligible2ndofmonthsColumn: BookingSheetColumn = {
  *   tourDate - 2 calendar months (bookings from 1 Jun 2026) or tourDate - 3 days
  * - plus snap-back to the last Friday before the cutoff when the monthly
  *   anchor overshoots it
+ * - an approved Installment Dates Override replaces the rule when set
  *
  * Returns: number | ""  (empty string if either date is blank/invalid)
  */
 export default function eligibleSecondsCountFunction(
   reservationDate: unknown, // K
   tourDate: unknown, // N
+  installmentDatesOverride?: string,
 ): number | "" {
   // ---------- local helpers (robust parsing like our previous funcs) ----------
   const toDate = (input: unknown): Date | null => {
@@ -135,5 +146,6 @@ export default function eligibleSecondsCountFunction(
   const tourD = startOfDay(tour);
 
   // Canonical rule lives in lib/installment-schedule.ts — do not reimplement.
-  return computeEligibleInstallmentDatesLocal(resD, tourD).length;
+  return resolveInstallmentDatesLocal(resD, tourD, installmentDatesOverride)
+    .length;
 }

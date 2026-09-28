@@ -1,4 +1,4 @@
-import { computeEligibleInstallmentDatesLocal } from "@/lib/installment-schedule";
+import { resolveInstallmentDatesLocal } from "@/lib/installment-schedule";
 import { BookingSheetColumn } from "@/types/booking-sheet-column";
 
 export const p1DueDateColumn: BookingSheetColumn = {
@@ -44,6 +44,15 @@ export const p1DueDateColumn: BookingSheetColumn = {
         name: "paymentCondition",
         type: "string",
         columnReference: "Payment Condition",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "installmentDatesOverride",
+        type: "string",
+        columnReference: "Installment Dates Override",
         isOptional: true,
         hasDefault: false,
         isRest: false,
@@ -192,6 +201,7 @@ export default function getP1DueDateFunction(
   tourDate?: unknown,
   paymentPlan?: string,
   paymentCondition?: string,
+  installmentDatesOverride?: string,
 ): string | "" | "ERROR" {
   // Same guard as Excel: if payment plan is Full Payment or reservation blank => ""
   if (paymentPlan === "Full Payment") return "";
@@ -226,7 +236,11 @@ export default function getP1DueDateFunction(
   if (isNaN(res.getTime()) || isNaN(tour.getTime())) return "ERROR";
 
   // Canonical rule lives in lib/installment-schedule.ts — do not reimplement.
-  const validDates = computeEligibleInstallmentDatesLocal(res, tour);
+  const validDates = resolveInstallmentDatesLocal(
+    res,
+    tour,
+    installmentDatesOverride,
+  );
 
   if (validDates.length < 1) return "";
 

@@ -14,12 +14,16 @@ import {
 import { db } from "@/lib/firebase";
 import EmailTemplateService from "@/services/email-template-service";
 import GmailApiService from "@/lib/gmail/gmail-api-service";
-import { getLateFeeGraceDays } from "@/lib/late-fee-policy";
+import {
+  getLateFeeGraceDays,
+  isDueDateChargeable,
+} from "@/lib/late-fee-policy";
 
 type LateFeesConfig = {
   enabled?: boolean;
   penaltyPercent?: number;
   graceDays?: number;
+  chargeDueFrom?: any;
   effectiveDate?: any;
 };
 
@@ -177,7 +181,12 @@ export async function POST() {
         const dueDate = parseTermDueDate(booking[`${termKey}DueDate`], index);
         const datePaid = asDate(booking[`${termKey}DatePaid`]);
 
-        if (!dueDate || termAmount <= 0 || datePaid) {
+        if (
+          !dueDate ||
+          termAmount <= 0 ||
+          datePaid ||
+          !isDueDateChargeable(dueDate, config.chargeDueFrom)
+        ) {
           continue;
         }
 
@@ -267,6 +276,7 @@ export async function POST() {
 
           if (
             !freshDueDate ||
+            !isDueDateChargeable(freshDueDate, config.chargeDueFrom) ||
             freshDatePaid ||
             freshPenalty > 0 ||
             freshAppliedAt

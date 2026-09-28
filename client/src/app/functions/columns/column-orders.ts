@@ -47,6 +47,7 @@ export const COLUMN_ORDERS: Record<string, number> = {
   tourDuration: 16,
   paymentCondition: 17,
   eligible2ndofmonths: 18,
+  installmentDatesOverride: 18.5,
   availablePaymentTerms: 19,
   daysBetweenBookingAndTourDate: 20,
   originalTourCost: 21,

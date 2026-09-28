@@ -75,6 +75,15 @@ export const adminFeeColumn: BookingSheetColumn = {
         isRest: false,
         value: "",
       },
+      {
+        name: "paid",
+        type: "number | string",
+        columnReference: "Paid",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
     ],
   },
 };
@@ -87,7 +96,10 @@ export const adminFeeColumn: BookingSheetColumn = {
  * 1. Admin fee = 0 when IHT cancels (IHT covers all costs)
  * 2. Admin fee = 0 when supplier costs involved (supplier takes the cost)
  * 3. Admin fee = 0 when no refund eligible
- * 4. For full payments: 10% of NRA (Full Payment Amount - Reservation Fee)
+ * 4. For full payments: 10% of what was actually paid beyond the reservation
+ *    fee (Paid - Reservation Fee). Full Payment Amount is the balance DUE after
+ *    the reservation fee, so it must not be used: a guest who only paid the
+ *    deposit would be charged a fee on money never received.
  * 5. For installments: 10% of paid terms
  *
  * The admin fee is deducted from the customer's refund to cover
@@ -101,6 +113,7 @@ export const adminFeeColumn: BookingSheetColumn = {
  * - reservationFee → Reservation fee amount
  * - supplierCostsCommitted → Supplier costs (default 0)
  * - reasonForCancellation → Cancellation reason
+ * - paid → Total amount paid (reservation fee + payments)
  *
  * Returns:
  * - number → 10% of applicable amount
@@ -116,6 +129,7 @@ export default async function getAdminFee(
   reservationFee: number | string,
   supplierCostsCommitted: number = 0,
   reasonForCancellation: string,
+  paid?: number | string,
 ): Promise<number | string> {
   // Return empty if not cancelled
   if (!reasonForCancellation) {
@@ -159,9 +173,8 @@ export default async function getAdminFee(
   let baseAmount = 0;
 
   if (fullPayment > 0) {
-    // Full Payment: Calculate on NRA (Full Payment - Reservation Fee)
-    const nra = fullPayment - rf;
-    baseAmount = nra;
+    // Full Payment: calculate on what was actually paid beyond the RF.
+    baseAmount = Math.max(0, toNumber(paid) - rf);
   } else {
     // Installment: Calculate on paid terms
     baseAmount = paidInstallments;

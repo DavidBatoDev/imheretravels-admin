@@ -58,6 +58,7 @@ import { allBookingSheetColumns } from "@/app/functions/columns";
 import { functionMap } from "@/app/functions/columns/functions-index";
 import { bookingService } from "@/services/booking-service";
 import { getSchedulePolicy } from "@/lib/schedule-policy";
+import { checkOverduePayments } from "@/lib/booking-overdue";
 import SchedulePolicyBadge from "@/components/bookings/SchedulePolicyBadge";
 import TravelPartyCard, {
   isPartyBooking,
@@ -514,6 +515,9 @@ export default function BookingDetailModal({
     if (!booking) return "bg-gray-100";
 
     const category = getBookingStatusCategory(booking.bookingStatus);
+    if (category === "Pending" && checkOverduePayments(booking).hasOverdue) {
+      return "bg-orange-500/20";
+    }
     switch (category) {
       case "Confirmed":
         return "bg-spring-green/20";
@@ -526,6 +530,15 @@ export default function BookingDetailModal({
       default:
         return "bg-gray-200";
     }
+  };
+
+  // Same label as the bookings list row: "Pending" becomes "Overdue" when a
+  // payment or the final balance deadline has passed.
+  const getDisplayStatus = (booking: Booking) => {
+    const category = getBookingStatusCategory(booking.bookingStatus);
+    return category === "Pending" && checkOverduePayments(booking).hasOverdue
+      ? "Overdue"
+      : category;
   };
 
   const getBookingTypeBgColor = (type: string) => {
@@ -1147,9 +1160,7 @@ export default function BookingDetailModal({
                               currentBooking,
                             )}`}
                           >
-                            {getBookingStatusCategory(
-                              currentBooking?.bookingStatus,
-                            )}
+                            {getDisplayStatus(currentBooking)}
                           </Badge>
                         </div>
                       )}

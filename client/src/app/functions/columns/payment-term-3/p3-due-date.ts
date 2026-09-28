@@ -1,4 +1,4 @@
-import { computeEligibleInstallmentDatesLocal } from "@/lib/installment-schedule";
+import { resolveInstallmentDatesLocal } from "@/lib/installment-schedule";
 import { BookingSheetColumn } from "@/types/booking-sheet-column";
 
 export const p3DueDateColumn: BookingSheetColumn = {
@@ -44,6 +44,15 @@ export const p3DueDateColumn: BookingSheetColumn = {
         name: "paymentCondition",
         type: "string",
         columnReference: "Payment Condition",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
+      {
+        name: "installmentDatesOverride",
+        type: "string",
+        columnReference: "Installment Dates Override",
         isOptional: true,
         hasDefault: false,
         isRest: false,
@@ -106,6 +115,7 @@ export default function getP3DueDateFunction(
   tourDate?: unknown,
   paymentPlan?: string,
   paymentCondition?: string,
+  installmentDatesOverride?: string,
 ): string | "" | "ERROR" {
   if (["Full Payment", "P1", "P2"].includes(paymentPlan ?? "")) return "";
   if (!reservationDate) return "";
@@ -124,7 +134,11 @@ export default function getP3DueDateFunction(
   const [ty, tm, td] = tourYmd.split("-").map(Number);
   const tour = new Date(ty, tm - 1, td);
   // Canonical rule lives in lib/installment-schedule.ts — do not reimplement.
-  const validDates = computeEligibleInstallmentDatesLocal(res, tour);
+  const validDates = resolveInstallmentDatesLocal(
+    res,
+    tour,
+    installmentDatesOverride,
+  );
 
   if (validDates.length < 3) return "";
   const fmt = (d: Date) =>

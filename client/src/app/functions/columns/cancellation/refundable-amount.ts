@@ -103,7 +103,7 @@ export const refundableAmountColumn: BookingSheetColumn = {
  *
  * Key Rules:
  * 1. Reservation Fee (RF) is ONLY refundable when IHT cancels
- * 2. For full payments: Split into RF + NRA (Non-Reservation Amount)
+ * 2. For full payments: NRA (Non-Reservation Amount) = Paid - RF
  * 3. For installments: Only paidTerms are considered (RF excluded)
  * 4. Supplier costs reduce any calculated refund
  * 5. Admin fee is deducted from refundable amount (except IHT cancellations)
@@ -229,8 +229,11 @@ export default async function getRefundableAmount(
 
   if (isFullPayment) {
     // Full Payment Scenario
-    // NRA = Full Payment - Reservation Fee
-    const nra = fullPayment - rf;
+    // NRA = what was actually paid beyond the reservation fee. Full Payment
+    // Amount is the balance DUE after the RF, so using it refunded money that
+    // was never paid (deposit-only cancellations) and subtracted the RF twice
+    // (paid-in-full cancellations).
+    const nra = Math.max(0, totalPaid - rf);
 
     if (
       eligibleRefund.includes("100% of non-reservation amount") ||

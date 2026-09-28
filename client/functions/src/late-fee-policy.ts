@@ -69,3 +69,17 @@ export function getLateFeeGraceDays(
   const configured = Number(configGraceDays ?? LEGACY_LATE_FEE_GRACE_DAYS);
   return Number.isFinite(configured) ? configured : LEGACY_LATE_FEE_GRACE_DAYS;
 }
+
+/**
+ * Automation restart gate. When config/late-fees `chargeDueFrom` is set, the
+ * nightly checker and Process Now only charge terms due on/after it, so turning
+ * automation back on never back-charges terms that fell due while it was off.
+ * Send Notice (a staff action on one term) ignores it. Unset → no gate.
+ */
+export function isDueDateChargeable(
+  dueDate: Date,
+  chargeDueFrom: unknown,
+): boolean {
+  const from = toDateValue(chargeDueFrom);
+  return !from || dueDate.getTime() >= from.getTime();
+}

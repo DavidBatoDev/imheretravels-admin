@@ -12,6 +12,76 @@ export type PatchNote = {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    slug: "late-fees-restart-and-refund-fix",
+    title: "Late Fees Back On, Refund Fix and Schedule Exceptions",
+    description:
+      "Automatic late fees resume for instalments due from Sep 28, 2026 without back-charging earlier ones. The booking details status now matches the list, Full Payment cancellation refunds are calculated from what was actually paid, and approved schedule exceptions can be stored per booking.",
+    date: "2026-09-28",
+    version: "1.4.2",
+    categories: ["fix", "improvement"],
+    content: `# Late Fees Back On, Refund Fix and Schedule Exceptions
+
+## 1. Automatic late fees resume, forward-only
+
+Automatic late fees had been switched off since Jul 24, 2026, so the nightly run and **Process Now** skipped every booking and fees were being added by hand.
+
+They are back on, with a new **start date** (\`chargeDueFrom\` in \`config/late-fees\`): the nightly run and **Process Now** only charge instalments **due on or after Sep 28, 2026**. Instalments that fell due while automation was off are **not** charged automatically.
+
+| Instalment due | What happens |
+|---|---|
+| Before Sep 28, 2026 | Nothing automatic. Staff can still apply a fee per term with **Send Notice** in the Late Fees tab. |
+| On/after Sep 28, 2026 | Charged automatically once the grace period passes (2 or 3 days, see v1.4.1). |
+
+---
+
+## 2. Booking details status matches the list
+
+A booking past a payment due date, or past its final balance deadline (2 months before the tour) and not fully paid, showed **Overdue** in the bookings list but **Pending** inside Booking Details. Both now use the same check and show **Overdue**.
+
+---
+
+## 3. Cancellation refunds on Full Payment plans
+
+For guest cancellations on a Full Payment plan, **Refundable Amount** and **Admin Fee** were calculated from the full-payment amount *due*, not what the guest had *paid*, and the reservation fee was subtracted twice.
+
+Example — £1,699 tour, £250 deposit, 60–99 days before the tour (50% window):
+
+| Guest had paid | Before | Now |
+|---|---|---|
+| Deposit only (£250) | Refund **£479.60** (money never received) | Refund **£0**, non-refundable £250 |
+| In full (£1,699) | Refund £479.60 | Refund **£579.60** (50% of £1,449 minus £144.90 fee) |
+
+Instalment plans are unchanged. A read-only check of prod found no real guest affected — only a test booking.
+
+---
+
+## 4. Installment Dates Override (approved schedule exceptions)
+
+A few bookings chose a plan before the current schedule rules existed. Example: **SB-PHSS-20261108-TP053** chose **P3** on Jul 30, but today's rule only allows P2 for her dates — Sep 4 is only 7 days after Aug 28, under the 14-day spacing floor. Every recompute (e.g. Edit → Save) turned her back into P2 and blanked P3.
+
+New column **Installment Dates Override** (Tour Details tab): comma-separated dates such as \`2026-07-31, 2026-08-28, 2026-09-04\`. When set, **Eligible Last Fridays** and the **P1–P4 due dates** use these dates instead of the rule, so Payment Condition, Available Payment Terms, amounts, reminders and late fees all follow. Leave it blank for normal bookings; a malformed value is ignored.
+
+Every due date must still be on or before the full-payment deadline (2 months before the tour).
+
+---
+
+## Files Changed
+
+| File | Change |
+|---|---|
+| \`lib/late-fee-policy.ts\`, \`functions/src/late-fee-policy.ts\` | \`isDueDateChargeable\` start-date gate |
+| \`functions/src/scheduled-late-fees.ts\`, \`api/late-fees/process-now\` | Skip terms due before \`chargeDueFrom\` |
+| \`lib/booking-overdue.ts\` | **New.** Shared overdue check for the list and Booking Details |
+| \`BookingsSection.tsx\`, \`BookingDetailModal.tsx\` | Use the shared check |
+| \`cancellation/refundable-amount.ts\`, \`payment-setting/admin-fee.ts\` | Full Payment refund/fee based on Paid − Reservation Fee |
+| \`cancellation/refund-math.test.ts\` | **New.** Deposit-only, paid-in-full and instalment cases |
+| \`lib/installment-schedule.ts\` | \`parseInstallmentDatesOverride\`, \`resolveInstallmentDatesLocal\` |
+| \`tour-details/installment-dates-override.ts\` | **New.** Installment Dates Override column |
+| \`eligible2ndofmonths.ts\`, \`p1–p4-due-date.ts\` | Use the override when set |
+| \`lib/installment-dates-override.test.ts\` | **New.** Parsing + the full column chain for SB-PHSS-20261108-TP053 |
+`,
+  },
+  {
     slug: "late-fee-two-day-grace",
     title: "Late Fees Apply 2 Days After the Due Date",
     description:

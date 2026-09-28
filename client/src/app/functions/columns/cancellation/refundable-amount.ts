@@ -1,4 +1,5 @@
 import { BookingSheetColumn } from "@/types/booking-sheet-column";
+import { paidLateFeeArguments, paidLateFees } from "../payment-calculation-helpers";
 
 export const refundableAmountColumn: BookingSheetColumn = {
   id: "refundableAmount",
@@ -93,6 +94,7 @@ export const refundableAmountColumn: BookingSheetColumn = {
         isRest: false,
         value: "",
       },
+      ...paidLateFeeArguments,
     ],
   },
 };
@@ -106,6 +108,7 @@ export const refundableAmountColumn: BookingSheetColumn = {
  * 2. For full payments: NRA (Non-Reservation Amount) = Paid - RF
  * 3. For installments: Only paidTerms are considered (RF excluded)
  * 4. Supplier costs reduce any calculated refund
+ * 4b. Paid late fees are never refunded to a guest
  * 5. Admin fee is deducted from refundable amount (except IHT cancellations)
  *
  * Scenarios:
@@ -169,6 +172,14 @@ export default async function getRefundableAmount(
   supplierCostsCommitted: number = 0,
   cancellationRequestDate: Date | string,
   eligibleRefund: string,
+  p1LateFeesPenalty?: number | string | null,
+  p1DatePaid?: any,
+  p2LateFeesPenalty?: number | string | null,
+  p2DatePaid?: any,
+  p3LateFeesPenalty?: number | string | null,
+  p3DatePaid?: any,
+  p4LateFeesPenalty?: number | string | null,
+  p4DatePaid?: any,
 ): Promise<number | string> {
   // Return empty if no cancellation date
   if (!cancellationRequestDate) {
@@ -233,7 +244,14 @@ export default async function getRefundableAmount(
     // Amount is the balance DUE after the RF, so using it refunded money that
     // was never paid (deposit-only cancellations) and subtracted the RF twice
     // (paid-in-full cancellations).
-    const nra = Math.max(0, totalPaid - rf);
+    // Paid late fees are never refundable, so they come out of the NRA too.
+    const lateFees = paidLateFees(
+      [p1LateFeesPenalty, p1DatePaid],
+      [p2LateFeesPenalty, p2DatePaid],
+      [p3LateFeesPenalty, p3DatePaid],
+      [p4LateFeesPenalty, p4DatePaid],
+    );
+    const nra = Math.max(0, totalPaid - rf - lateFees);
 
     if (
       eligibleRefund.includes("100% of non-reservation amount") ||

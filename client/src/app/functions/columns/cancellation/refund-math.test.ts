@@ -12,7 +12,9 @@ async function run(opts: {
   fullPaymentAmount?: number;
   paidTerms?: number;
   eligibleRefund: string;
+  lateFees?: Array<[number, string]>;
 }) {
+  const late = [0, 1, 2, 3].flatMap((i) => opts.lateFees?.[i] ?? [0, ""]);
   const reason = "Guest - Change of plans";
   const rf = 250;
   const adminFee = await getAdminFee(
@@ -24,6 +26,7 @@ async function run(opts: {
     0,
     reason,
     opts.paid,
+    ...late,
   );
   const refundable = await getRefundableAmount(
     reason,
@@ -35,6 +38,7 @@ async function run(opts: {
     0,
     "2026-09-28",
     opts.eligibleRefund,
+    ...late,
   );
   const nonRefundable = await getNonRefundableAmount(
     "Guest",
@@ -73,5 +77,29 @@ describe("guest cancellation refund math (instalments) is unchanged", () => {
     expect(r.adminFee).toBeCloseTo(66.6);
     expect(r.refundable).toBeCloseTo(266.4);
     expect(r.nonRefundable).toBeCloseTo(649.6);
+  });
+});
+
+describe("paid late fees are never refunded", () => {
+  it("full payment: £50 paid late fee is excluded from refund and admin fee", async () => {
+    const r = await run({
+      paid: 1749,
+      fullPaymentAmount: 1449,
+      eligibleRefund: EARLY,
+      lateFees: [[50, "2026-08-01"]],
+    });
+    expect(r.adminFee).toBeCloseTo(144.9);
+    expect(r.refundable).toBeCloseTo(1304.1);
+    expect(r.nonRefundable).toBeCloseTo(444.9);
+  });
+
+  it("unpaid late fee (no date paid) changes nothing", async () => {
+    const r = await run({
+      paid: 1699,
+      fullPaymentAmount: 1449,
+      eligibleRefund: EARLY,
+      lateFees: [[50, ""]],
+    });
+    expect(r.refundable).toBeCloseTo(1304.1);
   });
 });

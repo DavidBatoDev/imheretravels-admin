@@ -349,6 +349,17 @@ export const onGenerateCancellationDraftChanged = onDocumentUpdated(
         const nonRefundableAmount = bookingData.nonRefundableAmount || 0;
         const adminFee = bookingData.adminFee || 0;
         const supplierCostsCommitted = bookingData.supplierCostsCommitted || 0;
+        // Late fees the guest actually paid (term has a date paid). Never
+        // refundable; shown as their own line in the breakdown.
+        const lateFeesPaid = [1, 2, 3, 4].reduce((sum, n) => {
+          const datePaid = bookingData[`p${n}DatePaid`];
+          const hasDate =
+            datePaid != null && String(datePaid).trim() !== "";
+          return (
+            sum +
+            (hasDate ? Number(bookingData[`p${n}LateFeesPenalty`]) || 0 : 0)
+          );
+        }, 0);
         const paymentPlan = bookingData.paymentPlan || "";
         const reasonForCancellation = bookingData.reasonForCancellation || "";
 
@@ -430,6 +441,7 @@ export const onGenerateCancellationDraftChanged = onDocumentUpdated(
           nonRefundableAmount: Number(nonRefundableAmount).toFixed(2),
           adminFee: Number(adminFee).toFixed(2),
           supplierCostsCommitted: Number(supplierCostsCommitted).toFixed(2),
+          lateFeesPaid: Number(lateFeesPaid).toFixed(2),
           // Contextual variables
           daysBeforeTour,
           daysKnown,

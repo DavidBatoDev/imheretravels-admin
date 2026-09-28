@@ -448,3 +448,35 @@ export const resolveInstallmentSchedule = (
   );
 };
 
+
+// Late fee penalties the guest actually paid (a penalty counts once its term
+// has a date paid, matching the Paid column). Late fees are never refundable.
+export const paidLateFees = (
+  ...termPenaltyAndDatePaid: Array<[penalty: unknown, datePaid: unknown]>
+): number =>
+  termPenaltyAndDatePaid.reduce(
+    (sum, [penalty, datePaid]) => sum + (hasPaidDate(datePaid) ? toNumber(penalty) : 0),
+    0,
+  );
+
+// Column arguments feeding paidLateFees, in (P1 penalty, P1 date paid, ...) order.
+export const paidLateFeeArguments = [1, 2, 3, 4].flatMap((n) => [
+  {
+    name: `p${n}LateFeesPenalty`,
+    type: "number | string",
+    columnReference: `P${n} Late Fees Penalty`,
+    isOptional: true,
+    hasDefault: false,
+    isRest: false,
+    value: "",
+  },
+  {
+    name: `p${n}DatePaid`,
+    type: "any",
+    columnReference: `P${n} Date Paid`,
+    isOptional: true,
+    hasDefault: false,
+    isRest: false,
+    value: "",
+  },
+]);

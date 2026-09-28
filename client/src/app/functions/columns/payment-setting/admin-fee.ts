@@ -1,4 +1,5 @@
 import { BookingSheetColumn } from "@/types/booking-sheet-column";
+import { paidLateFeeArguments, paidLateFees } from "../payment-calculation-helpers";
 
 export const adminFeeColumn: BookingSheetColumn = {
   id: "adminFee",
@@ -84,6 +85,7 @@ export const adminFeeColumn: BookingSheetColumn = {
         isRest: false,
         value: "",
       },
+      ...paidLateFeeArguments,
     ],
   },
 };
@@ -130,6 +132,14 @@ export default async function getAdminFee(
   supplierCostsCommitted: number = 0,
   reasonForCancellation: string,
   paid?: number | string,
+  p1LateFeesPenalty?: number | string | null,
+  p1DatePaid?: any,
+  p2LateFeesPenalty?: number | string | null,
+  p2DatePaid?: any,
+  p3LateFeesPenalty?: number | string | null,
+  p3DatePaid?: any,
+  p4LateFeesPenalty?: number | string | null,
+  p4DatePaid?: any,
 ): Promise<number | string> {
   // Return empty if not cancelled
   if (!reasonForCancellation) {
@@ -174,7 +184,15 @@ export default async function getAdminFee(
 
   if (fullPayment > 0) {
     // Full Payment: calculate on what was actually paid beyond the RF.
-    baseAmount = Math.max(0, toNumber(paid) - rf);
+    // Paid includes paid late fees, which are never refunded, so the fee
+    // must not be charged on them either.
+    const lateFees = paidLateFees(
+      [p1LateFeesPenalty, p1DatePaid],
+      [p2LateFeesPenalty, p2DatePaid],
+      [p3LateFeesPenalty, p3DatePaid],
+      [p4LateFeesPenalty, p4DatePaid],
+    );
+    baseAmount = Math.max(0, toNumber(paid) - rf - lateFees);
   } else {
     // Installment: Calculate on paid terms
     baseAmount = paidInstallments;

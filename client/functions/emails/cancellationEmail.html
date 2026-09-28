@@ -171,6 +171,12 @@
                         (Includes £{{ adminFee }} administrative fee)
                     </div>
                     {% endif %}
+                    
+                    {% if lateFeesPaid and lateFeesPaid != "0.00" %}
+                    <div style="margin-bottom: 10px; font-size: 13px; color: #999;">
+                        (Includes £{{ lateFeesPaid }} in late payment fees, which are non-refundable)
+                    </div>
+                    {% endif %}
                 </div>
             </div>
 

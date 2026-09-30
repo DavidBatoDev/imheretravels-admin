@@ -459,8 +459,18 @@ async function handleInstallmentCheckoutPaid(session: Stripe.Checkout.Session) {
     // were edited between checkout creation and payment. Use the real
     // charged amount from the stripePayments doc as ground truth, and
     // self-heal the stored field to match (see update below).
+    // The Stripe charge is base + late fee (see create-checkout), but the late
+    // fee lives in its own pNLateFeesPenalty field — strip it here or it is
+    // double-counted in the term amount and every balance derived from it.
+    const chargedLateFee =
+      Number(paymentData.payment?.lateFeeAmount) ||
+      Number(booking[`${installment_id}LateFeesPenalty`]) ||
+      0;
     const actualCurrentAmount =
-      Number(paymentData.payment?.amount) ||
+      Number(paymentData.payment?.baseAmount) ||
+      (Number(paymentData.payment?.amount)
+        ? Math.round((Number(paymentData.payment.amount) - chargedLateFee) * 100) / 100
+        : 0) ||
       booking[`${installment_id}Amount`] ||
       0;
 

@@ -426,7 +426,13 @@ export default function ConfirmedBookingModal({
 
   const paid = safeNumber(bookingData?.paid, 0);
   const totalCost = getTotalCost();
-  const remaining = Math.max(0, totalCost - paid);
+  // Prefer the computed Remaining Balance column (includes late fees/add-ons).
+  const remaining = Math.max(
+    0,
+    bookingData?.remainingBalance != null && bookingData?.remainingBalance !== ""
+      ? safeNumber(bookingData.remainingBalance, 0)
+      : totalCost - paid,
+  );
   const progress = (() => {
     const stored = (bookingData as any)?.paymentProgress;
     if (stored !== undefined && stored !== null) {

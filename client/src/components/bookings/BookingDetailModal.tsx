@@ -555,7 +555,15 @@ export default function BookingDetailModal({
 
   const totalCost = getTotalCost(currentBooking);
   const paid = safeNumber(currentBooking?.paid, 0);
-  const remaining = Math.max(0, totalCost - paid);
+  // Prefer the computed Remaining Balance column: it accounts for late fees
+  // (owed and paid) and add-ons, which a plain cost − paid does not.
+  const remaining = Math.max(
+    0,
+    currentBooking?.remainingBalance != null &&
+      (currentBooking.remainingBalance as unknown) !== ""
+      ? safeNumber(currentBooking.remainingBalance, 0)
+      : totalCost - paid,
+  );
   const progress = calculatePaymentProgress(currentBooking);
 
   // Group columns by parentTab

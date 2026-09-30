@@ -423,6 +423,40 @@ export default function getRemainingBalanceFunction(
   // and counts as paid once it has a date paid.
   const addOns_ = addOnTotals(addOns);
 
+  // On the per-slot cash model the P-amount columns are the authoritative
+  // schedule: every open term is recalculated from the cash actually received.
+  // Sum those open terms rather than rebuilding the balance from historical
+  // paid terms.  Some older rows have a paid late fee embedded in a paid
+  // term's Amount as well as in Late Fees Penalty; total-minus-paid therefore
+  // makes that already-settled fee reduce the balance a second time.
+  if (perSlot && !isFullPaymentPlan) {
+    const scheduledAmounts = [p1Amount, p2Amount, p3Amount, p4Amount];
+    const paidDates = [p1DatePaid, p2DatePaid, p3DatePaid, p4DatePaid];
+    const lateFees = [
+      p1LateFeesPenalty,
+      p2LateFeesPenalty,
+      p3LateFeesPenalty,
+      p4LateFeesPenalty,
+    ];
+    let openSchedule = 0;
+    for (let index = 0; index < terms; index += 1) {
+      if (!hasPaidDate(paidDates[index])) {
+        openSchedule +=
+          toNumber(scheduledAmounts[index]) + toNumber(lateFees[index]);
+      }
+    }
+
+    // Limit the schedule-based repair to rows touched by the historical late
+    // fee bug. Normal overpayments still need the cash-based calculation below
+    // until their open schedule columns have been reallocated.
+    const hasSettledLateFee = paidDates.some(
+      (date, index) => hasPaidDate(date) && toNumber(lateFees[index]) > 0,
+    );
+    if (hasSettledLateFee) {
+      return Math.max(roundCurrency(openSchedule + addOns_.unpaid), 0);
+    }
+  }
+
   const totalDue = total + totalLateFees + addOns_.total;
 
   // Remaining balance - round to 2 decimal places

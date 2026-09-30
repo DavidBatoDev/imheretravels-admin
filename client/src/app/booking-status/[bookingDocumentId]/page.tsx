@@ -49,6 +49,7 @@ import {
 } from "@/lib/booking-calculations";
 import PayNowModal from "@/components/booking-status/PayNowModal";
 import { getLateFeeGraceDays } from "@/lib/late-fee-policy";
+import { getDisplayedBalanceDue } from "@/lib/finance/balance-due";
 
 
 interface PaymentTokenData {
@@ -109,6 +110,7 @@ interface BookingData {
   p2LateFeeAppliedAt?: any;
   p3LateFeeAppliedAt?: any;
   p4LateFeeAppliedAt?: any;
+  addOns?: unknown;
   sentEmailLink?: string;
   eventName?: string;
   discountRate?: number;
@@ -413,6 +415,7 @@ export default function BookingStatusPage() {
         p3LateFeeAppliedAt: bookingData.p3LateFeeAppliedAt,
         p4LateFeesPenalty: bookingData.p4LateFeesPenalty,
         p4LateFeeAppliedAt: bookingData.p4LateFeeAppliedAt,
+        addOns: bookingData.addOns,
         sentEmailLink: bookingData.sentEmailLink,
         eventName: bookingData.eventName,
         discountRate: bookingData.discountRate,
@@ -735,7 +738,10 @@ export default function BookingStatusPage() {
   const discountedTourCost = toNumber(booking.discountedTourCost, 0);
   const totalCost = discountedTourCost || originalTourCost;
   const paidAmount = toNumber(booking.paid);
-  const remainingBalanceAmount = toNumber(booking.remainingBalance);
+  const remainingBalanceAmount = getDisplayedBalanceDue(
+    booking as unknown as Record<string, unknown>,
+    toNumber(booking.remainingBalance),
+  );
   const manualCreditAmount = toNumber(booking.manualCredit, 0);
   const creditFromLabel = (booking.creditFrom || "").toString().trim();
   const showManualCreditInTable =
@@ -1874,4 +1880,3 @@ export default function BookingStatusPage() {
     </div>
   );
 }
-

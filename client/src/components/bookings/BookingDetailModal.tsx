@@ -56,6 +56,7 @@ import type { Booking } from "@/types/bookings";
 import { SheetColumn } from "@/types/sheet-management";
 import { allBookingSheetColumns } from "@/app/functions/columns";
 import { formatAddOnsSummary } from "@/lib/finance/add-ons";
+import { getDisplayedBalanceDue } from "@/lib/finance/balance-due";
 import { functionMap } from "@/app/functions/columns/functions-index";
 import { bookingService } from "@/services/booking-service";
 import { getSchedulePolicy } from "@/lib/schedule-policy";
@@ -557,12 +558,16 @@ export default function BookingDetailModal({
   const paid = safeNumber(currentBooking?.paid, 0);
   // Prefer the computed Remaining Balance column: it accounts for late fees
   // (owed and paid) and add-ons, which a plain cost − paid does not.
-  const remaining = Math.max(
+  const storedRemaining = Math.max(
     0,
     currentBooking?.remainingBalance != null &&
       (currentBooking.remainingBalance as unknown) !== ""
       ? safeNumber(currentBooking.remainingBalance, 0)
       : totalCost - paid,
+  );
+  const remaining = getDisplayedBalanceDue(
+    currentBooking as unknown as Record<string, unknown>,
+    storedRemaining,
   );
   const progress = calculatePaymentProgress(currentBooking);
 

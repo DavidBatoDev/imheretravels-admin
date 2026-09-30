@@ -7,6 +7,7 @@ import getPaidTerms from "@/app/functions/columns/payment-setting/paid-terms";
 import getFullPaymentRemainingFunction from "@/app/functions/columns/full-payment/full-payment-amount";
 import getOverpaidAmountFunction from "@/app/functions/columns/payment-setting/overpaid-amount";
 import { calculateInstallmentAmounts } from "@/lib/booking-calculations";
+import { getDisplayedBalanceDue } from "@/lib/finance/balance-due";
 
 const D = new Date(2026, 0, 1);
 
@@ -61,6 +62,34 @@ describe("column functions — per-slot cash path (grid)", () => {
       sam.resFee, sam.paid[0], sam.paid[1], sam.paid[2], sam.paid[3], undefined,
     );
     expect(v).toBe(150);
+  });
+
+  it("Remaining Balance: sums open terms when a paid legacy term contains its late fee", () => {
+    // Regression: Ovidiu's paid P1 amount was historically increased by the
+    // same £7.49 fee also stored in P1 Late Fees Penalty.  Paid history must
+    // not distort the two open £249.75 installments.
+    const v = getRemainingBalanceFunction(
+      "Philippines Sunset with Roxana", false, 0, 1199, 200, "", 0, "P4",
+      undefined, 0,
+      D as any, 257.24,
+      D as any, 249.75,
+      undefined, 249.75,
+      undefined, 249.75,
+      7.49, 0, 0, 0,
+      200, 264.73, 249.75, undefined, undefined, undefined,
+    );
+    expect(v).toBe(499.5);
+
+    expect(getDisplayedBalanceDue({
+      paymentPlan: "P4",
+      p1DatePaid: D,
+      p1Amount: 257.24,
+      p1LateFeesPenalty: 7.49,
+      p2DatePaid: D,
+      p2Amount: 249.75,
+      p3Amount: 249.75,
+      p4Amount: 249.75,
+    }, 492.01)).toBe(499.5);
   });
 
   it("Paid Terms: instalment cash only, reservation excluded", async () => {

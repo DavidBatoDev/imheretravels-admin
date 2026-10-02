@@ -163,6 +163,14 @@ export async function POST(req: NextRequest) {
           console.log(
             "✅ Reservation already has its booking, nothing to do",
           );
+          // An earlier delivery may have recorded a failure (e.g. a 409 while
+          // the client-side creation was running) before the booking landed.
+          if (paymentData.booking?.creationError) {
+            await updateDoc(doc(db, "stripePayments", paymentDoc.id), {
+              "booking.creationError": null,
+              "booking.creationErrorAt": null,
+            });
+          }
         } else {
           // For other payment types or already processed, just update status
           await updateDoc(doc(db, "stripePayments", paymentDoc.id), {

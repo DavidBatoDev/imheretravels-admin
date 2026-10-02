@@ -422,6 +422,62 @@ describe("createBookingsForReservationPayment - Tanzania Exploration custom pric
     expect(payment.booking.documentId).toBe("prior-main");
   });
 
+  describe("creation lock held by the other owner", () => {
+    const seedLockedPayment = (startedMinutesAgo: number) =>
+      store.set(`stripePayments/${PAYMENT_DOC_ID}`, {
+        customer: { email: "x@x.com", firstName: "X", lastName: "Y" },
+        booking: {
+          type: "Single Booking",
+          groupSize: 1,
+          guestDetails: [],
+          id: "PENDING",
+          documentId: "",
+          creationLock: "api",
+          creationStartedAt: {
+            toDate: () => new Date(Date.now() - startedMinutesAgo * 60_000),
+          },
+        },
+        tour: {
+          packageId: TANZANIA_PACKAGE_ID,
+          packageName: "Tanzania Exploration",
+          date: "2026-12-10",
+        },
+        payment: {
+          amount: 250,
+          currency: "GBP",
+          status: "reserve_paid",
+          type: "reservationFee",
+          originalPrice: 1949,
+        },
+      });
+
+    it("backs off while that run may still be in progress", async () => {
+      seedLockedPayment(1);
+      await expect(
+        createBookingsForReservationPayment({
+          paymentDocId: PAYMENT_DOC_ID,
+          creationLock: "webhook",
+        }),
+      ).rejects.toThrow(/already in progress \(lock: api\)/);
+      expect(addedDocs).toHaveLength(0);
+    });
+
+    it("takes over a lock abandoned by a run that died", async () => {
+      seedLockedPayment(10);
+      const result = await createBookingsForReservationPayment({
+        paymentDocId: PAYMENT_DOC_ID,
+        creationLock: "webhook",
+      });
+      expect(result.alreadyExists).toBe(false);
+      expect(
+        addedDocs.filter((d) => d.collectionPath === "bookings"),
+      ).toHaveLength(1);
+      expect(
+        store.get(`stripePayments/${PAYMENT_DOC_ID}`)!.booking.creationLock,
+      ).toBe("webhook");
+    });
+  });
+
   it("rejects payments that are not yet reserve_paid / succeeded", async () => {
     store.set(`stripePayments/${PAYMENT_DOC_ID}`, {
       customer: { email: "x@x.com", firstName: "X", lastName: "Y" },

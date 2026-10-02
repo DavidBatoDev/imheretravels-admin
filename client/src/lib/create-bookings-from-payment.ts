@@ -26,6 +26,8 @@ import crypto from "crypto";
 
 export type CreationLockOwner = "api" | "webhook";
 
+const STALE_LOCK_MS = 5 * 60 * 1000;
+
 export type CreateBookingsResult =
   | {
       alreadyExists: true;
@@ -283,15 +285,21 @@ export async function createBookingsForReservationPayment(opts: {
     );
   }
 
-  // Creation lock: prevents webhook + client double-creation races.
+  // Creation lock: prevents webhook + client double-creation races. A lock the
+  // other owner left behind (its run died) would otherwise block every retry,
+  // so after STALE_LOCK_MS it is taken over; resuming is safe because
+  // travellers already written are reused below.
   const existingLock = paymentData.booking?.creationLock;
-  if (existingLock && existingLock !== lockOwner) {
+  const lockStartedMs = toDate(paymentData.booking?.creationStartedAt)?.getTime();
+  const lockIsStale =
+    lockStartedMs === undefined || Date.now() - lockStartedMs > STALE_LOCK_MS;
+  if (existingLock && existingLock !== lockOwner && !lockIsStale) {
     throw new CreateBookingsError(
       `Booking creation already in progress (lock: ${existingLock})`,
       409,
     );
   }
-  if (!existingLock) {
+  if (existingLock !== lockOwner) {
     await updateDoc(paymentDocRef, {
       "booking.creationLock": lockOwner,
       "booking.creationStartedAt": serverTimestamp(),

@@ -39,6 +39,24 @@ export const shouldAutoRestoreFromUrlPayment = (payment: {
 };
 
 /**
+ * URL restore for a paid reservation whose plan hasn't been chosen yet. Only
+ * once its booking exists: that is the server-side proof the payment went
+ * through, and step 3 needs the booking to attach the plan to.
+ */
+export const shouldRestorePaidFromUrl = (payment: {
+  status?: string;
+  payment?: { status?: string };
+  booking?: { documentId?: string };
+}): boolean => {
+  const bookingDocId = payment?.booking?.documentId;
+  return (
+    getSessionRestoreStatus(payment) === "reserve_paid" &&
+    !!bookingDocId &&
+    bookingDocId !== "PENDING"
+  );
+};
+
+/**
  * URL restore for still-unpaid drafts, gated behind an explicit resume param
  * (`?paymentid=<id>&resume=1`) so only abandoned-booking follow-up email links
  * change behavior — organic `?paymentid=` navigation is untouched.

@@ -7,6 +7,7 @@ import {
   getSessionRestoreRoute,
   getSessionRestoreStatus,
   shouldAutoRestoreFromUrlPayment,
+  shouldRestorePaidFromUrl,
   shouldResumePendingFromUrl,
 } from "../../utils/sessionRestore";
 import {
@@ -106,6 +107,47 @@ export const useSessionRestore = ({
 
     setSessionLoading(true);
 
+    // Rehydrate the form (customer, party, tour) from a stripePayments record
+    // opened via ?paymentid=.
+    const hydrateFromUrlRecord = (urlPaymentId: string, data: any) => {
+      setPaymentDocId(urlPaymentId);
+
+      const restoredCustomer = deriveCustomerRestoreState({
+        record: data,
+        countries: getCountries(),
+        getCallingCode: (country) =>
+          safeGetCountryCallingCode(country as Country),
+        onUnmatchedPhone: "set-number",
+      });
+      if (restoredCustomer.email) setEmail(restoredCustomer.email);
+      if (restoredCustomer.firstName) setFirstName(restoredCustomer.firstName);
+      if (restoredCustomer.lastName) setLastName(restoredCustomer.lastName);
+      if (restoredCustomer.birthdate) setBirthdate(restoredCustomer.birthdate);
+      if (restoredCustomer.nationality)
+        setNationality(restoredCustomer.nationality);
+      if (restoredCustomer.whatsAppCountry)
+        setWhatsAppCountry(restoredCustomer.whatsAppCountry as Country);
+      if (restoredCustomer.whatsAppNumber)
+        setWhatsAppNumber(restoredCustomer.whatsAppNumber);
+      const restoredBookingState = deriveBookingRestoreState(data);
+
+      if (data.booking?.type) setBookingType(restoredBookingState.bookingType);
+      if (typeof data.booking?.groupSize === "number")
+        setGroupSize(restoredBookingState.groupSize);
+
+      if (restoredBookingState.shouldMountGuests) {
+        scheduleGuestsMountHeightSync({
+          setGuestsMounted,
+          getContentHeight: () => guestsContentRef.current?.scrollHeight ?? 0,
+          setGuestsHeight,
+        });
+      }
+
+      setAdditionalGuests(restoredBookingState.additionalGuests);
+      if (data.tour?.packageId) setTourPackage(data.tour.packageId);
+      if (data.tour?.date) setTourDate(data.tour.date);
+    };
+
     const loadFromSession = async () => {
       try {
         const urlPaymentId = searchParams?.get("paymentid");
@@ -128,49 +170,7 @@ export const useSessionRestore = ({
 
                 if (!mounted) return;
 
-                setPaymentDocId(urlPaymentId);
-
-                const restoredCustomer = deriveCustomerRestoreState({
-                  record: data,
-                  countries: getCountries(),
-                  getCallingCode: (country) =>
-                    safeGetCountryCallingCode(country as Country),
-                  onUnmatchedPhone: "set-number",
-                });
-                if (restoredCustomer.email) setEmail(restoredCustomer.email);
-                if (restoredCustomer.firstName)
-                  setFirstName(restoredCustomer.firstName);
-                if (restoredCustomer.lastName)
-                  setLastName(restoredCustomer.lastName);
-                if (restoredCustomer.birthdate)
-                  setBirthdate(restoredCustomer.birthdate);
-                if (restoredCustomer.nationality)
-                  setNationality(restoredCustomer.nationality);
-                if (restoredCustomer.whatsAppCountry)
-                  setWhatsAppCountry(
-                    restoredCustomer.whatsAppCountry as Country,
-                  );
-                if (restoredCustomer.whatsAppNumber)
-                  setWhatsAppNumber(restoredCustomer.whatsAppNumber);
-                const restoredBookingState = deriveBookingRestoreState(data);
-
-                if (data.booking?.type)
-                  setBookingType(restoredBookingState.bookingType);
-                if (typeof data.booking?.groupSize === "number")
-                  setGroupSize(restoredBookingState.groupSize);
-
-                if (restoredBookingState.shouldMountGuests) {
-                  scheduleGuestsMountHeightSync({
-                    setGuestsMounted,
-                    getContentHeight: () =>
-                      guestsContentRef.current?.scrollHeight ?? 0,
-                    setGuestsHeight,
-                  });
-                }
-
-                setAdditionalGuests(restoredBookingState.additionalGuests);
-                if (data.tour?.packageId) setTourPackage(data.tour.packageId);
-                if (data.tour?.date) setTourDate(data.tour.date);
+                hydrateFromUrlRecord(urlPaymentId, data);
 
                 const urlPaymentPlanLabel = getPaymentPlanLabelFromRecord(data);
                 if (urlPaymentPlanLabel) {
@@ -188,6 +188,28 @@ export const useSessionRestore = ({
                 return;
               }
 
+              // Paid reservation reopened before a plan was chosen (closed
+              // tab, new device, link from history): land on the plan step
+              // instead of a blank form. The linked booking proves the
+              // payment succeeded, so no Stripe round-trip is needed.
+              if (shouldRestorePaidFromUrl(data)) {
+                if (debug)
+                  console.debug("URL restore (paid, no plan): loading doc", {
+                    urlPaymentId,
+                    data,
+                  });
+
+                if (!mounted) return;
+
+                hydrateFromUrlRecord(urlPaymentId, data);
+                setPaymentConfirmed(true);
+                if (data.booking?.id) setBookingId(data.booking.id);
+                setStep(3);
+                setCompletedSteps([1, 2]);
+
+                return;
+              }
+
               // Unpaid draft opened from a follow-up email link
               // (?paymentid=<id>&resume=1): rehydrate and land on the
               // payment step, mirroring the sessionStorage pending-step2 path.
@@ -200,49 +222,7 @@ export const useSessionRestore = ({
 
                 if (!mounted) return;
 
-                setPaymentDocId(urlPaymentId);
-
-                const restoredCustomer = deriveCustomerRestoreState({
-                  record: data,
-                  countries: getCountries(),
-                  getCallingCode: (country) =>
-                    safeGetCountryCallingCode(country as Country),
-                  onUnmatchedPhone: "set-number",
-                });
-                if (restoredCustomer.email) setEmail(restoredCustomer.email);
-                if (restoredCustomer.firstName)
-                  setFirstName(restoredCustomer.firstName);
-                if (restoredCustomer.lastName)
-                  setLastName(restoredCustomer.lastName);
-                if (restoredCustomer.birthdate)
-                  setBirthdate(restoredCustomer.birthdate);
-                if (restoredCustomer.nationality)
-                  setNationality(restoredCustomer.nationality);
-                if (restoredCustomer.whatsAppCountry)
-                  setWhatsAppCountry(
-                    restoredCustomer.whatsAppCountry as Country,
-                  );
-                if (restoredCustomer.whatsAppNumber)
-                  setWhatsAppNumber(restoredCustomer.whatsAppNumber);
-                const restoredBookingState = deriveBookingRestoreState(data);
-
-                if (data.booking?.type)
-                  setBookingType(restoredBookingState.bookingType);
-                if (typeof data.booking?.groupSize === "number")
-                  setGroupSize(restoredBookingState.groupSize);
-
-                if (restoredBookingState.shouldMountGuests) {
-                  scheduleGuestsMountHeightSync({
-                    setGuestsMounted,
-                    getContentHeight: () =>
-                      guestsContentRef.current?.scrollHeight ?? 0,
-                    setGuestsHeight,
-                  });
-                }
-
-                setAdditionalGuests(restoredBookingState.additionalGuests);
-                if (data.tour?.packageId) setTourPackage(data.tour.packageId);
-                if (data.tour?.date) setTourDate(data.tour.date);
+                hydrateFromUrlRecord(urlPaymentId, data);
 
                 // Persist the session key so in-tab behavior afterwards
                 // matches an organic (non-email) session.

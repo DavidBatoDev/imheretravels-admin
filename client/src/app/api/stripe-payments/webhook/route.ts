@@ -60,11 +60,15 @@ export async function POST(req: NextRequest) {
         const paymentDoc = snapshot.docs[0];
         const paymentData = paymentDoc.data();
 
+        // Gate on the booking link, not the status: a delivery whose booking
+        // creation failed has already been marked reserve_paid, and Stripe's
+        // retry must still be able to finish the job.
+        const bookingLinked =
+          !!paymentData.booking?.documentId &&
+          paymentData.booking.documentId !== "PENDING";
+
         // Check if this is a reservation fee payment (Step 2)
-        if (
-          paymentData.payment?.type === "reservationFee" &&
-          paymentData.payment?.status !== "reserve_paid"
-        ) {
+        if (paymentData.payment?.type === "reservationFee" && !bookingLinked) {
           console.log(
             "🎯 Processing reservation fee payment - creating booking",
           );
@@ -73,17 +77,27 @@ export async function POST(req: NextRequest) {
           // status precondition is satisfied. This also ensures any concurrent
           // client-side call to /api/stripe-payments/create-booking sees the
           // correct status.
-          await updateDoc(doc(db, "stripePayments", paymentDoc.id), {
-            "payment.status": "reserve_paid",
-            "timestamps.paidAt": new Date().toISOString(),
-            "timestamps.updatedAt": serverTimestamp(),
-          });
+          if (paymentData.payment?.status !== "reserve_paid") {
+            await updateDoc(doc(db, "stripePayments", paymentDoc.id), {
+              "payment.status": "reserve_paid",
+              "timestamps.paidAt": new Date().toISOString(),
+              "timestamps.updatedAt": serverTimestamp(),
+            });
+          }
 
           try {
             const result = await createBookingsForReservationPayment({
               paymentDocId: paymentDoc.id,
               creationLock: "webhook",
             });
+
+            // A retry succeeded: drop the failure note left by the earlier attempt.
+            if (paymentData.booking?.creationError) {
+              await updateDoc(doc(db, "stripePayments", paymentDoc.id), {
+                "booking.creationError": null,
+                "booking.creationErrorAt": null,
+              });
+            }
 
             if (!result.alreadyExists) {
               console.log(
@@ -120,8 +134,42 @@ export async function POST(req: NextRequest) {
               "❌ Failed to create booking from webhook:",
               bookingError,
             );
-            // Don't throw — Stripe will retry the webhook, and the
-            // /api/stripe-payments/create-booking fallback can also recover.
+            // The customer has paid but has no booking. Record why, then fail
+            // the delivery so Stripe retries it; the retry re-enters above
+            // because the booking is still unlinked, and the helper reuses any
+            // travellers this attempt already wrote.
+            try {
+              await updateDoc(doc(db, "stripePayments", paymentDoc.id), {
+                "booking.creationError": String(
+                  bookingError?.message || bookingError,
+                ).slice(0, 500),
+                "booking.creationErrorAt": serverTimestamp(),
+              });
+            } catch (recordError) {
+              console.error(
+                "❌ Failed to record booking creation error:",
+                recordError,
+              );
+            }
+            return NextResponse.json(
+              { error: "Booking creation failed; retry" },
+              { status: 500 },
+            );
+          }
+        } else if (paymentData.payment?.type === "reservationFee") {
+          // Duplicate delivery for a reservation whose booking already exists.
+          // Leave the status alone: by now it may have moved on to
+          // terms_selected, and overwriting it would undo the customer's plan.
+          console.log(
+            "✅ Reservation already has its booking, nothing to do",
+          );
+          // An earlier delivery may have recorded a failure (e.g. a 409 while
+          // the client-side creation was running) before the booking landed.
+          if (paymentData.booking?.creationError) {
+            await updateDoc(doc(db, "stripePayments", paymentDoc.id), {
+              "booking.creationError": null,
+              "booking.creationErrorAt": null,
+            });
           }
         } else {
           // For other payment types or already processed, just update status

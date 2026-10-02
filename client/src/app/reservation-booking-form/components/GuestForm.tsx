@@ -172,6 +172,10 @@ const GuestForm = memo(
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -10 }}
         transition={{ duration: 0.24, ease: [0.4, 0, 0.2, 1] }}
+        // Flush the debounced value when a field loses focus. Pressing
+        // "Continue to Payment" blurs the field first, so validation never sees
+        // a guest field as empty just because the 500ms debounce hadn't fired.
+        onBlur={() => onUpdate(index, localData)}
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
           {/* Guest Email */}

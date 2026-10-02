@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { db } from "../../../../lib/firebase";
 
 type UseReservationPaymentVerificationOptions = {
   paymentConfirmed: boolean;
@@ -29,8 +30,17 @@ export const useReservationPaymentVerification = ({
           );
 
           try {
+            // `paymentid` is the stripePayments doc id, not the Stripe
+            // PaymentIntent id — resolve the intent before asking Stripe.
+            const { doc, getDoc } = await import("firebase/firestore");
+            const snap = await getDoc(doc(db, "stripePayments", pid));
+            const stripeIntentId = snap.exists()
+              ? snap.data()?.payment?.stripeIntentId
+              : undefined;
+            if (!stripeIntentId) return;
+
             const verifyRes = await fetch(
-              `/api/stripe-payments/verify-payment?paymentIntentId=${pid}`,
+              `/api/stripe-payments/verify-payment?paymentIntentId=${stripeIntentId}`,
               { method: "GET" },
             );
 

@@ -8,6 +8,7 @@ import {
   getSessionRestoreStatus,
   isStaleReservationSessionKey,
   shouldAutoRestoreFromUrlPayment,
+  shouldRestorePaidFromUrl,
   shouldResumePendingFromUrl,
 } from "./sessionRestore";
 
@@ -97,6 +98,43 @@ describe("sessionRestore", () => {
         { payment: { status: "terms_selected" } },
         true,
       ),
+    ).toBe(false);
+  });
+
+  it("restores paid reservations from URL only once their booking exists", () => {
+    expect(
+      shouldRestorePaidFromUrl({
+        payment: { status: "reserve_paid" },
+        booking: { documentId: "booking-1" },
+      }),
+    ).toBe(true);
+
+    // Paid but the booking isn't linked yet (webhook still running or failed)
+    expect(
+      shouldRestorePaidFromUrl({
+        payment: { status: "reserve_paid" },
+        booking: { documentId: "" },
+      }),
+    ).toBe(false);
+    expect(
+      shouldRestorePaidFromUrl({
+        payment: { status: "reserve_paid" },
+        booking: { documentId: "PENDING" },
+      }),
+    ).toBe(false);
+
+    // Unpaid, or already past plan selection (handled by the terms path)
+    expect(
+      shouldRestorePaidFromUrl({
+        payment: { status: "reserve_pending" },
+        booking: { documentId: "booking-1" },
+      }),
+    ).toBe(false);
+    expect(
+      shouldRestorePaidFromUrl({
+        payment: { status: "terms_selected" },
+        booking: { documentId: "booking-1" },
+      }),
     ).toBe(false);
   });
 

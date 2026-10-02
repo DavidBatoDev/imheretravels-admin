@@ -184,6 +184,34 @@ async function getTotalBookingsCount(): Promise<number> {
   }
 }
 
+type PriorBooking = { docId: string; bookingId: string; groupId: string };
+
+// Bookings an earlier, interrupted run already created for this payment, keyed
+// by traveller index (0 = main booker). Lets a retry finish the party instead
+// of duplicating the travellers that were already written.
+async function getBookingsCreatedForPayment(
+  paymentDocId: string,
+): Promise<Map<number, PriorBooking>> {
+  const prior = new Map<number, PriorBooking>();
+  const snapshot = await getDocs(
+    query(
+      collection(db, "bookings"),
+      where("sourcePaymentDocId", "==", paymentDocId),
+    ),
+  );
+  snapshot.forEach((d) => {
+    const data = d.data();
+    if (typeof data.sourceGuestIndex === "number") {
+      prior.set(data.sourceGuestIndex, {
+        docId: d.id,
+        bookingId: data.bookingId || "",
+        groupId: data.groupId || "",
+      });
+    }
+  });
+  return prior;
+}
+
 function generateAccessToken(): string {
   return crypto
     .randomBytes(32)
@@ -198,6 +226,8 @@ function generateAccessToken(): string {
  *
  * - Idempotent: if a booking already exists on the payment doc, returns it.
  * - Uses a creation lock so concurrent webhook + client calls cannot duplicate.
+ * - Safe to retry after a partial failure: travellers already written for this
+ *   payment (matched by sourcePaymentDocId) are reused, not created again.
  * - For Duo/Group bookings, splits the reservation fee per traveller and
  *   creates one booking per guest in `booking.guestDetails`.
  */
@@ -299,11 +329,19 @@ export async function createBookingsForReservationPayment(opts: {
   const mainBookerName =
     `${mainBookerFirstName} ${mainBookerLastName}`.trim();
 
+  const priorBookings = await getBookingsCreatedForPayment(paymentDocId);
+  if (priorBookings.size > 0) {
+    console.log(
+      `♻️ Resuming interrupted creation: ${priorBookings.size} booking(s) already exist for payment ${paymentDocId}`,
+    );
+  }
+
   // ONE shared code for the whole travel party, always derived from the main
   // booker. Guests inherit it verbatim — they must never mint their own, or the
   // party falls apart in the admin UI and in the group emails.
   const groupId = isGroupBooking
-    ? paymentData.booking?.groupCode ||
+    ? priorBookings.get(0)?.groupId ||
+      paymentData.booking?.groupCode ||
       generateGroupCode(
         bookingType,
         tourPackageName,
@@ -383,40 +421,54 @@ export async function createBookingsForReservationPayment(opts: {
     totalBookingsCount,
   };
 
-  const mainBookingData = await createBookingData(mainBookingInput);
+  const priorMain = priorBookings.get(0);
+  let mainBookingRef;
 
-  if (isGroupBooking) {
-    mainBookingData.isMainBooker = true;
-    mainBookingData.groupId = groupId;
-    // Only the main booker records what was actually charged for the whole
-    // party; each member's own `reservationFee`/`paid` stays the per-person
-    // split that drives their individual balance.
-    (mainBookingData as any).reservationFeePaidTotal = totalReservationFee;
+  if (priorMain) {
+    mainBookingRef = doc(db, "bookings", priorMain.docId);
+    createdBookingIds.push(priorMain.bookingId);
+    createdBookingDocIds.push(priorMain.docId);
+    console.log(
+      `♻️ Main booker booking already created: ${priorMain.docId} (${priorMain.bookingId})`,
+    );
+  } else {
+    const mainBookingData = await createBookingData(mainBookingInput);
+
+    if (isGroupBooking) {
+      mainBookingData.isMainBooker = true;
+      mainBookingData.groupId = groupId;
+      // Only the main booker records what was actually charged for the whole
+      // party; each member's own `reservationFee`/`paid` stays the per-person
+      // split that drives their individual balance.
+      (mainBookingData as any).reservationFeePaidTotal = totalReservationFee;
+    }
+
+    const mainAccessToken = generateAccessToken();
+
+    mainBookingRef = await addDoc(collection(db, "bookings"), {
+      ...mainBookingData,
+      ...partyContext,
+      emailAddress: mainBookerEmail,
+      access_token: mainAccessToken,
+      tourDate: tourDateTimestamp,
+      returnDate: calculatedReturnDate,
+      reservationDate: Timestamp.now(),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      priceSnapshotDate: serverTimestamp(),
+      tourPackagePricingVersion: (tourPackage as any)?.currentVersion || 1,
+      priceSource: "snapshot",
+      lockPricing: true,
+      sourcePaymentDocId: paymentDocId,
+      sourceGuestIndex: 0,
+    });
+
+    createdBookingIds.push(mainBookingData.bookingId);
+    createdBookingDocIds.push(mainBookingRef.id);
+    console.log(
+      `✅ Main booker booking created: ${mainBookingRef.id} (${mainBookingData.bookingId})`,
+    );
   }
-
-  const mainAccessToken = generateAccessToken();
-
-  const mainBookingRef = await addDoc(collection(db, "bookings"), {
-    ...mainBookingData,
-    ...partyContext,
-    emailAddress: mainBookerEmail,
-    access_token: mainAccessToken,
-    tourDate: tourDateTimestamp,
-    returnDate: calculatedReturnDate,
-    reservationDate: Timestamp.now(),
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    priceSnapshotDate: serverTimestamp(),
-    tourPackagePricingVersion: (tourPackage as any)?.currentVersion || 1,
-    priceSource: "snapshot",
-    lockPricing: true,
-  });
-
-  createdBookingIds.push(mainBookingData.bookingId);
-  createdBookingDocIds.push(mainBookingRef.id);
-  console.log(
-    `✅ Main booker booking created: ${mainBookingRef.id} (${mainBookingData.bookingId})`,
-  );
 
   // Every member — including the main booker — points at the main booker's doc,
   // so "who leads this party" is a single field read from any member.
@@ -427,6 +479,17 @@ export async function createBookingsForReservationPayment(opts: {
   // 2. GUESTS
   for (let i = 0; i < guestDetails.length; i++) {
     const guest = guestDetails[i];
+
+    const priorGuest = priorBookings.get(i + 1);
+    if (priorGuest) {
+      createdBookingIds.push(priorGuest.bookingId);
+      createdBookingDocIds.push(priorGuest.docId);
+      console.log(
+        `♻️ Guest ${i + 1} booking already created: ${priorGuest.docId} (${priorGuest.bookingId})`,
+      );
+      continue;
+    }
+
     const guestBookingInput: BookingCreationInput = {
       email: guest.email || "",
       firstName: guest.firstName || "",
@@ -475,6 +538,8 @@ export async function createBookingsForReservationPayment(opts: {
       tourPackagePricingVersion: (tourPackage as any)?.currentVersion || 1,
       priceSource: "snapshot",
       lockPricing: true,
+      sourcePaymentDocId: paymentDocId,
+      sourceGuestIndex: i + 1,
     });
 
     createdBookingIds.push(guestBookingData.bookingId);

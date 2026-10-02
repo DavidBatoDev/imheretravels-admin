@@ -27,10 +27,11 @@ vi.mock("firebase/firestore", () => {
     doc: (_db: unknown, collectionPath: string, id: string) =>
       makeDocRef(collectionPath, id),
 
-    // Queries — we don't filter, we just remember the collection
-    query: (collectionRef: any, ..._constraints: any[]) => ({
+    // Queries — only `==` constraints are applied, which is all the helper uses
+    query: (collectionRef: any, ...constraints: any[]) => ({
       __query: true,
       collectionPath: collectionRef.collectionPath,
+      constraints,
     }),
     where: (field: string, op: string, value: unknown) => ({
       __where: true,
@@ -48,11 +49,13 @@ vi.mock("firebase/firestore", () => {
         id: ref.id,
       };
     },
-    getDocs: async (q: { collectionPath: string }) => {
-      // For bookings count queries, return empty: no bookings yet
+    getDocs: async (q: { collectionPath: string; constraints?: any[] }) => {
       const docs: any[] = [];
       for (const [path, data] of store.entries()) {
-        if (path.startsWith(`${q.collectionPath}/`)) {
+        const matches = (q.constraints || []).every(
+          (c) => c.op !== "==" || data[c.field] === c.value,
+        );
+        if (path.startsWith(`${q.collectionPath}/`) && matches) {
           docs.push({ id: path.split("/")[1], data: () => data });
         }
       }
@@ -354,6 +357,69 @@ describe("createBookingsForReservationPayment - Tanzania Exploration custom pric
     expect(addedDocs.filter((d) => d.collectionPath === "bookings")).toHaveLength(
       0,
     );
+  });
+
+  it("finishes an interrupted Duo creation without duplicating the main booker", async () => {
+    store.set(`stripePayments/${PAYMENT_DOC_ID}`, {
+      customer: {
+        email: "main@example.com",
+        firstName: "Main",
+        lastName: "Booker",
+      },
+      booking: {
+        type: "Duo Booking",
+        groupSize: 2,
+        guestDetails: [
+          { email: "guest@example.com", firstName: "Guest", lastName: "Two" },
+        ],
+        id: "PENDING",
+        documentId: "",
+        creationLock: "webhook",
+      },
+      tour: {
+        packageId: TANZANIA_PACKAGE_ID,
+        packageName: "Tanzania Exploration",
+        date: "2026-12-10",
+      },
+      payment: {
+        amount: 500,
+        currency: "GBP",
+        status: "reserve_paid",
+        type: "reservationFee",
+        originalPrice: 1949,
+      },
+    });
+    // The first attempt wrote the main booker, then failed before the guest.
+    store.set("bookings/prior-main", {
+      bookingId: "DB-TZE-PRIOR-MB001",
+      groupId: "GRP-PRIOR",
+      tourPackageName: "Tanzania Exploration",
+      sourcePaymentDocId: PAYMENT_DOC_ID,
+      sourceGuestIndex: 0,
+    });
+
+    const result = await createBookingsForReservationPayment({
+      paymentDocId: PAYMENT_DOC_ID,
+      creationLock: "webhook",
+    });
+
+    expect(result.alreadyExists).toBe(false);
+    if (result.alreadyExists) return;
+    expect(result.bookingDocumentIds[0]).toBe("prior-main");
+    expect(result.bookingIds[0]).toBe("DB-TZE-PRIOR-MB001");
+    expect(result.bookingIds).toHaveLength(2);
+
+    // Only the missing guest is written, and it joins the existing party
+    const written = addedDocs.filter((d) => d.collectionPath === "bookings");
+    expect(written).toHaveLength(1);
+    expect(written[0].data.emailAddress).toBe("guest@example.com");
+    expect(written[0].data.groupId).toBe("GRP-PRIOR");
+    expect(written[0].data.mainBookerId).toBe("prior-main");
+    expect(written[0].data.sourcePaymentDocId).toBe(PAYMENT_DOC_ID);
+    expect(written[0].data.sourceGuestIndex).toBe(1);
+
+    const payment = store.get(`stripePayments/${PAYMENT_DOC_ID}`)!;
+    expect(payment.booking.documentId).toBe("prior-main");
   });
 
   it("rejects payments that are not yet reserve_paid / succeeded", async () => {

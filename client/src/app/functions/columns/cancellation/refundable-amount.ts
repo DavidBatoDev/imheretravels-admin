@@ -1,4 +1,5 @@
 import { BookingSheetColumn } from "@/types/booking-sheet-column";
+import { addOnTotals } from "@/lib/finance/add-ons";
 import { paidLateFeeArguments, paidLateFees } from "../payment-calculation-helpers";
 
 export const refundableAmountColumn: BookingSheetColumn = {
@@ -95,6 +96,15 @@ export const refundableAmountColumn: BookingSheetColumn = {
         value: "",
       },
       ...paidLateFeeArguments,
+      {
+        name: "addOns",
+        type: "any",
+        columnReference: "Add-ons",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
     ],
   },
 };
@@ -106,7 +116,9 @@ export const refundableAmountColumn: BookingSheetColumn = {
  * Key Rules:
  * 1. Reservation Fee (RF) is ONLY refundable when IHT cancels
  * 2. For full payments: NRA (Non-Reservation Amount) = Paid - RF
- * 3. For installments: Only paidTerms are considered (RF excluded)
+ * 3. For installments: paidTerms + paid add-ons (RF excluded). Add-ons follow
+ *    the tour's cancellation conditions (T&C §12); for full payments they are
+ *    already inside Paid.
  * 4. Supplier costs reduce any calculated refund
  * 4b. Paid late fees are never refunded to a guest
  * 5. Admin fee is deducted from refundable amount (except IHT cancellations)
@@ -180,6 +192,7 @@ export default async function getRefundableAmount(
   p3DatePaid?: any,
   p4LateFeesPenalty?: number | string | null,
   p4DatePaid?: any,
+  addOns?: unknown,
 ): Promise<number | string> {
   // Return empty if no cancellation date
   if (!cancellationRequestDate) {
@@ -201,7 +214,7 @@ export default async function getRefundableAmount(
 
   const admin = toNumber(adminFee);
   const totalPaid = toNumber(paid);
-  const paidInstallments = toNumber(paidTerms);
+  const paidTermsAmount = toNumber(paidTerms);
   const rf = toNumber(reservationFee);
   const fullPayment = toNumber(fullPaymentAmount);
   const supplierCosts = toNumber(supplierCostsCommitted);
@@ -272,7 +285,9 @@ export default async function getRefundableAmount(
     }
   } else {
     // Installment Scenario
-    // Only paidTerms are refundable (RF already excluded)
+    // Paid terms (RF already excluded) plus paid add-ons, which sit outside
+    // P1–P4 but are refundable under the same tier.
+    const paidInstallments = paidTermsAmount + addOnTotals(addOns).paid;
 
     if (
       eligibleRefund.includes("100% of paid terms") ||

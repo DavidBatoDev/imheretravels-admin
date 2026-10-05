@@ -1,4 +1,5 @@
 import { BookingSheetColumn } from "@/types/booking-sheet-column";
+import { addOnTotals } from "@/lib/finance/add-ons";
 import { paidLateFeeArguments, paidLateFees } from "../payment-calculation-helpers";
 
 export const adminFeeColumn: BookingSheetColumn = {
@@ -86,6 +87,15 @@ export const adminFeeColumn: BookingSheetColumn = {
         value: "",
       },
       ...paidLateFeeArguments,
+      {
+        name: "addOns",
+        type: "any",
+        columnReference: "Add-ons",
+        isOptional: true,
+        hasDefault: false,
+        isRest: false,
+        value: "",
+      },
     ],
   },
 };
@@ -102,7 +112,8 @@ export const adminFeeColumn: BookingSheetColumn = {
  *    fee (Paid - Reservation Fee). Full Payment Amount is the balance DUE after
  *    the reservation fee, so it must not be used: a guest who only paid the
  *    deposit would be charged a fee on money never received.
- * 5. For installments: 10% of paid terms
+ * 5. For installments: 10% of paid terms plus paid add-ons (T&C §12: add-ons
+ *    follow the same cancellation conditions as the tour)
  *
  * The admin fee is deducted from the customer's refund to cover
  * processing and administrative costs of the cancellation.
@@ -140,6 +151,7 @@ export default async function getAdminFee(
   p3DatePaid?: any,
   p4LateFeesPenalty?: number | string | null,
   p4DatePaid?: any,
+  addOns?: unknown,
 ): Promise<number | string> {
   // Return empty if not cancelled
   if (!reasonForCancellation) {
@@ -194,8 +206,9 @@ export default async function getAdminFee(
     );
     baseAmount = Math.max(0, toNumber(paid) - rf - lateFees);
   } else {
-    // Installment: Calculate on paid terms
-    baseAmount = paidInstallments;
+    // Installment: paid terms exclude add-ons, so add the paid ones back.
+    // (Full Payment already has them: Paid includes paid add-ons.)
+    baseAmount = paidInstallments + addOnTotals(addOns).paid;
   }
 
   // If no base amount, return 0

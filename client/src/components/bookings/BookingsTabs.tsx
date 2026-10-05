@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { asDate, parseTermDueDate } from "@/lib/late-fee-policy";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   collection,
@@ -67,52 +68,6 @@ const internalTabToUrl = (internalTab: string): string => {
       return "bookings";
   }
 };
-
-function asDate(value: any): Date | null {
-  if (!value) return null;
-
-  if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
-
-  if (typeof value === "string") {
-    const parsed = new Date(value);
-    return isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  if (typeof value === "object") {
-    if (typeof value.toDate === "function") {
-      const parsed = value.toDate();
-      return parsed instanceof Date && !isNaN(parsed.getTime()) ? parsed : null;
-    }
-
-    if (typeof value.seconds === "number") {
-      const parsed = new Date(value.seconds * 1000);
-      return isNaN(parsed.getTime()) ? null : parsed;
-    }
-
-    if (typeof value._seconds === "number") {
-      const parsed = new Date(value._seconds * 1000);
-      return isNaN(parsed.getTime()) ? null : parsed;
-    }
-  }
-
-  return null;
-}
-
-function parseTermDueDate(dueDateRaw: any, termIndex: number): Date | null {
-  if (!dueDateRaw) return null;
-
-  if (typeof dueDateRaw === "string" && dueDateRaw.includes(",")) {
-    const parts = dueDateRaw.split(",").map((part) => part.trim());
-    const partStart = termIndex * 2;
-    const partEnd = partStart + 1;
-
-    if (parts.length > partEnd) {
-      return asDate(`${parts[partStart]}, ${parts[partEnd]}`);
-    }
-  }
-
-  return asDate(dueDateRaw);
-}
 
 export default function BookingsTabs() {
   const searchParams = useSearchParams();

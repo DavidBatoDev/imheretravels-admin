@@ -15,8 +15,11 @@ import { db } from "@/lib/firebase";
 import EmailTemplateService from "@/services/email-template-service";
 import GmailApiService from "@/lib/gmail/gmail-api-service";
 import {
+  asDate,
   getLateFeeGraceDays,
   isDueDateChargeable,
+  isPastGrace,
+  parseTermDueDate,
 } from "@/lib/late-fee-policy";
 
 type LateFeesConfig = {
@@ -29,56 +32,6 @@ type LateFeesConfig = {
 
 type TermKey = "p1" | "p2" | "p3" | "p4";
 const TERM_KEYS: TermKey[] = ["p1", "p2", "p3", "p4"];
-
-function asDate(value: any): Date | null {
-  if (!value) return null;
-
-  if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? null : value;
-  }
-
-  if (typeof value === "string") {
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  if (typeof value === "object") {
-    if (typeof value.toDate === "function") {
-      const parsed = value.toDate();
-      return parsed instanceof Date && !Number.isNaN(parsed.getTime())
-        ? parsed
-        : null;
-    }
-
-    if (typeof value.seconds === "number") {
-      const parsed = new Date(value.seconds * 1000);
-      return Number.isNaN(parsed.getTime()) ? null : parsed;
-    }
-
-    if (typeof value._seconds === "number") {
-      const parsed = new Date(value._seconds * 1000);
-      return Number.isNaN(parsed.getTime()) ? null : parsed;
-    }
-  }
-
-  return null;
-}
-
-function parseTermDueDate(dueDateRaw: any, termIndex: number): Date | null {
-  if (!dueDateRaw) return null;
-
-  if (typeof dueDateRaw === "string" && dueDateRaw.includes(",")) {
-    const parts = dueDateRaw.split(",").map((part) => part.trim());
-    const partStart = termIndex * 2;
-    const partEnd = partStart + 1;
-
-    if (parts.length > partEnd) {
-      return asDate(`${parts[partStart]}, ${parts[partEnd]}`);
-    }
-  }
-
-  return asDate(dueDateRaw);
-}
 
 function formatGBP(value: number): string {
   return `£${value.toFixed(2)}`;
@@ -190,10 +143,7 @@ export async function POST() {
           continue;
         }
 
-        const graceCutoff = new Date(dueDate.getTime());
-        graceCutoff.setDate(graceCutoff.getDate() + graceDays);
-
-        if (now < graceCutoff) {
+        if (!isPastGrace(dueDate, graceDays, now)) {
           continue;
         }
 
@@ -284,9 +234,7 @@ export async function POST() {
             return false;
           }
 
-          const freshGraceCutoff = new Date(freshDueDate.getTime());
-          freshGraceCutoff.setDate(freshGraceCutoff.getDate() + graceDays);
-          if (now < freshGraceCutoff) {
+          if (!isPastGrace(freshDueDate, graceDays, now)) {
             return false;
           }
 

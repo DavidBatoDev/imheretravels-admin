@@ -96,7 +96,8 @@
     "report:review-blocked": "tsx scripts/report-review-blocked.ts",
     "report:2027-bookings": "tsx scripts/report-2027-bookings.ts",
     "set:tour-code": "tsx scripts/set-tour-code.ts",
-    "seed:dev": "tsx scripts/seed-dev-from-prod.ts"
+    "seed:dev": "tsx scripts/seed-dev-from-prod.ts",
+    "import:guest-passport-data": "tsx scripts/import-guest-passport-data.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -211,6 +212,7 @@
     "react-resizable-panels": "^3.0.4",
     "recharts": "^3.7.0",
     "remark-gfm": "^4.0.1",
+    "server-only": "^0.0.1",
     "sonner": "^2.0.7",
     "stripe": "^19.3.0",
     "tailwind-merge": "^3.3.1",

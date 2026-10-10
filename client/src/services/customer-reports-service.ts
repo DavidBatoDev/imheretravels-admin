@@ -2,15 +2,14 @@
  * Customer Reports Service
  *
  * Data priority per booking:
- *   1. Passport form data (GUEST_PASSPORT_DATA, keyed by bookingCode)
+ *   1. Passport form data (server-only, fetched from /api/reports/guest-passport-data)
  *   2. Stripe payment data (stripePayments Firestore collection)
  *   3. Booking document only (admin-created — demographics null)
  */
 
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import { collection, getDocs } from "firebase/firestore";
 import { bookingService } from "./booking-service";
-import { GUEST_PASSPORT_DATA } from "@/data/guest-passport-data";
 import {
   CustomerReport,
   CustomerReportRow,
@@ -271,6 +270,40 @@ function buildMetrics(rows: CustomerReportRow[]): CustomerReportMetrics {
 }
 
 // ---------------------------------------------------------------------------
+// Passport form data (personal data: fetched from the server, never bundled)
+// ---------------------------------------------------------------------------
+
+interface GuestPassportEntry {
+  source: string;
+  fullName: string;
+  nationality: string;
+  country: string;
+  birthdate: string; // YYYY-MM-DD
+  gender: string;
+  passportLink: string;
+}
+
+async function fetchGuestPassportData(
+  bookingCodes: string[],
+): Promise<Record<string, GuestPassportEntry>> {
+  const user = auth.currentUser;
+  if (!user) throw new Error("You must be signed in to view the customer report");
+  const token = await user.getIdToken();
+
+  const res = await fetch("/api/reports/guest-passport-data", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ bookingCodes }),
+  });
+  if (!res.ok) {
+    const { error } = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(`Failed to load passport data: ${error}`);
+  }
+  const { entries } = (await res.json()) as { entries: Record<string, GuestPassportEntry> };
+  return entries;
+}
+
+// ---------------------------------------------------------------------------
 // Main export
 // ---------------------------------------------------------------------------
 
@@ -287,7 +320,13 @@ export async function generateCustomerReport(
     return iso >= startDate && iso <= endDate;
   });
 
-  const stripeMap = await fetchStripePaymentsByBookingId();
+  const lookupCodes = filtered.flatMap((b) =>
+    [b.bookingCode, b.bookingId, b.id].filter((v): v is string => typeof v === "string" && v.length > 0),
+  );
+  const [stripeMap, passportData] = await Promise.all([
+    fetchStripePaymentsByBookingId(),
+    fetchGuestPassportData(lookupCodes),
+  ]);
 
   type RawRow = Omit<CustomerReportRow, "customerType">;
   const rawRows: RawRow[] = [];
@@ -310,7 +349,7 @@ export async function generateCustomerReport(
     const isOverdue = detectOverdue(booking as Record<string, unknown>);
 
     // ── Priority 1: Passport form data ──────────────────────────────────────
-    const passportEntry = GUEST_PASSPORT_DATA[bookingCode] ?? GUEST_PASSPORT_DATA[bookingId];
+    const passportEntry = passportData[bookingCode] ?? passportData[bookingId];
     if (passportEntry) {
       rawRows.push({
         bookingId,

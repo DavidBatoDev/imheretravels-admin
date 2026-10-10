@@ -3,17 +3,17 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // This rule allows anyone with your Firestore database reference to view, edit,
-    // and delete all data in your Firestore database. It is useful for getting
-    // started, but it is configured to expire after 30 days because it
-    // leaves your app open to attackers. At that time, all client
-    // requests to your Firestore database will be denied.
+    // TEMPORARY: Firebase test-mode rule, open to any client until 2026-10-22.
+    // Replace with default-deny rules before then
+    // (portal/docs/06-phase0-admin-lockdown.md).
     //
-    // Make sure to write security rules for your app before that time, or else
-    // all client requests to your Firestore database will be denied until you Update
-    // your rules
-    match /{document=**} {
-      allow read, write: if request.time < timestamp.date(2026, 10, 22);
+    // Server-only collections are excluded, so no client can read or write
+    // them. The admin server reads them with firebase-admin, which bypasses
+    // these rules:
+    //   guestPassportData: passport-form data for /reports/customers
+    match /{collection}/{document=**} {
+      allow read, write: if request.time < timestamp.date(2026, 10, 22)
+        && !(collection in ['guestPassportData']);
     }
   }
 }

@@ -3,7 +3,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // TEMPORARY: Firebase test-mode rule, open to any client until 2026-10-22.
+    // TEMPORARY: Firebase test-mode rule, open to any client until 2026-12-31.
+    // (Extended from 2026-10-22: 63 API routes still use the browser SDK with
+    // no signed-in user, so default-deny would break them, incl. the Stripe
+    // webhook.)
     // Replace with default-deny rules before then
     // (portal/docs/06-phase0-admin-lockdown.md).
     //
@@ -12,7 +15,7 @@ service cloud.firestore {
     // these rules:
     //   guestPassportData: passport-form data for /reports/customers
     match /{collection}/{document=**} {
-      allow read, write: if request.time < timestamp.date(2026, 10, 22)
+      allow read, write: if request.time < timestamp.date(2026, 12, 31)
         && !(collection in ['guestPassportData']);
     }
   }

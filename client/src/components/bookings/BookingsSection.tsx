@@ -101,6 +101,7 @@ import {
   computeDataBounds,
 } from "@/services/financial-reports-service";
 import { compareByRow, useBookingsStore } from "@/hooks/use-bookings-store";
+import { getNextBookingRow } from "@/lib/booking-row-queries";
 import { useToast } from "@/hooks/use-toast";
 import BookingDetailModal from "./BookingDetailModal";
 import BookingVersionHistoryModal from "@/components/version-history/BookingVersionHistoryModal";
@@ -1547,19 +1548,9 @@ export default function BookingsSection() {
               onClick={async () => {
                 setIsCreatingBooking(true);
                 try {
-                  // Compute next row number (fill gaps)
-                  const rowNumbers = (bookings || [])
-                    .map((b) => (typeof b.row === "number" ? b.row : 0))
-                    .filter((n) => n > 0)
-                    .sort((a, b) => a - b);
-                  let nextRowNumber = 1;
-                  for (let i = 0; i < rowNumbers.length; i++) {
-                    if (rowNumbers[i] !== i + 1) {
-                      nextRowNumber = i + 1;
-                      break;
-                    }
-                    nextRowNumber = i + 2;
-                  }
+                  // Next free row, read from Firestore (dedupes rows; sees
+                  // bookings other admins just created)
+                  const nextRowNumber = await getNextBookingRow();
 
                   // Create minimal doc then update with id/row/timestamps
                   const newBookingId = await bookingService.createBooking({});
@@ -1615,19 +1606,9 @@ export default function BookingsSection() {
             onClick={async () => {
               setIsCreatingBooking(true);
               try {
-                // Compute next row number (fill gaps)
-                const rowNumbers = (bookings || [])
-                  .map((b) => (typeof b.row === "number" ? b.row : 0))
-                  .filter((n) => n > 0)
-                  .sort((a, b) => a - b);
-                let nextRowNumber = 1;
-                for (let i = 0; i < rowNumbers.length; i++) {
-                  if (rowNumbers[i] !== i + 1) {
-                    nextRowNumber = i + 1;
-                    break;
-                  }
-                  nextRowNumber = i + 2;
-                }
+                // Next free row, read from Firestore (dedupes rows; sees
+                // bookings other admins just created)
+                const nextRowNumber = await getNextBookingRow();
 
                 // Create minimal doc then update with id/row/timestamps
                 const newBookingId = await bookingService.createBooking({});
@@ -3359,19 +3340,9 @@ export default function BookingsSection() {
             onClick={async () => {
               setIsCreatingBooking(true);
               try {
-                // Compute next row number (fill gaps)
-                const rowNumbers = (bookings || [])
-                  .map((b) => (typeof b.row === "number" ? b.row : 0))
-                  .filter((n) => n > 0)
-                  .sort((a, b) => a - b);
-                let nextRowNumber = 1;
-                for (let i = 0; i < rowNumbers.length; i++) {
-                  if (rowNumbers[i] !== i + 1) {
-                    nextRowNumber = i + 1;
-                    break;
-                  }
-                  nextRowNumber = i + 2;
-                }
+                // Next free row, read from Firestore (dedupes rows; sees
+                // bookings other admins just created)
+                const nextRowNumber = await getNextBookingRow();
 
                 // Create minimal doc then update with id/row/timestamps
                 const newBookingId = await bookingService.createBooking({});
@@ -3726,19 +3697,9 @@ export default function BookingsSection() {
                     onClick={async () => {
                       setIsCreatingBooking(true);
                       try {
-                        // Compute next row number (fill gaps)
-                        const rowNumbers = (bookings || [])
-                          .map((b) => (typeof b.row === "number" ? b.row : 0))
-                          .filter((n) => n > 0)
-                          .sort((a, b) => a - b);
-                        let nextRowNumber = 1;
-                        for (let i = 0; i < rowNumbers.length; i++) {
-                          if (rowNumbers[i] !== i + 1) {
-                            nextRowNumber = i + 1;
-                            break;
-                          }
-                          nextRowNumber = i + 2;
-                        }
+                        // Next free row, read from Firestore (dedupes rows; sees
+                        // bookings other admins just created)
+                        const nextRowNumber = await getNextBookingRow();
 
                         // Create minimal doc then update with id/row/timestamps
                         const newBookingId = await bookingService.createBooking(

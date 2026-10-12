@@ -50,7 +50,7 @@ vi.mock("firebase/firestore", () => ({
   },
 }));
 
-import { getLastContiguousBookingRow } from "./booking-row-queries";
+import { firstFreeRow, getLastContiguousBookingRow } from "./booking-row-queries";
 
 /** Reference: the original full-scan implementation. */
 function original(allRows: unknown[]): number {
@@ -84,5 +84,26 @@ describe("getLastContiguousBookingRow", () => {
   it.each(cases)("matches the original full scan: %s", async (_name, data) => {
     rows = data;
     expect(await getLastContiguousBookingRow()).toBe(original(data));
+  });
+});
+
+describe("firstFreeRow", () => {
+  const range = (a: number, b: number) =>
+    Array.from({ length: b - a + 1 }, (_, i) => a + i);
+
+  it("does not get stuck on duplicates (prod: 215 x2 kept handing out 216)", () => {
+    // The old sort-and-compare loop returned 216 here, and kept returning
+    // 216 as each new booking added another duplicate.
+    const rows = [...range(1, 215), 215, ...range(217, 242), 216, 216, 216];
+    expect(firstFreeRow(rows)).toBe(243);
+  });
+
+  it("still reuses a real gap", () => {
+    expect(firstFreeRow([1, 2, 4, 4, 5])).toBe(3);
+  });
+
+  it("ignores non-numeric and missing rows", () => {
+    expect(firstFreeRow([1, "2", null, undefined, 0, 2])).toBe(3);
+    expect(firstFreeRow([])).toBe(1);
   });
 });

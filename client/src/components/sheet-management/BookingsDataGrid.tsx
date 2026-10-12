@@ -1,4 +1,5 @@
 "use client";
+import { firstFreeRow, getNextBookingRow } from "@/lib/booking-row-queries";
 
 import React, {
   useState,
@@ -3197,24 +3198,8 @@ export default function BookingsDataGrid({
           // Calculate what the next row number would be for the first empty row (filling gaps)
           let nextRowNumber = "-";
           if (isFirstEmptyRow && data && data.length > 0) {
-            // Find the first missing row number (same logic as handleAddNewRow)
-            const rowNumbers = data
-              .map((item) => {
-                const row = item.row;
-                return typeof row === "number" ? row : 0;
-              })
-              .filter((row) => row > 0)
-              .sort((a, b) => a - b);
-
-            let firstGap = 1;
-            for (let i = 0; i < rowNumbers.length; i++) {
-              if (rowNumbers[i] !== i + 1) {
-                firstGap = i + 1;
-                break;
-              }
-              firstGap = i + 2;
-            }
-            nextRowNumber = firstGap.toString();
+            // Preview of the row handleAddNewRow will assign
+            nextRowNumber = firstFreeRow(data.map((item) => item.row)).toString();
           } else if (!isFirstEmptyRow) {
             // For subsequent empty rows, just show placeholder
             nextRowNumber = "-";
@@ -4262,31 +4247,9 @@ export default function BookingsDataGrid({
     try {
       setIsAddingRow(true);
 
-      // Get all existing row numbers and find the first gap
-      const existingRows = data || [];
-      const rowNumbers = existingRows
-        .map((item) => {
-          const row = item.row;
-          return typeof row === "number" ? row : 0;
-        })
-        .filter((row) => row > 0)
-        .sort((a, b) => a - b); // Sort ascending
-
-      // Find the first missing row number
-      let nextRowNumber = 1;
-      for (let i = 0; i < rowNumbers.length; i++) {
-        if (rowNumbers[i] !== i + 1) {
-          nextRowNumber = i + 1;
-          break;
-        }
-        nextRowNumber = i + 2; // If no gap found, use next number
-      }
-
-      console.log("🔍 [ADD ROW DEBUG]", {
-        existingRowNumbers: rowNumbers,
-        nextRowNumber,
-        totalRows: existingRows.length,
-      });
+      // Next free row, read from Firestore (dedupes rows; sees bookings
+      // other admins just created)
+      const nextRowNumber = await getNextBookingRow();
 
       // Create the initial booking data with row number
       const initialBookingData = {

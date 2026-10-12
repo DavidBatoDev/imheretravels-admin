@@ -43,15 +43,22 @@ export async function getLastContiguousBookingRow(): Promise<number> {
 
   // Gap somewhere — find the smallest free row.
   const snapshot = await getDocs(bookingsRef);
-  const existingRows = new Set<number>();
-  snapshot.forEach((doc) => {
-    const row = doc.data().row;
-    if (row && typeof row === "number") existingRows.add(row);
-  });
+  return firstFreeRow(snapshot.docs.map((doc) => doc.data().row)) - 1;
+}
 
-  let nextRow = 1;
-  while (existingRows.has(nextRow)) nextRow++;
-  return nextRow - 1;
+/**
+ * Smallest positive row number not already taken. Duplicated rows count once
+ * — sorting and comparing positions instead (the old client logic) treats
+ * every duplicate as a "gap" and keeps handing out the same row.
+ */
+export function firstFreeRow(rows: ReadonlyArray<unknown>): number {
+  const taken = new Set<number>();
+  for (const row of rows) {
+    if (row && typeof row === "number") taken.add(row);
+  }
+  let next = 1;
+  while (taken.has(next)) next++;
+  return next;
 }
 
 /** Number of bookings for a tour package, counted server-side. */
@@ -65,4 +72,13 @@ export async function countBookingsForTourPackage(
     ),
   );
   return snapshot.data().count;
+}
+
+/**
+ * Row number for a brand-new booking: the smallest free row (gaps from
+ * deleted rows are reused). Reads Firestore, so it also sees bookings other
+ * admins created a moment ago.
+ */
+export async function getNextBookingRow(): Promise<number> {
+  return (await getLastContiguousBookingRow()) + 1;
 }

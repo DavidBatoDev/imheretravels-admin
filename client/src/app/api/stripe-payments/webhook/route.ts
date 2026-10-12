@@ -1,8 +1,8 @@
 // /api/stripe-payments/webhook/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { db } from "@/lib/firebase";
 import {
+  db,
   collection,
   query,
   where,
@@ -11,7 +11,7 @@ import {
   doc,
   getDoc,
   serverTimestamp,
-} from "firebase/firestore";
+} from "@/lib/server-firestore";
 import { createBookingsForReservationPayment } from "@/lib/create-bookings-from-payment";
 import {
   getCreditOrder,

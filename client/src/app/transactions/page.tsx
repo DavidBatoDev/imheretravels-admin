@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, Suspense } from "react";
+import { staffFetch } from "@/lib/staff-fetch";
 import { format } from "date-fns";
 import {
   CheckCircle2,
@@ -458,7 +459,7 @@ function TransactionsPageContent() {
     setIsRefunding(transactionToRefund.id);
 
     try {
-      const response = await fetch("/api/stripe-payments/refund", {
+      const response = await staffFetch("/api/stripe-payments/refund", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

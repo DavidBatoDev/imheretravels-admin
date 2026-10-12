@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/firebase";
 import {
+  db,
   collection,
   query,
   where,
@@ -11,7 +11,7 @@ import {
   addDoc,
   serverTimestamp,
   Timestamp,
-} from "firebase/firestore";
+} from "@/lib/server-firestore";
 import Stripe from "stripe";
 import crypto from "crypto";
 

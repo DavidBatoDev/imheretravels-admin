@@ -1,8 +1,8 @@
 // app/api/stripe-payments/init-payment/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { db } from "@/lib/firebase";
 import {
+  db,
   collection,
   addDoc,
   setDoc,
@@ -14,7 +14,7 @@ import {
   getDocs,
   getDoc,
   limit,
-} from "firebase/firestore";
+} from "@/lib/server-firestore";
 import { StripePaymentDocument } from "@/types";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);

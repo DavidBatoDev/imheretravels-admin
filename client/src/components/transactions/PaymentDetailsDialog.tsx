@@ -1,3 +1,4 @@
+import { staffFetch } from "@/lib/staff-fetch";
 import {
   Dialog,
   DialogContent,
@@ -216,7 +217,7 @@ export function PaymentDetailsDialog({
     setIsRefunding(true);
     
     try {
-      const response = await fetch("/api/stripe-payments/refund", {
+      const response = await staffFetch("/api/stripe-payments/refund", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

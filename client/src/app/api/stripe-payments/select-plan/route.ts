@@ -1,7 +1,6 @@
 // /api/stripe-payments/select-plan/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/firebase";
-import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { db, doc, getDoc, updateDoc, serverTimestamp } from "@/lib/server-firestore";
 import {
   calculatePaymentPlanUpdate,
   getAvailablePaymentTerms,

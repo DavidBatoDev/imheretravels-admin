@@ -10,6 +10,7 @@ import {
   orderBy,
   Timestamp,
   limit,
+  getCountFromServer,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import {
@@ -207,9 +208,9 @@ export async function getUnsentGuestInvitationsCount(): Promise<number> {
       collection(db, GUEST_INVITATIONS_COLLECTION),
       where("status", "==", "created"),
     );
-    const querySnapshot = await getDocs(q);
+    const countSnapshot = await getCountFromServer(q);
 
-    return querySnapshot.size;
+    return countSnapshot.data().count;
   } catch (error) {
     console.error("Error counting unsent guest invitations:", error);
     return 0;

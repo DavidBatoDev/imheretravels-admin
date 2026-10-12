@@ -2,15 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Fuse from "fuse.js";
-import {
-  collection,
-  doc,
-  onSnapshot,
-  query,
-  Timestamp,
-  setDoc,
-  where,
-} from "firebase/firestore";
+import { doc, onSnapshot, Timestamp, setDoc } from "firebase/firestore";
+import { useBookingsStore } from "@/hooks/use-bookings-store";
 import { auth, db } from "@/lib/firebase";
 import {
   getSchedulePolicy,
@@ -145,7 +138,6 @@ function formatDate(value: Date | null): string {
 }
 
 export default function LateFeesSection() {
-  const [bookings, setBookings] = useState<Booking[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [quickSort, setQuickSort] = useState<LateFeesSortKey>("overdue-desc");
   const [busyRowId, setBusyRowId] = useState<string | null>(null);
@@ -197,44 +189,28 @@ export default function LateFeesSection() {
     return () => unsubscribe();
   }, [isEditingEffectiveDate]);
 
-  useEffect(() => {
-    const bookingsCollectionRef = collection(db, "bookings");
-    const bookingsQuery = effectiveDate
-      ? query(
-          bookingsCollectionRef,
-          where(
-            "reservationDate",
-            ">=",
-            Timestamp.fromDate(new Date(`${effectiveDate}T00:00:00`)),
-          ),
-        )
-      : query(bookingsCollectionRef);
-    const unsubscribe = onSnapshot(
-      bookingsQuery,
-      (snapshot) => {
-        const nextBookings = snapshot.docs.map((bookingDoc) => ({
-          id: bookingDoc.id,
-          ...bookingDoc.data(),
-        })) as Booking[];
-        nextBookings.sort((a, b) => {
-          const aDate = asDate((a as any).reservationDate)?.getTime() || 0;
-          const bDate = asDate((b as any).reservationDate)?.getTime() || 0;
-          return bDate - aDate;
-        });
-        setBookings(nextBookings);
-      },
-      (error) => {
-        console.error("Failed to load bookings for late fees tab", error);
-        toast({
-          title: "Error",
-          description: "Failed to load bookings",
-          variant: "destructive",
-        });
-      },
-    );
+  // Bookings come from the shared realtime store (one listener app-wide);
+  // the effective-date filter is applied in expandedRows below.
+  const bookingsStore = useBookingsStore();
+  const bookings = useMemo(
+    () =>
+      [...bookingsStore.bookings].sort((a, b) => {
+        const aDate = asDate((a as any).reservationDate)?.getTime() || 0;
+        const bDate = asDate((b as any).reservationDate)?.getTime() || 0;
+        return bDate - aDate;
+      }),
+    [bookingsStore.bookings],
+  );
 
-    return () => unsubscribe();
-  }, [effectiveDate]);
+  useEffect(() => {
+    if (!bookingsStore.error) return;
+    console.error("Failed to load bookings for late fees tab", bookingsStore.error);
+    toast({
+      title: "Error",
+      description: "Failed to load bookings",
+      variant: "destructive",
+    });
+  }, [bookingsStore.error]);
 
   const expandedRows = useMemo(() => {
     const now = new Date();
@@ -244,10 +220,14 @@ export default function LateFeesSection() {
     const expandedRows: LateFeeRow[] = [];
 
     for (const booking of bookings) {
-      const reservationDate = asDate((booking as any).reservationDate);
+      const rawReservationDate = (booking as any).reservationDate;
+      const reservationDate = asDate(rawReservationDate);
+      // Matches the former Firestore filter (reservationDate >= Timestamp):
+      // only Timestamp-typed dates qualify, never legacy string dates.
       if (
         effectiveDateStart &&
-        (!reservationDate ||
+        (!(rawReservationDate instanceof Timestamp) ||
+          !reservationDate ||
           reservationDate.getTime() < effectiveDateStart.getTime())
       ) {
         continue;

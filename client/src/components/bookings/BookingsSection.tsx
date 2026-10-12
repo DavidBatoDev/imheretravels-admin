@@ -93,10 +93,14 @@ import {
 import { allBookingSheetColumns } from "@/app/functions/columns";
 import { functionMap } from "@/app/functions/columns/functions-index";
 import { db } from "@/lib/firebase";
-import { collection, onSnapshot, query, getDocs } from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
 import { Timestamp } from "firebase/firestore";
 import { bookingService } from "@/services/booking-service";
-import { financialReportsService } from "@/services/financial-reports-service";
+import {
+  buildReport,
+  computeDataBounds,
+} from "@/services/financial-reports-service";
+import { compareByRow, useBookingsStore } from "@/hooks/use-bookings-store";
 import { useToast } from "@/hooks/use-toast";
 import BookingDetailModal from "./BookingDetailModal";
 import BookingVersionHistoryModal from "@/components/version-history/BookingVersionHistoryModal";
@@ -178,7 +182,6 @@ export default function BookingsSection() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [typeFilter, setTypeFilter] = useState("All");
-  const [bookings, setBookings] = useState<Booking[]>([]);
   const [columns, setColumns] = useState<SheetColumn[]>([]);
 
   // Advanced filtering state
@@ -247,18 +250,34 @@ export default function BookingsSection() {
   const [fieldSelectorOpen, setFieldSelectorOpen] = useState<string | null>(
     null,
   );
-  const [isLoading, setIsLoading] = useState(true);
   const [isFilterSticky, setIsFilterSticky] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isCreatingBooking, setIsCreatingBooking] = useState(false);
   const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState(false);
-  const [reportMetrics, setReportMetrics] = useState<{
-    netRevenue: number;
-    outstandingBalances: number;
-    expectedRevenue: number;
-  } | null>(null);
-  const [isReportMetricsLoading, setIsReportMetricsLoading] = useState(true);
+
+  // Realtime bookings come from the shared store (one listener app-wide).
+  // Optimistic edits are layered on top until the next snapshot arrives.
+  const bookingsStore = useBookingsStore();
+  const [optimisticBookings, setOptimisticBookings] = useState<
+    Record<string, Booking>
+  >({});
+
+  useEffect(() => {
+    setOptimisticBookings({});
+  }, [bookingsStore.bookings]);
+
+  const bookings = useMemo(() => {
+    const merged = bookingsStore.bookings.map(
+      (booking) => optimisticBookings[booking.id] ?? booking,
+    );
+    return merged.sort(compareByRow);
+  }, [bookingsStore.bookings, optimisticBookings]);
+
+  const isLoading = bookingsStore.isLoading;
+
+  // Columns whose loadOptions already succeeded while building the columns
+  const loadedOptionColumnIds = useRef(new Set<string>());
 
   // Ref for the bookings container to enable scrolling after adding a booking
   const bookingsContainerRef = useRef<HTMLDivElement>(null);
@@ -350,7 +369,10 @@ export default function BookingsSection() {
             typeof columnData.loadOptions === "function"
           ) {
             try {
-              const dynamicOptions = await columnData.loadOptions();
+              const dynamicOptions = await columnData.loadOptions({
+                formData: {},
+              });
+              loadedOptionColumnIds.current.add(columnData.id);
               return {
                 ...columnData,
                 options: dynamicOptions,
@@ -385,12 +407,11 @@ export default function BookingsSection() {
       for (const col of columns) {
         if (col.dataType === "select" && col.loadOptions) {
           try {
-            // Pass empty formData context for filter loading
-            const options = await col.loadOptions({ formData: {} });
-            optionsMap[col.id] = options;
-            console.log(
-              `📋 Loaded ${options.length} options for ${col.columnName}`,
-            );
+            // Reuse options already loaded with the columns; only fetch when
+            // that load failed.
+            optionsMap[col.id] = loadedOptionColumnIds.current.has(col.id)
+              ? col.options || []
+              : await col.loadOptions({ formData: {} });
           } catch (error) {
             console.error(
               `Failed to load options for ${col.columnName}:`,
@@ -410,93 +431,6 @@ export default function BookingsSection() {
       loadDynamicOptions();
     }
   }, [columns]);
-
-  // Subscribe to real-time bookings data
-  useEffect(() => {
-    console.log(
-      "🔍 [BOOKINGS SECTION] Setting up real-time booking subscription...",
-    );
-
-    const unsubscribe = onSnapshot(
-      query(collection(db, "bookings")),
-      (querySnapshot) => {
-        const fetchedBookings = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Booking[];
-
-        // Sort bookings numerically by row number
-        const sortedBookings = fetchedBookings.sort((a, b) => {
-          const aRow = typeof a.row === "number" ? a.row : 0;
-          const bRow = typeof b.row === "number" ? b.row : 0;
-          if (aRow === 0 && bRow === 0) return 0;
-          if (aRow === 0) return 1;
-          if (bRow === 0) return -1;
-          return aRow - bRow;
-        });
-
-        console.log(
-          `✅ [BOOKINGS SECTION] Received ${sortedBookings.length} bookings from Firestore`,
-        );
-
-        // Debug: Log first booking's payment and date data
-        if (sortedBookings.length > 0) {
-          const firstBooking = sortedBookings[0];
-          console.log("🔍 [DEBUG] First booking payment data:", {
-            id: firstBooking.id,
-            paid: firstBooking.paid,
-            paidType: typeof firstBooking.paid,
-            originalTourCost: firstBooking.originalTourCost,
-            originalTourCostType: typeof firstBooking.originalTourCost,
-            discountedTourCost: firstBooking.discountedTourCost,
-            discountedTourCostType: typeof firstBooking.discountedTourCost,
-            useDiscountedTourCost: firstBooking.useDiscountedTourCost,
-          });
-
-          console.log("🔍 [DEBUG] First booking date data:", {
-            id: firstBooking.id,
-            reservationDate: firstBooking.reservationDate,
-            reservationDateType: typeof firstBooking.reservationDate,
-            reservationDateIsTimestamp:
-              firstBooking.reservationDate &&
-              typeof firstBooking.reservationDate === "object" &&
-              (firstBooking.reservationDate as any).toDate,
-            tourDate: firstBooking.tourDate,
-            tourDateType: typeof firstBooking.tourDate,
-            tourDateIsTimestamp:
-              firstBooking.tourDate &&
-              typeof firstBooking.tourDate === "object" &&
-              (firstBooking.tourDate as any).toDate,
-          });
-        }
-
-        // Use real data if available, otherwise show empty state
-        if (sortedBookings.length > 0) {
-          setBookings(sortedBookings);
-        } else {
-          console.log(
-            "📝 [BOOKINGS SECTION] No real data found, showing empty state",
-          );
-          setBookings([]);
-        }
-        setIsLoading(false);
-      },
-      (error) => {
-        console.error("❌ Error listening to bookings:", error);
-        console.log(
-          "📝 [BOOKINGS SECTION] Error occurred, showing empty state",
-        );
-        setBookings([]);
-        setIsLoading(false);
-      },
-    );
-
-    // Cleanup subscription on unmount
-    return () => {
-      console.log("🧹 [BOOKINGS SECTION] Cleaning up booking subscription");
-      unsubscribe();
-    };
-  }, []);
 
   // Handle query parameters for opening modals
   useEffect(() => {
@@ -840,38 +774,23 @@ export default function BookingsSection() {
     completedBookings,
   } = statistics;
 
-  useEffect(() => {
-    let active = true;
-
-    const loadFinancialMetrics = async () => {
-      try {
-        if (active) setIsReportMetricsLoading(true);
-        const bounds = await financialReportsService.getDataBounds();
-        const report = await financialReportsService.generateReport({
-          preset: "all_time",
-          startDate: bounds.startDate,
-          endDate: bounds.endDate,
-        });
-
-        if (!active) return;
-        setReportMetrics({
-          netRevenue: report.metrics.totalNetRevenue,
-          outstandingBalances: report.metrics.totalOverdueUnpaid,
-          expectedRevenue: report.metrics.totalExpectedRevenue,
-        });
-      } catch (error) {
-        console.error("Failed to load financial metrics for bookings:", error);
-      } finally {
-        if (active) setIsReportMetricsLoading(false);
-      }
+  // Financial metrics are derived from the bookings already in memory —
+  // no extra Firestore reads when a booking changes.
+  const reportMetrics = useMemo(() => {
+    if (bookingsStore.bookings.length === 0) return null;
+    const bounds = computeDataBounds(bookingsStore.bookings);
+    const report = buildReport(bookingsStore.bookings, {
+      preset: "all_time",
+      startDate: bounds.startDate,
+      endDate: bounds.endDate,
+    });
+    return {
+      netRevenue: report.metrics.totalNetRevenue,
+      outstandingBalances: report.metrics.totalOverdueUnpaid,
+      expectedRevenue: report.metrics.totalExpectedRevenue,
     };
-
-    loadFinancialMetrics();
-
-    return () => {
-      active = false;
-    };
-  }, [bookings]);
+  }, [bookingsStore.bookings]);
+  const isReportMetricsLoading = isLoading;
 
   const getStatusBgColor = (booking: Booking) => {
     const category = getBookingStatusCategory(booking.bookingStatus);
@@ -1057,11 +976,10 @@ export default function BookingsSection() {
   // Handle booking update
   const handleBookingUpdate = (updatedBooking: Booking) => {
     // Update the booking in the local bookings array
-    setBookings((prevBookings) =>
-      prevBookings.map((booking) =>
-        booking.id === updatedBooking.id ? updatedBooking : booking,
-      ),
-    );
+    setOptimisticBookings((prev) => ({
+      ...prev,
+      [updatedBooking.id]: updatedBooking,
+    }));
 
     // Update the selected booking as well
     setSelectedBooking(updatedBooking);

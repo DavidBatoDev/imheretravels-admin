@@ -14,8 +14,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Search, AlertCircle, CheckCircle2, X, Mail } from "lucide-react";
-import { collection, getDocs, query, doc, getDoc } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc } from "firebase/firestore";
 import { db, functions } from "@/lib/firebase";
+import { getBookingsOnce } from "@/hooks/use-bookings-store";
 import { httpsCallable } from "firebase/functions";
 import {
   createGuestInvitation,
@@ -115,6 +116,7 @@ export default function AddGuestInvitationModal({
 
   const validateBooking = async (
     booking: any,
+    invitedBookingIds?: Set<string>,
   ): Promise<BookingWithValidation> => {
     const errors: string[] = [];
     let isValid = true;
@@ -144,7 +146,9 @@ export default function AddGuestInvitationModal({
     // Check if already has a guest invitation
     let alreadyInvited = false;
     try {
-      const existing = await getGuestInvitationByBookingId(booking.id);
+      const existing = invitedBookingIds
+        ? invitedBookingIds.has(booking.id)
+        : await getGuestInvitationByBookingId(booking.id);
       if (existing) {
         alreadyInvited = true;
         errors.push("Already has a guest invitation");
@@ -177,16 +181,27 @@ export default function AddGuestInvitationModal({
   const loadBookings = async () => {
     setLoading(true);
     try {
-      const bookingsQuery = query(collection(db, "bookings"));
-      const snapshot = await getDocs(bookingsQuery);
+      // Fetch everything once and join in memory (instead of one
+      // guest-invitation query per booking).
+      const [bookingsData, invitationsSnapshot] = await Promise.all([
+        getBookingsOnce(),
+        // On failure, fall back to per-booking lookups (as before).
+        getDocs(collection(db, "guestInvitations")).catch((error) => {
+          console.error("Error loading guestInvitations:", error);
+          return null;
+        }),
+      ]);
 
-      const bookingsData = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      const invitedBookingIds = invitationsSnapshot
+        ? new Set<string>(
+            invitationsSnapshot.docs
+              .map((doc) => doc.data().bookingDocumentId)
+              .filter((id): id is string => typeof id === "string"),
+          )
+        : undefined;
 
       const validatedBookings = await Promise.all(
-        bookingsData.map((b) => validateBooking(b)),
+        bookingsData.map((b) => validateBooking(b, invitedBookingIds)),
       );
 
       // Sort: valid first, then by payment progress desc, then by bookingId

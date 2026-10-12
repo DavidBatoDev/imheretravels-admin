@@ -3,14 +3,7 @@ import { SheetColumn, SheetData, SheetConfig } from "@/types/sheet-management";
 import { defaultBookingColumns } from "@/lib/default-booking-columns";;
 import { bookingService } from "@/services/booking-service";
 import { useToast } from "@/hooks/use-toast";
-import { db } from "@/lib/firebase";
-import {
-  collection,
-  onSnapshot,
-  query,
-  orderBy,
-  where,
-} from "firebase/firestore";
+import { useBookingsStore } from "@/hooks/use-bookings-store";
 import { allBookingSheetColumns } from "@/app/functions/columns";
 import { functionMap } from "@/app/functions/columns/functions-index";
 
@@ -90,82 +83,38 @@ export function useSheetManagement() {
   // REAL-TIME BOOKING DATA SUBSCRIPTION
   // ============================================================================
 
+  // Bookings come from the shared realtime store (one listener app-wide).
+  // Each new snapshot replaces local data, as the private listener did.
+  const {
+    bookings: storeBookings,
+    isLoading: storeLoading,
+    error: storeError,
+  } = useBookingsStore();
+
   useEffect(() => {
-    console.log(
-      "🔍 [SHEET MANAGEMENT] Setting up real-time booking data subscription..."
-    );
+    if (storeError) {
+      setError(`Failed to fetch bookings: ${storeError.message}`);
+      setIsLoading(false);
+      return;
+    }
+    if (storeLoading) return;
 
-    const unsubscribeBookings = onSnapshot(
-      query(collection(db, "bookings")),
-      (querySnapshot) => {
-        const bookings = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as SheetData[];
-
-        // Sort bookings numerically by ID to fix the "10" appearing after "1" issue
-        const sortedBookings = bookings.sort((a, b) => {
-          const aId = parseInt(a.id);
-          const bId = parseInt(b.id);
-          if (isNaN(aId) && isNaN(bId)) return 0;
-          if (isNaN(aId)) return 1;
-          if (isNaN(bId)) return -1;
-          return aId - bId;
-        });
-
-        console.log(
-          `✅ [SHEET MANAGEMENT] Received ${sortedBookings.length} bookings from Firestore sorted numerically by ID:`,
-          {
-            bookingCount: sortedBookings.length,
-            firstBookingKeys:
-              sortedBookings.length > 0 ? Object.keys(sortedBookings[0]) : [],
-            timestamp: new Date().toISOString(),
-          }
-        );
-
-        // Debug: Log each booking to see what fields are present
-        sortedBookings.forEach((booking, index) => {
-          const fieldCount = Object.keys(booking).length;
-          const nonEssentialFields = Object.keys(booking).filter(
-            (key) => key !== "id" && key !== "createdAt" && key !== "updatedAt"
-          );
-          const hasNullFields = nonEssentialFields.some(
-            (key) => booking[key] === null
-          );
-          // console.log(
-          //   `📊 Booking ${index + 1} (ID: ${
-          //     booking.id
-          //   }): ${fieldCount} fields, Non-essential: [${nonEssentialFields.join(
-          //     ", "
-          //   )}]${hasNullFields ? " (has null fields)" : ""}`
-          // );
-
-          // Log null fields specifically
-          if (hasNullFields) {
-            const nullFields = nonEssentialFields.filter(
-              (key) => booking[key] === null
-            );
-            // console.log(`  🔍 Null fields: [${nullFields.join(", ")}]`);
-          }
-        });
-
-        setData(sortedBookings);
-        setIsLoading(false);
-        setError(null);
-      },
-      (error) => {
-        console.error("❌ Error listening to bookings:", error);
-        setError(`Failed to fetch bookings: ${error.message}`);
-        setIsLoading(false);
+    // Sort bookings numerically by ID to fix the "10" appearing after "1" issue
+    const sortedBookings = ([...storeBookings] as unknown as SheetData[]).sort(
+      (a, b) => {
+        const aId = parseInt(a.id);
+        const bId = parseInt(b.id);
+        if (isNaN(aId) && isNaN(bId)) return 0;
+        if (isNaN(aId)) return 1;
+        if (isNaN(bId)) return -1;
+        return aId - bId;
       }
     );
 
-    // Cleanup subscription on unmount
-    return () => {
-      console.log("🧹 Cleaning up booking data subscription");
-      unsubscribeBookings();
-    };
-  }, []);
+    setData(sortedBookings);
+    setIsLoading(false);
+    setError(null);
+  }, [storeBookings, storeLoading, storeError]);
 
   // ============================================================================
   // DATA MANAGEMENT METHODS

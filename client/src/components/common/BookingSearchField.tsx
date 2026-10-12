@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { collection, getDocs } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { getBookingsOnce } from "@/hooks/use-bookings-store";
 import Fuse from "fuse.js";
 import { Input } from "@/components/ui/input";
 import { Search, X, Loader2 } from "lucide-react";
@@ -46,13 +45,14 @@ export default function BookingSearchField({
     if (loaded || loading) return;
     setLoading(true);
     try {
-      const snap = await getDocs(collection(db, "bookings"));
+      // Read once from the shared bookings store (usually already warm).
+      const bookings = await getBookingsOnce();
       setItems(
-        snap.docs.map((d) => {
-          const x = d.data() as any;
+        bookings.map((b) => {
+          const x = b as any;
           return {
-            bookingDocId: d.id,
-            bookingId: x.bookingId || x.bookingCode || d.id,
+            bookingDocId: b.id,
+            bookingId: x.bookingId || x.bookingCode || b.id,
             fullName: x.fullName || `${x.firstName ?? ""} ${x.lastName ?? ""}`.trim(),
             emailAddress: x.emailAddress || "",
             tourPackageName: x.tourPackageName || "",

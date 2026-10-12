@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useCallback, useEffect, memo } from "react";
+import { getBookingsOnce } from "@/hooks/use-bookings-store";
 // Import react-data-grid components
 // @ts-expect-error - react-data-grid v7 has incorrect type definitions
 import { DataGrid } from "react-data-grid";
@@ -35,7 +36,6 @@ import {
 } from "@/types/version-history";
 import { SheetColumn, SheetData } from "@/types/sheet-management";
 import { bookingVersionHistoryService } from "@/services/booking-version-history-service";
-import { bookingService } from "@/services/booking-service";
 
 // Define types manually since the package types are not matching
 type Column<TRow> = {
@@ -175,9 +175,10 @@ export default function BookingVersionHistoryGrid({
           selectedVersionId
         );
 
-        // Fetch the latest bookings to avoid stale snapshots after restores or new inserts
+        // Latest bookings from the shared realtime store (avoids stale
+        // snapshots after restores or new inserts without a full refetch)
         const latestBookings =
-          (await bookingService.getAllBookings()) as SheetData[];
+          (await getBookingsOnce()) as unknown as SheetData[];
 
         const mergedBookingsMap = new Map<string, SheetData>();
         const mergeSource = [...allBookingsData, ...latestBookings];

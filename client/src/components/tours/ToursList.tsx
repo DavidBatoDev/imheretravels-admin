@@ -10,7 +10,7 @@ import {
 import { collection, onSnapshot, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import Fuse from "fuse.js";
-import type { Booking } from "@/types/bookings";
+import { useBookingsStore } from "@/hooks/use-bookings-store";
 import {
   Card,
   CardContent,
@@ -89,7 +89,9 @@ export default function ToursList({ view = "all" }: ToursListProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [allTours, setAllTours] = useState<TourPackage[]>([]); // Full list for client-side search
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  // Bookings come from the shared realtime store (one listener app-wide);
+  // only the tour-matching fields are used, for per-tour counts.
+  const { bookings } = useBookingsStore();
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -215,43 +217,6 @@ export default function ToursList({ view = "all" }: ToursListProps) {
     });
   }, [fuse, searchTerm, statusFilter, view, allTours, nameCollator]);
 
-  // Load bookings data
-  const loadBookings = () => {
-    try {
-      const bookingsQuery = query(collection(db, "bookings"));
-
-      const unsubscribe = onSnapshot(bookingsQuery, (snapshot) => {
-        const bookingData = snapshot.docs.map((doc) => {
-          const data = doc.data();
-          // Convert Firebase Timestamps to JavaScript Date objects
-          return {
-            id: doc.id,
-            ...data,
-            reservationDate: data.reservationDate?.toDate
-              ? data.reservationDate.toDate()
-              : new Date(data.reservationDate),
-            tourDate: data.tourDate?.toDate
-              ? data.tourDate.toDate()
-              : new Date(data.tourDate),
-            returnDate: data.returnDate?.toDate
-              ? data.returnDate.toDate()
-              : data.returnDate
-                ? new Date(data.returnDate)
-                : null,
-          };
-        }) as Booking[];
-
-        setBookings(bookingData);
-        console.log("Loaded bookings:", bookingData.length, bookingData);
-      });
-
-      return unsubscribe;
-    } catch (error) {
-      console.error("Error loading bookings:", error);
-      return () => {}; // Return empty function as fallback
-    }
-  };
-
   // Load tours with real-time updates
   const loadTours = () => {
     try {
@@ -307,14 +272,10 @@ export default function ToursList({ view = "all" }: ToursListProps) {
 
   useEffect(() => {
     const unsubscribeTours = loadTours();
-    const unsubscribeBookings = loadBookings();
 
     return () => {
       if (unsubscribeTours) {
         unsubscribeTours();
-      }
-      if (unsubscribeBookings) {
-        unsubscribeBookings();
       }
     };
   }, []); // Only load on mount, filtering is now client-side

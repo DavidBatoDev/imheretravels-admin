@@ -33,7 +33,17 @@ import {
 } from "@/components/transactions/TransactionFilterDialog";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
+import {
+  collection,
+  query,
+  orderBy,
+  onSnapshot,
+  limit,
+  where,
+  doc,
+  getDoc,
+  getCountFromServer,
+} from "firebase/firestore";
 import {
   toCsv,
   downloadCsv,
@@ -146,6 +156,8 @@ interface Transaction {
   };
 }
 
+const PAGE_SIZE = 100;
+
 function TransactionsPageContent() {
   const [data, setData] = useState<Transaction[]>([]);
   const [stats, setStats] = useState({
@@ -186,6 +198,25 @@ function TransactionsPageContent() {
     "all" | "stripe"
   >("all");
   const [hideCancelled, setHideCancelled] = useState(true);
+
+  // The default view (All tab, no search/filters) loads the newest
+  // PAGE_SIZE transactions; "Load more" grows the window. Search, tab and
+  // advanced filters, and CSV export all work client-side over the full list,
+  // so any of them switches the listener to the full collection.
+  const [pageLimit, setPageLimit] = useState(PAGE_SIZE);
+  const [exportRequested, setExportRequested] = useState(false);
+  const needsFullData =
+    !!searchQuery ||
+    activeTab !== "All" ||
+    activeFilters.length > 0 ||
+    exportRequested;
+  const listenerLimit = needsFullData ? null : pageLimit;
+  // Window the current `data` was loaded with (undefined until first load).
+  const [loadedLimit, setLoadedLimit] = useState<number | null | undefined>(
+    undefined,
+  );
+  const isFullDataLoaded = loadedLimit === null;
+  const hasMore = loadedLimit != null && data.length >= loadedLimit;
 
   // CSV export filtered by selected payment status
   const [isExporting, setIsExporting] = useState(false);
@@ -358,7 +389,14 @@ function TransactionsPageContent() {
   useEffect(() => {
     // Set up realtime listener for transactions
     const paymentsRef = collection(db, "stripePayments");
-    const q = query(paymentsRef, orderBy("timestamps.createdAt", "desc"));
+    const q =
+      listenerLimit === null
+        ? query(paymentsRef, orderBy("timestamps.createdAt", "desc"))
+        : query(
+            paymentsRef,
+            orderBy("timestamps.createdAt", "desc"),
+            limit(listenerLimit),
+          );
 
     const unsubscribe = onSnapshot(
       q,
@@ -369,27 +407,7 @@ function TransactionsPageContent() {
         })) as Transaction[];
 
         setData(payments);
-
-        // Calculate stats in realtime
-        const calculatedStats = {
-          all: payments.length,
-          reservationFee: payments.filter(
-            (p: any) => p.payment?.type === "reservationFee",
-          ).length,
-          installment: payments.filter(
-            (p: any) => p.payment?.type === "installment",
-          ).length,
-          pending: payments.filter((p: any) =>
-            [
-              "pending",
-              "reserve_pending",
-              "reservation_pending",
-              "installment_pending",
-            ].includes(p.payment?.status),
-          ).length,
-        };
-
-        setStats((prev) => ({ ...prev, ...calculatedStats }));
+        setLoadedLimit(listenerLimit);
         setLoading(false);
       },
       (error) => {
@@ -408,7 +426,97 @@ function TransactionsPageContent() {
     return () => {
       unsubscribe();
     };
-  }, [toast]);
+  }, [toast, listenerLimit]);
+
+  // Tab counts. With the full list loaded they're computed from it (as
+  // before). With only a page loaded they're aggregated server-side over the
+  // same ordered query, so docs the list can't show aren't counted.
+  const [serverStatsLoaded, setServerStatsLoaded] = useState(false);
+  useEffect(() => {
+    if (isFullDataLoaded) {
+      setStats((prev) => ({
+        ...prev,
+        all: data.length,
+        reservationFee: data.filter(
+          (p: any) => p.payment?.type === "reservationFee",
+        ).length,
+        installment: data.filter((p: any) => p.payment?.type === "installment")
+          .length,
+        pending: data.filter((p: any) =>
+          PENDING_STATUSES.includes(p.payment?.status),
+        ).length,
+      }));
+      return;
+    }
+    if (loadedLimit === undefined) return;
+
+    let active = true;
+    // Debounced: a burst of payment updates triggers one recount.
+    const timer = setTimeout(() => {
+      const paymentsRef = collection(db, "stripePayments");
+      const ordered = orderBy("timestamps.createdAt", "asc");
+      Promise.all([
+        getCountFromServer(query(paymentsRef, ordered)),
+        getCountFromServer(
+          query(
+            paymentsRef,
+            where("payment.type", "==", "reservationFee"),
+            ordered,
+          ),
+        ),
+        getCountFromServer(
+          query(paymentsRef, where("payment.type", "==", "installment"), ordered),
+        ),
+        getCountFromServer(
+          query(
+            paymentsRef,
+            where("payment.status", "in", PENDING_STATUSES),
+            ordered,
+          ),
+        ),
+      ])
+        .then(([all, reservationFee, installment, pending]) => {
+          if (!active) return;
+          setStats((prev) => ({
+            ...prev,
+            all: all.data().count,
+            reservationFee: reservationFee.data().count,
+            installment: installment.data().count,
+            pending: pending.data().count,
+          }));
+          setServerStatsLoaded(true);
+        })
+        .catch((error) => {
+          console.error("Error counting transactions:", error);
+        });
+    }, 500);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [data, isFullDataLoaded, loadedLimit]);
+
+  // Deep links to a transaction outside the loaded page: fetch it directly.
+  useEffect(() => {
+    if (!deepLinkPaymentId || deepLinkPaymentId === handledDeepLinkId) return;
+    if (loading || data.some((t) => t.id === deepLinkPaymentId)) return;
+    let active = true;
+    getDoc(doc(db, "stripePayments", deepLinkPaymentId))
+      .then((snap) => {
+        if (!active) return;
+        // Mark handled even when missing, so it isn't refetched per snapshot.
+        setHandledDeepLinkId(deepLinkPaymentId);
+        if (!snap.exists()) return;
+        setSelectedTransaction({ id: snap.id, ...snap.data() } as Transaction);
+        setViewDialogOpen(true);
+      })
+      .catch((error) => {
+        console.error("Error loading linked transaction:", error);
+      });
+    return () => {
+      active = false;
+    };
+  }, [deepLinkPaymentId, handledDeepLinkId, loading, data]);
 
   const handleDelete = async () => {
     if (!transactionToDelete) return;
@@ -1052,7 +1160,12 @@ function TransactionsPageContent() {
               )}
             </Button>
 
-            <Popover>
+            <Popover
+              onOpenChange={(open) => {
+                // Export works over every transaction, not just the page.
+                if (open) setExportRequested(true);
+              }}
+            >
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
@@ -1113,11 +1226,18 @@ function TransactionsPageContent() {
                     className="w-full gap-2"
                     onClick={handleExportFiltered}
                     disabled={
-                      isExporting || loading || exportStatuses.length === 0
+                      isExporting ||
+                      loading ||
+                      !isFullDataLoaded ||
+                      exportStatuses.length === 0
                     }
                   >
                     <Download className="h-3.5 w-3.5" />
-                    {isExporting ? "Exporting..." : "Export CSV"}
+                    {isExporting
+                      ? "Exporting..."
+                      : !isFullDataLoaded
+                        ? "Loading all transactions..."
+                        : "Export CSV"}
                   </Button>
                 </div>
               </PopoverContent>
@@ -1408,15 +1528,19 @@ function TransactionsPageContent() {
           <div className="border-t border-border px-4 py-3 bg-muted/50 flex items-center justify-between text-sm text-muted-foreground">
             <div>
               Viewing {combinedData.length > 0 ? 1 : 0}-{combinedData.length} of{" "}
-              {data.length} items
+              {isFullDataLoaded || !serverStatsLoaded ? data.length : stats.all}{" "}
+              items
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" disabled>
-                Previous
-              </Button>
-              <Button variant="outline" size="sm" disabled>
-                Next
-              </Button>
+              {hasMore && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPageLimit((n) => n + PAGE_SIZE)}
+                >
+                  Load more
+                </Button>
+              )}
             </div>
           </div>
         </div>

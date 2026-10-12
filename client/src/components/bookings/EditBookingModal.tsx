@@ -1119,33 +1119,24 @@ export default function EditBookingModal({
 
       const optionsMap: Record<string, string[]> = {};
 
-      for (const col of columns) {
-        if (col.dataType === "select" && col.loadOptions) {
-          try {
-            console.log(
-              `🔄 [EDIT BOOKING MODAL] Loading options for ${col.columnName}...`,
-            );
-            // Pass formData as context for context-aware options
-            const options = await col.loadOptions({ formData });
-            console.log(
-              `✅ [EDIT BOOKING MODAL] Loaded ${options.length} options for ${col.columnName}:`,
-              options,
-            );
-            optionsMap[col.id] = options;
-          } catch (error) {
-            console.error(
-              `Failed to load options for ${col.columnName}:`,
-              error,
-            );
-            optionsMap[col.id] = col.options || [];
-          }
-        }
-      }
-
-      console.log(
-        "📦 [EDIT BOOKING MODAL] All dynamic options loaded:",
-        optionsMap,
+      // Load all select options in parallel (was one await per column)
+      await Promise.all(
+        columns
+          .filter((col) => col.dataType === "select" && col.loadOptions)
+          .map(async (col) => {
+            try {
+              // Pass formData as context for context-aware options
+              optionsMap[col.id] = await col.loadOptions!({ formData });
+            } catch (error) {
+              console.error(
+                `Failed to load options for ${col.columnName}:`,
+                error,
+              );
+              optionsMap[col.id] = col.options || [];
+            }
+          }),
       );
+
       setDynamicOptions(optionsMap);
     };
 

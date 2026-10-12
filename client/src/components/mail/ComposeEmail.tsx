@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { staffFetch, fetchAttachmentDataUrl } from "@/lib/staff-fetch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmailAutocomplete } from "@/components/ui/email-autocomplete";
@@ -455,7 +456,7 @@ export function ComposeEmail({
           if (replyToEmail.id && !loadedAttachments) {
             // Use messageId if available, otherwise use id
             const messageIdToFetch = replyToEmail.messageId || replyToEmail.id;
-            fetch(`/api/gmail/emails/${messageIdToFetch}`)
+            staffFetch(`/api/gmail/emails/${messageIdToFetch}`)
               .then((res) => res.json())
               .then((data) => {
                 if (data.success && data.data) {
@@ -600,6 +601,10 @@ export function ComposeEmail({
       sanitizedHTML = sanitizedHTML.replace(
         /<img([^>]*)src="cid:([^"]+)"([^>]*)>/gi,
         (match, beforeSrc, cidValue, afterSrc) => {
+          // Placeholder shown until the image loads, or when it can't be found
+          const placeholderSrc =
+            "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23999' font-size='12'%3EImage%3C/text%3E%3C/svg%3E";
+
           // For reply emails, try to find the attachment
           if (replyToEmail?.id && attachmentsToUse) {
             const cleanCid = cidValue.replace(/[<>]/g, "");
@@ -614,20 +619,18 @@ export function ComposeEmail({
             });
 
             if (attachment) {
-              // Use the attachment API endpoint - use messageId if available
+              // The attachment API needs a staff token, which an <img src>
+              // can't send. Mark the image; hydrateAttachmentImages swaps in a
+              // data URL once the editor holds the HTML.
               const emailIdForAttachment =
                 replyToEmail.messageId || replyToEmail.id;
-              const attachmentUrl = `/api/gmail/attachments/${emailIdForAttachment}/${attachment.attachmentId}?preview=true`;
               return match.replace(
                 /src="cid:[^"]+"/gi,
-                `src="${attachmentUrl}"`
+                `src="${placeholderSrc}" data-gmail-attachment="${emailIdForAttachment}/${attachment.attachmentId}"`
               );
             }
           }
 
-          // If no attachment found or not a reply, use placeholder
-          const placeholderSrc =
-            "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23999' font-size='12'%3EImage%3C/text%3E%3C/svg%3E";
           return match.replace(/src="cid:[^"]+"/gi, `src="${placeholderSrc}"`);
         }
       );
@@ -641,10 +644,37 @@ export function ComposeEmail({
         if (editorRef.current) {
           editorRef.current.innerHTML = sanitizedHTML;
           setBody(sanitizedHTML);
+          void hydrateAttachmentImages(editorRef.current);
         }
       }, 0);
     }
   }, [initialBody, replyToEmail, loadedAttachments]);
+
+  // Replace each marked inline image with its data URL, then sync the body.
+  const hydrateAttachmentImages = async (editor: HTMLDivElement) => {
+    const images = Array.from(
+      editor.querySelectorAll<HTMLImageElement>("img[data-gmail-attachment]")
+    );
+    if (images.length === 0) return;
+
+    await Promise.all(
+      images.map(async (img) => {
+        const [messageId, attachmentId] = (
+          img.dataset.gmailAttachment || ""
+        ).split("/");
+        try {
+          img.src = await fetchAttachmentDataUrl(messageId, attachmentId);
+        } catch (error) {
+          console.warn("Could not load inline image", error);
+        }
+        img.removeAttribute("data-gmail-attachment");
+      })
+    );
+
+    if (editorRef.current === editor) {
+      setBody(editor.innerHTML);
+    }
+  };
 
   // Manual save draft function (for explicit saves)
   const saveDraftManually = async () => {
@@ -657,7 +687,7 @@ export function ComposeEmail({
     setDraftStatus("saving");
 
     try {
-      const response = await fetch("/api/gmail/drafts", {
+      const response = await staffFetch("/api/gmail/drafts", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -723,7 +753,7 @@ export function ComposeEmail({
     setDraftStatus("saving");
 
     try {
-      const response = await fetch("/api/gmail/drafts", {
+      const response = await staffFetch("/api/gmail/drafts", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -824,7 +854,7 @@ export function ComposeEmail({
   const cleanupDraft = async () => {
     if (draftId) {
       try {
-        await fetch(`/api/gmail/drafts?draftId=${draftId}`, {
+        await staffFetch(`/api/gmail/drafts?draftId=${draftId}`, {
           method: "DELETE",
         });
         console.log("Draft cleaned up:", draftId);
@@ -892,7 +922,7 @@ export function ComposeEmail({
         })
       );
 
-      const response = await fetch("/api/gmail/send", {
+      const response = await staffFetch("/api/gmail/send", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

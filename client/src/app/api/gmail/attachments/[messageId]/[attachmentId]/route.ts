@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import GmailApiService from "@/lib/gmail/gmail-api-service";
+import { requireStaff } from "@/lib/require-staff";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ messageId: string; attachmentId: string }> }
 ) {
+  const staff = await requireStaff(request.headers.get("authorization"));
+  if (!staff.ok) {
+    return NextResponse.json(
+      { success: false, error: staff.error },
+      { status: staff.status },
+    );
+  }
+
   try {
     const { messageId, attachmentId } = await params;
     const { searchParams } = new URL(request.url);

@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import GmailApiService from "@/lib/gmail/gmail-api-service";
+import { requireStaff } from "@/lib/require-staff";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const staff = await requireStaff(request.headers.get("authorization"));
+  if (!staff.ok) {
+    return NextResponse.json(
+      { success: false, error: staff.error },
+      { status: staff.status },
+    );
+  }
+
   try {
     const { id: messageId } = await params;
 
@@ -48,6 +57,14 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const staff = await requireStaff(request.headers.get("authorization"));
+  if (!staff.ok) {
+    return NextResponse.json(
+      { success: false, error: staff.error },
+      { status: staff.status },
+    );
+  }
+
   try {
     const { id: messageId } = await params;
     const body = await request.json();

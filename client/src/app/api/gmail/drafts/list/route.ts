@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
 import { simplifyGmailHtml } from "@/utils/html-parser";
+import { requireStaff } from "@/lib/require-staff";
 
 export async function GET(request: NextRequest) {
+  const staff = await requireStaff(request.headers.get("authorization"));
+  if (!staff.ok) {
+    return NextResponse.json(
+      { success: false, error: staff.error },
+      { status: staff.status },
+    );
+  }
+
   try {
     // Initialize OAuth2 client
     const oauth2Client = new google.auth.OAuth2(

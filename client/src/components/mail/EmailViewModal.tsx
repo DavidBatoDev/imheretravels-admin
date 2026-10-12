@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { staffFetch, fetchAttachmentObjectUrl } from "@/lib/staff-fetch";
 import {
   Dialog,
   DialogContent,
@@ -9,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { ImagePreviewModal } from "./ImagePreviewModal";
 import { PDFPreviewModal } from "./PDFPreviewModal";
+import { AttachmentThumbnail } from "./AttachmentThumbnail";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -555,7 +557,7 @@ export function EmailViewModal({
   const fetchThreadEmails = async (threadId: string) => {
     setIsLoadingThread(true);
     try {
-      const response = await fetch(`/api/gmail/threads/${threadId}`, {
+      const response = await staffFetch(`/api/gmail/threads/${threadId}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -1004,7 +1006,7 @@ export function EmailViewModal({
     }
 
     try {
-      const response = await fetch(
+      const response = await staffFetch(
         `/api/gmail/drafts?draftId=${encodeURIComponent(draftId)}`,
         {
           method: "DELETE",
@@ -1082,7 +1084,7 @@ export function EmailViewModal({
     try {
       const latestEmail = threadEmails[threadEmails.length - 1];
 
-      const response = await fetch("/api/gmail/drafts", {
+      const response = await staffFetch("/api/gmail/drafts", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1212,7 +1214,7 @@ export function EmailViewModal({
         })
       );
 
-      const response = await fetch(apiEndpoint, {
+      const response = await staffFetch(apiEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1242,7 +1244,7 @@ export function EmailViewModal({
         // If there's a saved draft for this compose, delete it now to avoid stale drafts
         try {
           if (draftId) {
-            await fetch(
+            await staffFetch(
               `/api/gmail/drafts?draftId=${encodeURIComponent(draftId)}`,
               {
                 method: "DELETE",
@@ -1287,9 +1289,13 @@ export function EmailViewModal({
         attachment.mimeType
       );
 
-      // If it's a PDF, show in modal
+      // If it's a PDF, show in modal. The preview is fetched with the staff
+      // token and shown from a blob: URL (revoked when the modal closes).
       if (attachment.mimeType === "application/pdf") {
-        const url = `/api/gmail/attachments/${messageId}/${attachment.attachmentId}?preview=true`;
+        const url = await fetchAttachmentObjectUrl(
+          messageId,
+          attachment.attachmentId
+        );
         setPreviewPDF({
           url,
           filename: attachment.filename,
@@ -1297,26 +1303,22 @@ export function EmailViewModal({
         return;
       }
 
-      // If it's an image, preload it first then show in modal
+      // If it's an image, load it first then show in modal
       if (attachment.mimeType?.startsWith("image/")) {
-        const url = `/api/gmail/attachments/${messageId}/${attachment.attachmentId}?preview=true`;
-
-        // Create a new image to preload
-        const img = new Image();
-        img.onload = () => {
-          // Image is now in browser cache, safe to open modal
-          setPreviewAttachment({
-            url,
-            mimeType: attachment.mimeType,
-            filename: attachment.filename,
-          });
-        };
-        img.src = url;
+        const url = await fetchAttachmentObjectUrl(
+          messageId,
+          attachment.attachmentId
+        );
+        setPreviewAttachment({
+          url,
+          mimeType: attachment.mimeType,
+          filename: attachment.filename,
+        });
         return;
       }
 
       // For other files, download them
-      const response = await fetch(
+      const response = await staffFetch(
         `/api/gmail/attachments/${messageId}/${attachment.attachmentId}`
       );
 
@@ -1380,23 +1382,17 @@ export function EmailViewModal({
     if (mimeType.startsWith("image/")) {
       return (
         <div className="w-full h-full rounded-lg overflow-hidden bg-gray-100">
-          <img
-            src={`/api/gmail/attachments/${messageId}/${attachmentId}?preview=true`}
+          <AttachmentThumbnail
+            messageId={messageId}
+            attachmentId={attachmentId}
             alt={filename}
             className="w-full h-full object-cover"
-            onError={(e) => {
-              // Fallback to generic icon if image fails to load
-              const target = e.target as HTMLImageElement;
-              target.style.display = "none";
-              const parent = target.parentElement;
-              if (parent) {
-                parent.innerHTML = `
-                  <div class="w-12 h-12 bg-gradient-to-br from-green-100 to-green-200 rounded-lg flex items-center justify-center">
-                    <div class="text-green-700 font-bold text-xs">IMG</div>
-                  </div>
-                `;
-              }
-            }}
+            fallback={
+              // Generic icon if the image fails to load
+              <div className="w-12 h-12 bg-gradient-to-br from-green-100 to-green-200 rounded-lg flex items-center justify-center">
+                <div className="text-green-700 font-bold text-xs">IMG</div>
+              </div>
+            }
           />
         </div>
       );
@@ -3034,7 +3030,10 @@ export function EmailViewModal({
       {/* Image Preview Modal */}
       <ImagePreviewModal
         isOpen={!!previewAttachment}
-        onClose={() => setPreviewAttachment(null)}
+        onClose={() => {
+          if (previewAttachment) URL.revokeObjectURL(previewAttachment.url);
+          setPreviewAttachment(null);
+        }}
         imageUrl={previewAttachment?.url || ""}
         filename={previewAttachment?.filename || ""}
         mimeType={previewAttachment?.mimeType || ""}
@@ -3043,7 +3042,10 @@ export function EmailViewModal({
       {/* PDF Preview Modal */}
       <PDFPreviewModal
         isOpen={!!previewPDF}
-        onClose={() => setPreviewPDF(null)}
+        onClose={() => {
+          if (previewPDF) URL.revokeObjectURL(previewPDF.url);
+          setPreviewPDF(null);
+        }}
         pdfUrl={previewPDF?.url || ""}
         filename={previewPDF?.filename || ""}
       />

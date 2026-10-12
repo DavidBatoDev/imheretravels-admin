@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/firebase";
 import {
+  db,
   doc,
   getDoc,
   collection,
@@ -8,7 +8,7 @@ import {
   where,
   getDocs,
   limit,
-} from "firebase/firestore";
+} from "@/lib/server-firestore";
 
 export async function GET(
   request: NextRequest,

@@ -3,8 +3,8 @@
 // It uses the same createBookingData function as the main booking.
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/firebase";
 import {
+  db,
   collection,
   doc,
   getDoc,
@@ -15,11 +15,11 @@ import {
   Timestamp,
   query,
   where,
-} from "firebase/firestore";
+} from "@/lib/server-firestore";
 import {
   validateGuestInvitation,
   checkDuplicateGuestBooking,
-} from "@/lib/guest-booking-utils";
+} from "@/lib/guest-booking-server";
 import {
   createBookingData,
   normalizeTourDateToUTCPlus8Nine,

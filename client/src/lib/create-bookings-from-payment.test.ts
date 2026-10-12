@@ -13,12 +13,12 @@ const makeDocRef = (collectionPath: string, id: string): DocRef => ({
   collectionPath,
 });
 
-vi.mock("@/lib/firebase", () => ({
-  db: { __fake: true },
-}));
+vi.mock("server-only", () => ({}));
 
-vi.mock("firebase/firestore", () => {
+vi.mock("@/lib/server-firestore", () => {
   return {
+    db: { __fake: true },
+
     // Refs
     collection: (_db: unknown, collectionPath: string) => ({
       __collection: true,

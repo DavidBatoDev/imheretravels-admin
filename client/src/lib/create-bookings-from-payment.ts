@@ -3,8 +3,8 @@
 // and the /api/stripe-payments/create-booking endpoint (client-confirmed path)
 // so the two flows stay in sync.
 
-import { db } from "@/lib/firebase";
 import {
+  db,
   collection,
   query,
   where,
@@ -15,7 +15,7 @@ import {
   getDoc,
   serverTimestamp,
   Timestamp,
-} from "firebase/firestore";
+} from "@/lib/server-firestore";
 import {
   createBookingData,
   normalizeTourDateToUTCPlus8Nine,

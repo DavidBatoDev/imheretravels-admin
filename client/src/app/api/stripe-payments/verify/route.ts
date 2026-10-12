@@ -1,7 +1,6 @@
 // /api/stripe-payments/verify/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/firebase";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { db, collection, query, where, getDocs } from "@/lib/server-firestore";
 
 export async function POST(req: NextRequest) {
   try {

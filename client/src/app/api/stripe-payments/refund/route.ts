@@ -1,13 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/firebase";
-import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { db, doc, getDoc, updateDoc, serverTimestamp } from "@/lib/server-firestore";
 import Stripe from "stripe";
+import { requireStaff } from "@/lib/require-staff";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
     apiVersion: "2025-10-29.clover"
 });
 
 export async function POST(req: NextRequest) {
+  const staff = await requireStaff(req.headers.get("authorization"));
+  if (!staff.ok) {
+    return NextResponse.json(
+      { success: false, error: staff.error },
+      { status: staff.status },
+    );
+  }
+
   try {
     const { paymentDocId } = await req.json();
 

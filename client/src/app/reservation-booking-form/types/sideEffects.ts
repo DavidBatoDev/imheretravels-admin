@@ -31,17 +31,18 @@ export type HttpPort = {
   ) => Promise<{ ok: boolean; data: T }>;
 };
 
-export type FirestorePort = {
-  getDocById: <T = JsonObject>(
-    collectionName: string,
-    id: string,
-  ) => Promise<{ exists: boolean; data: T | null }>;
-  updateDocById: (
-    collectionName: string,
-    id: string,
-    payload: JsonObject,
-  ) => Promise<void>;
-  deleteDocById: (collectionName: string, id: string) => Promise<void>;
+/**
+ * Reservation operations the reuse flow needs, done by the server
+ * (api/public/reservations). Replaces a generic Firestore port that let the
+ * browser read, update or delete any document.
+ */
+export type ReservationsPort = {
+  /** Payment plan of the booking linked to this reservation, or null. */
+  getBookingPaymentPlan: (paymentDocId: string) => Promise<string | null>;
+  /** Re-check the status against Stripe; returns the resulting status. */
+  syncStatus: (paymentDocId: string) => Promise<string>;
+  /** Delete an unpaid draft. */
+  discard: (paymentDocId: string) => Promise<void>;
 };
 
 export type ReservationSideEffects = {
@@ -49,5 +50,5 @@ export type ReservationSideEffects = {
   navigation: NavigationPort;
   notification: NotificationPort;
   http: HttpPort;
-  firestore: FirestorePort;
+  reservations: ReservationsPort;
 };

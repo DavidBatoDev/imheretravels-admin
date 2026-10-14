@@ -8,6 +8,7 @@ import {
   serverTimestamp,
   getDoc,
 } from "@/lib/server-firestore";
+import { priceReservation } from "@/lib/reservation-pricing";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
@@ -21,12 +22,11 @@ export async function POST(req: NextRequest) {
       tourPackageName,
     } = await req.json();
 
-    // Validate required fields
-    if (!paymentDocId || !amountGBP) {
+    // Validate required fields. amountGBP is only logged: the charge is
+    // priced on the server from the draft's tour and date.
+    if (!paymentDocId) {
       return NextResponse.json(
-        {
-          error: "Missing required fields: paymentDocId and amountGBP are required",
-        },
+        { error: "Missing required field: paymentDocId" },
         { status: 400 }
       );
     }
@@ -44,6 +44,35 @@ export async function POST(req: NextRequest) {
 
     const paymentData = paymentDocSnap.data();
     const stripeIntentId = paymentData?.payment?.stripeIntentId;
+
+    const paymentStatus = paymentData?.payment?.status;
+    if (
+      paymentData?.booking?.isGuest ||
+      (paymentStatus && paymentStatus !== "reserve_pending" && paymentStatus !== "pending")
+    ) {
+      return NextResponse.json(
+        { error: "This reservation can no longer be changed", cannotUpdate: true },
+        { status: 400 }
+      );
+    }
+
+    const tourPackageSnap = paymentData?.tour?.packageId
+      ? await getDoc(doc(db, "tourPackages", paymentData.tour.packageId))
+      : null;
+    const price = priceReservation(
+      tourPackageSnap?.exists() ? tourPackageSnap.data() : undefined,
+      paymentData?.tour?.date,
+      bookingType || paymentData?.booking?.type || "Single Booking",
+      Number(numberOfGuests ?? paymentData?.booking?.groupSize ?? 1),
+    );
+    if (!price.ok) {
+      return NextResponse.json({ error: price.error }, { status: 400 });
+    }
+    if (amountGBP !== undefined && Number(amountGBP) !== price.amount) {
+      console.warn(
+        `update-payment: browser sent £${amountGBP}, server price is £${price.amount} (${paymentDocId})`,
+      );
+    }
 
     if (!stripeIntentId) {
       return NextResponse.json(
@@ -73,7 +102,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Convert GBP → pence (Stripe expects smallest currency unit)
-    const amountPence = Math.round(amountGBP * 100);
+    const amountPence = Math.round(price.amount * 100);
 
     console.log("🔄 Updating payment intent:", {
       paymentIntentId: stripeIntentId,
@@ -98,9 +127,10 @@ export async function POST(req: NextRequest) {
 
     // Update Firestore document
     await updateDoc(paymentDocRef, {
-      "payment.amount": amountGBP,
-      "booking.type": bookingType || "Single Booking",
-      "booking.groupSize": numberOfGuests || 1,
+      "payment.amount": price.amount,
+      "booking.type": bookingType || paymentData?.booking?.type || "Single Booking",
+      "booking.groupSize": price.travellers,
+      ...(price.originalPrice ? { "payment.originalPrice": price.originalPrice } : {}),
       "timestamps.updatedAt": serverTimestamp(),
     });
 
@@ -109,7 +139,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       paymentIntentId: updatedIntent.id,
-      amount: amountGBP,
+      amount: price.amount,
       message: "Payment intent updated successfully",
     });
   } catch (err: any) {

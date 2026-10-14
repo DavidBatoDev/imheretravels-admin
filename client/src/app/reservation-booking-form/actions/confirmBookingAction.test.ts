@@ -1,20 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { runConfirmBookingAction } from "./confirmBookingAction";
 
-const getDocsMock = vi.fn(async () => ({ empty: true, docs: [] }));
-const getDocMock = vi.fn(async () => ({
-  exists: () => true,
-  data: () => ({ bookingDocumentIds: ["booking-doc-1"] }),
+const getReservationMock = vi.fn(async (_id: string) => ({
+  id: "doc-1",
+  bookingDocumentIds: ["booking-doc-1"],
 }));
+vi.mock("../api/reservationsApi", () => ({ getReservation: getReservationMock }));
 
-vi.mock("firebase/firestore", () => ({
-  collection: vi.fn(() => ({})),
-  query: vi.fn(() => ({})),
-  where: vi.fn(() => ({})),
-  getDocs: getDocsMock,
-  doc: vi.fn(() => ({})),
-  getDoc: getDocMock,
-}));
+const { runConfirmBookingAction } = await import("./confirmBookingAction");
 
 describe("runConfirmBookingAction", () => {
   it("alerts and returns early when plans are incomplete", async () => {
@@ -22,7 +14,6 @@ describe("runConfirmBookingAction", () => {
     const setConfirmingBooking = vi.fn();
 
     await runConfirmBookingAction({
-      db: {} as any,
       paymentConfirmed: true,
       isLastMinute: false,
       allPlansSelected: false,
@@ -53,7 +44,6 @@ describe("runConfirmBookingAction", () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
 
     await runConfirmBookingAction({
-      db: {} as any,
       paymentConfirmed: false,
       isLastMinute: false,
       allPlansSelected: true,
@@ -96,7 +86,6 @@ describe("runConfirmBookingAction", () => {
       } as any);
 
     await runConfirmBookingAction({
-      db: {} as any,
       paymentConfirmed: true,
       isLastMinute: false,
       allPlansSelected: true,

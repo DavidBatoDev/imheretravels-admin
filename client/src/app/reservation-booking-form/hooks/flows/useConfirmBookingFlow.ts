@@ -1,5 +1,4 @@
 ﻿import { useCallback } from "react";
-import type { Firestore } from "firebase/firestore";
 import type { PersonPaymentPlan } from "../../utils/step3PaymentPlan";
 import { runConfirmBookingAction } from "../../actions/confirmBookingAction";
 
@@ -10,7 +9,6 @@ type PaymentPlanOption = {
 };
 
 type UseConfirmBookingFlowOptions = {
-  db: Firestore;
   paymentConfirmed: boolean;
   isLastMinute: boolean;
   allPlansSelected: boolean;
@@ -27,7 +25,6 @@ type UseConfirmBookingFlowOptions = {
 };
 
 export const useConfirmBookingFlow = ({
-  db,
   paymentConfirmed,
   isLastMinute,
   allPlansSelected,
@@ -44,7 +41,6 @@ export const useConfirmBookingFlow = ({
 }: UseConfirmBookingFlowOptions) => {
   const handleConfirmBooking = useCallback(async () => {
     await runConfirmBookingAction({
-      db,
       paymentConfirmed,
       isLastMinute,
       allPlansSelected,
@@ -64,7 +60,6 @@ export const useConfirmBookingFlow = ({
       },
     });
   }, [
-    db,
     paymentConfirmed,
     isLastMinute,
     allPlansSelected,

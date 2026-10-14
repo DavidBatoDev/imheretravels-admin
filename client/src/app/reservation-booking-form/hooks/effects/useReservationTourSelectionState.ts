@@ -1,5 +1,5 @@
 ﻿import { useEffect } from "react";
-import type { Firestore } from "firebase/firestore";
+import { getReservation } from "../../api/reservationsApi";
 import { calculateDaysBetween } from "../../utils/bookingFlow";
 import {
   buildStripePaymentDocSessionKey,
@@ -13,7 +13,6 @@ type TourPackage = {
 };
 
 type UseReservationTourSelectionStateOptions = {
-  db: Firestore;
   email: string;
   tourPackage: string;
   tourPackages: TourPackage[];
@@ -28,7 +27,6 @@ type UseReservationTourSelectionStateOptions = {
 };
 
 export const useReservationTourSelectionState = ({
-  db,
   email,
   tourPackage,
   tourPackages,
@@ -49,9 +47,7 @@ export const useReservationTourSelectionState = ({
         if (id) {
           (async () => {
             try {
-              const { doc, getDoc } = await import("firebase/firestore");
-              const snap = await getDoc(doc(db, "stripePayments", id));
-              if (snap.exists()) {
+              if (await getReservation(id)) {
                 setPaymentDocId(id);
                 try {
                   replaceWithPaymentId(id);
@@ -106,7 +102,6 @@ export const useReservationTourSelectionState = ({
       setTourDate("");
     }
   }, [
-    db,
     tourPackage,
     tourPackages,
     email,

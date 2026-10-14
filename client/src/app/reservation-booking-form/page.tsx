@@ -5,15 +5,9 @@ export const dynamic = "force-dynamic";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import {
-  addDoc,
-  serverTimestamp,
-  setDoc,
-  doc,
-  collection,
-} from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import StripePayment from "./components/StripePayment";
+import { createReservationDraft } from "./api/reservationsApi";
 import TourSelectionModal from "./components/TourSelectionModal";
 import ExistingPaymentsDialog from "./components/ExistingPaymentsDialog";
 import ReservationProgressHeader from "./components/ReservationProgressHeader";
@@ -186,7 +180,7 @@ const Page = () => {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const sideEffects = createDefaultReservationSideEffects({ db, router });
+  const sideEffects = createDefaultReservationSideEffects({ router });
   const previousStepRef = useRef(step);
   const stepSwipeDirection = step >= previousStepRef.current ? 1 : -1;
   const [step1ValidationAttempted, setStep1ValidationAttempted] =
@@ -259,30 +253,15 @@ const Page = () => {
   // Create a new placeholder stripePayments doc and set session state
   const createPlaceholder = async () => {
     try {
-      const paymentsRef = collection(db, "stripePayments");
-      const newDoc = await addDoc(paymentsRef, {
-        ...getReservationDraftPayload(),
-        timestamps: {
-          createdAt: serverTimestamp(),
-        },
-      });
-
-      // write the id into the document for convenience
-      await setDoc(
-        doc(db, "stripePayments", newDoc.id),
-        {
-          id: newDoc.id,
-        },
-        { merge: true },
-      );
-      setPaymentDocId(newDoc.id);
+      const newDocId = await createReservationDraft(getReservationDraftPayload());
+      setPaymentDocId(newDocId);
       try {
         sessionStorage.setItem(
           `stripe_payment_doc_${email}_${tourPackage}`,
-          newDoc.id,
+          newDocId,
         );
       } catch {}
-      return newDoc.id;
+      return newDocId;
     } catch (err) {
       console.error("Error creating payment placeholder:", err);
       alert("Unable to create payment record. Please try again.");
@@ -388,7 +367,6 @@ const Page = () => {
   });
 
   useReservationTourSelectionState({
-    db,
     email,
     tourPackage,
     tourPackages,
@@ -497,18 +475,8 @@ const Page = () => {
   });
 
   const { handlePaymentSuccess } = usePaymentSuccessFlow({
-    db,
     email,
-    firstName,
-    lastName,
-    birthdate,
-    nationality,
-    bookingType,
-    groupSize,
     tourPackage,
-    tourDate,
-    selectedPackageName: selectedPackage?.name || "",
-    selectedPackageDeposit: (selectedPackage as any)?.deposit || 0,
     completedSteps,
     setCompletedSteps,
     setPaymentConfirmed,
@@ -516,7 +484,6 @@ const Page = () => {
   });
 
   useSessionRestore({
-    db,
     searchParams,
     debug: DEBUG,
     replaceWithPaymentId,
@@ -638,7 +605,6 @@ const Page = () => {
   });
 
   useReservationGuestPersistence({
-    db,
     bookingType,
     additionalGuests,
     email,
@@ -659,12 +625,10 @@ const Page = () => {
   });
 
   const { checkExistingPaymentsAndMaybeProceed } = useExistingPaymentCheck({
-    db,
     email,
     selectedPackageName: selectedPackage?.name || "",
     tourDate,
     replaceWithPaymentId,
-    serverTimestampValue: serverTimestamp(),
     formSlice: {
       validate,
       isCreatingPayment,
@@ -685,7 +649,6 @@ const Page = () => {
     },
   });
   const { handleConfirmBooking } = useConfirmBookingFlow({
-    db,
     paymentConfirmed,
     isLastMinute: availablePaymentTerm.isLastMinute,
     allPlansSelected,

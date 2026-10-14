@@ -84,10 +84,10 @@ const buildBaseInput = () => ({
       getJson: vi.fn(),
       postJson: vi.fn(),
     },
-    firestore: {
-      getDocById: vi.fn(),
-      updateDocById: vi.fn(),
-      deleteDocById: vi.fn(),
+    reservations: {
+      getBookingPaymentPlan: vi.fn(async () => null),
+      syncStatus: vi.fn(async () => "reserve_pending"),
+      discard: vi.fn(),
     },
   },
   pathname: "/reservation-booking-form",

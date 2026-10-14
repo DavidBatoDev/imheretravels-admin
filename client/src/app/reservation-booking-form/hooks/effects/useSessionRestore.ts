@@ -1,6 +1,6 @@
 ﻿import { useEffect } from "react";
 import { getCountries, type Country } from "react-phone-number-input";
-import type { Firestore } from "firebase/firestore";
+import { getReservation, syncReservationStatus } from "../../api/reservationsApi";
 import { deriveCustomerRestoreState } from "../../utils/customerHydration";
 import {
   buildStripePaymentDocSessionKey,
@@ -17,7 +17,6 @@ import {
 import { scheduleGuestsMountHeightSync } from "../../utils/guestUiState";
 
 type UseSessionRestoreOptions = {
-  db: Firestore;
   searchParams: { get: (key: string) => string | null } | null;
   debug: boolean;
   replaceWithPaymentId: (docId: string | null) => void;
@@ -59,7 +58,6 @@ type UseSessionRestoreOptions = {
 };
 
 export const useSessionRestore = ({
-  db,
   searchParams,
   debug,
   replaceWithPaymentId,
@@ -155,11 +153,10 @@ export const useSessionRestore = ({
 
         if (urlPaymentId) {
           try {
-            const { doc, getDoc } = await import("firebase/firestore");
-            const snap = await getDoc(doc(db, "stripePayments", urlPaymentId));
+            const reservation = await getReservation(urlPaymentId);
 
-            if (snap.exists()) {
-              const data = snap.data() as any;
+            if (reservation) {
+              const data = reservation as any;
 
               if (shouldAutoRestoreFromUrlPayment(data)) {
                 if (debug)
@@ -259,9 +256,8 @@ export const useSessionRestore = ({
             if (!docId) continue;
 
             try {
-              const { doc, getDoc } = await import("firebase/firestore");
-              const snap = await getDoc(doc(db, "stripePayments", docId));
-              if (!snap.exists()) {
+              const reservation = await getReservation(docId);
+              if (!reservation) {
                 try {
                   sessionStorage.removeItem(key);
                 } catch {}
@@ -272,7 +268,7 @@ export const useSessionRestore = ({
                   });
                 continue;
               }
-              const data = snap.data() as any;
+              const data = reservation as any;
               if (debug)
                 console.debug("session restore: loaded doc", { docId, data });
 
@@ -364,13 +360,10 @@ export const useSessionRestore = ({
                       !verifyResponse.ok ||
                       verifyResult.status !== "succeeded"
                     ) {
-                      const { doc: firestoreDoc, updateDoc } =
-                        await import("firebase/firestore");
-                      await updateDoc(
-                        firestoreDoc(db, "stripePayments", docId),
-                        {
-                          "payment.status": "reserve_pending",
-                        },
+                      // The server re-checks Stripe and resets a stale
+                      // "paid" status itself.
+                      await syncReservationStatus(docId).catch((err) =>
+                        console.warn("Failed to sync reservation status:", err),
                       );
 
                       try {

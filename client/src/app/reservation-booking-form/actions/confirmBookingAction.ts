@@ -1,4 +1,4 @@
-import type { Firestore } from "firebase/firestore";
+import { getReservation } from "../api/reservationsApi";
 import {
   findSelectedPlanDetails,
   getPaymentPlanId,
@@ -14,14 +14,14 @@ import {
 } from "../utils/sessionRestore";
 
 type ConfirmBookingActionInput = {
-  db: Firestore;
   paymentConfirmed: boolean;
   isLastMinute: boolean;
   allPlansSelected: boolean;
   numberOfPeople: number;
   paymentPlans: PersonPaymentPlan[];
   availablePaymentPlans: PaymentPlanOption[];
-  bookingId: string;
+  /** Unused since the booking-code lookup was removed; kept for callers. */
+  bookingId?: string;
   paymentDocId: string | null;
   email: string;
   tourPackage: string;
@@ -33,14 +33,12 @@ type ConfirmBookingActionInput = {
 };
 
 export const runConfirmBookingAction = async ({
-  db,
   paymentConfirmed,
   isLastMinute,
   allPlansSelected,
   numberOfPeople,
   paymentPlans,
   availablePaymentPlans,
-  bookingId,
   paymentDocId,
   email,
   tourPackage,
@@ -75,53 +73,22 @@ export const runConfirmBookingAction = async ({
       availablePaymentPlans,
     );
 
-    const {
-      collection,
-      query,
-      where,
-      getDocs,
-      doc: firestoreDoc,
-      getDoc,
-    } = await import("firebase/firestore");
-
-    const paymentsRef = collection(db, "stripePayments");
-    let q: any;
-
-    if (bookingId) {
-      q = query(paymentsRef, where("booking.id", "==", bookingId));
-    } else if (!paymentDocId) {
+    // The reservation is read through the server. There's no lookup by
+    // booking code any more: that let anyone holding a booking code fetch
+    // the reservation behind it.
+    if (!paymentDocId) {
       throw new Error(
         "No booking or payment document found. Please complete payment first.",
       );
     }
 
-    const querySnapshot = bookingId
-      ? await getDocs(q)
-      : { empty: false, docs: [] as any[] };
-
-    if (querySnapshot.empty && !paymentDocId) {
-      throw new Error(
-        "Payment document not found. Please complete payment first.",
-      );
-    }
-
-    const paymentDocIdToUse =
-      paymentDocId ||
-      (querySnapshot.docs.length > 0 ? querySnapshot.docs[0].id : null);
-
-    if (!paymentDocIdToUse) {
-      throw new Error("Payment document ID not found");
-    }
-
-    const paymentDocSnap = await getDoc(
-      firestoreDoc(db, "stripePayments", paymentDocIdToUse),
-    );
-    if (!paymentDocSnap.exists()) {
+    const paymentDocData = await getReservation(paymentDocId);
+    if (!paymentDocData) {
       throw new Error("Payment document not found in Firestore");
     }
-
-    const paymentDocData = paymentDocSnap.data();
-    const bookingDocumentIds = resolveBookingDocumentIds(paymentDocData);
+    const bookingDocumentIds = resolveBookingDocumentIds(
+      paymentDocData as Parameters<typeof resolveBookingDocumentIds>[0],
+    );
 
     if (bookingDocumentIds.length === 0) {
       throw new Error(

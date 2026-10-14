@@ -45,12 +45,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!amountGBP || amountGBP <= 0) {
+    // Charge the draft's server-priced amount (set by api/public/reservations
+    // or the guest route), not the browser's amountGBP.
+    let chargeGBP = Number(amountGBP);
+    if (paymentDocId) {
+      const draftSnap = await getDoc(doc(db, "stripePayments", paymentDocId));
+      const draftAmount = Number(draftSnap.exists() ? draftSnap.data()?.payment?.amount : NaN);
+      if (Number.isFinite(draftAmount) && draftAmount > 0) {
+        if (draftAmount !== chargeGBP) {
+          console.warn(
+            `init-payment: browser sent £${amountGBP}, draft amount is £${draftAmount} (${paymentDocId})`,
+          );
+        }
+        chargeGBP = draftAmount;
+      }
+    }
+
+    if (!chargeGBP || chargeGBP <= 0) {
       return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
     }
 
     // Convert GBP → pence (Stripe expects smallest currency unit)
-    const amountPence = Math.round(amountGBP * 100);
+    const amountPence = Math.round(chargeGBP * 100);
 
     // 1️⃣ If a paymentDocId was supplied, try to reuse any existing intent attached to that doc
     if (paymentDocId) {
@@ -75,6 +91,11 @@ export async function POST(req: NextRequest) {
                   "♻️ Reusing existing payment intent for document:",
                   paymentDocId
                 );
+                // Keep the intent on the draft's current price, or the
+                // payment check would reject it as the wrong amount.
+                if (existingIntent.amount !== amountPence) {
+                  await stripe.paymentIntents.update(existingIntent.id, { amount: amountPence });
+                }
                 return NextResponse.json({
                   clientSecret: existingIntent.client_secret,
                   paymentDocId,
@@ -182,7 +203,7 @@ export async function POST(req: NextRequest) {
       await updateDoc(paymentDocRef, {
         "payment.stripeIntentId": intent.id,
         "payment.clientSecret": intent.client_secret,
-        "payment.amount": amountGBP,
+        "payment.amount": chargeGBP,
         "payment.currency": "GBP",
         "timestamps.updatedAt": serverTimestamp(),
       });
@@ -246,7 +267,7 @@ export async function POST(req: NextRequest) {
         },
         payment: {
           clientSecret: intent.client_secret || "",
-          amount: amountGBP,
+          amount: chargeGBP,
           currency: "GBP",
           type: "reservationFee",
           status: "reserve_pending",

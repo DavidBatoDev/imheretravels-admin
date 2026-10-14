@@ -27,10 +27,10 @@ const createEffects = () => ({
     getJson: vi.fn(),
     postJson: vi.fn(async () => ({ ok: true, data: {} })),
   },
-  firestore: {
-    getDocById: vi.fn(),
-    updateDocById: vi.fn(),
-    deleteDocById: vi.fn(async () => undefined),
+  reservations: {
+    getBookingPaymentPlan: vi.fn(async (): Promise<unknown> => null),
+    syncStatus: vi.fn(async () => "reserve_pending"),
+    discard: vi.fn(async () => undefined),
   },
 });
 
@@ -53,7 +53,7 @@ describe("discardExistingPaymentAction", () => {
     });
 
     expect(result.blocked).toBe(true);
-    expect(effects.firestore.deleteDocById).not.toHaveBeenCalled();
+    expect(effects.reservations.discard).not.toHaveBeenCalled();
     expect(effects.notification.alert).toHaveBeenCalled();
   });
 
@@ -74,10 +74,7 @@ describe("discardExistingPaymentAction", () => {
       },
     });
 
-    expect(effects.firestore.deleteDocById).toHaveBeenCalledWith(
-      "stripePayments",
-      "a",
-    );
+    expect(effects.reservations.discard).toHaveBeenCalledWith("a");
     expect(result.updatedRecords).toEqual([{ id: "b" }]);
     expect(result.shouldCloseModal).toBe(false);
     expect(result.nextStep).toBeNull();
@@ -181,11 +178,7 @@ describe("reuseReservePaidAction", () => {
     });
 
     expect(result.outcome).toBe("verification-failed-reload");
-    expect(effects.firestore.updateDocById).toHaveBeenCalledWith(
-      "stripePayments",
-      "doc-1",
-      { "payment.status": "reserve_pending" },
-    );
+    expect(effects.reservations.syncStatus).toHaveBeenCalledWith("doc-1");
     expect(effects.navigation.reloadPage).toHaveBeenCalled();
   });
 
@@ -195,10 +188,7 @@ describe("reuseReservePaidAction", () => {
       ok: true,
       data: { status: "succeeded" },
     }));
-    effects.firestore.getDocById = vi.fn(async () => ({
-      exists: true,
-      data: { paymentPlan: { plan: "P3" } },
-    }));
+    effects.reservations.getBookingPaymentPlan = vi.fn(async (): Promise<unknown> => ({ plan: "P3" }));
 
     const result = await reuseReservePaidAction({
       effects: effects as any,
@@ -227,10 +217,7 @@ describe("reuseReservePaidAction", () => {
 describe("reuseTermsSelectedAction", () => {
   it("returns confirmed-with-plan when booking has payment plan", async () => {
     const effects = createEffects();
-    effects.firestore.getDocById = vi.fn(async () => ({
-      exists: true,
-      data: { paymentPlan: { plan: "P6" } },
-    }));
+    effects.reservations.getBookingPaymentPlan = vi.fn(async (): Promise<unknown> => ({ plan: "P6" }));
 
     const result = await reuseTermsSelectedAction({
       effects: effects as any,
@@ -257,10 +244,7 @@ describe("reuseTermsSelectedAction", () => {
 
   it("returns confirmed-without-plan when booking has no payment plan", async () => {
     const effects = createEffects();
-    effects.firestore.getDocById = vi.fn(async () => ({
-      exists: true,
-      data: {},
-    }));
+    effects.reservations.getBookingPaymentPlan = vi.fn(async () => null);
 
     const result = await reuseTermsSelectedAction({
       effects: effects as any,

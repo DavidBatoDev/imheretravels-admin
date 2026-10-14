@@ -1,12 +1,10 @@
 import {
-  deleteDoc,
-  doc,
-  getDoc,
-  updateDoc,
-  type Firestore,
-} from "firebase/firestore";
+  discardReservation,
+  getReservation,
+  syncReservationStatus,
+} from "../api/reservationsApi";
 import type {
-  FirestorePort,
+  ReservationsPort,
   HttpPort,
   NavigationPort,
   NotificationPort,
@@ -87,33 +85,21 @@ const createHttpPort = (): HttpPort => ({
   },
 });
 
-const createFirestorePort = (db: Firestore): FirestorePort => ({
-  getDocById: async <T = Record<string, unknown>>(collectionName, id) => {
-    const snapshot = await getDoc(doc(db, collectionName, id));
-    if (!snapshot.exists()) {
-      return { exists: false, data: null };
-    }
-
-    return { exists: true, data: snapshot.data() as T };
-  },
-  updateDocById: async (collectionName, id, payload) => {
-    await updateDoc(doc(db, collectionName, id), payload);
-  },
-  deleteDocById: async (collectionName, id) => {
-    await deleteDoc(doc(db, collectionName, id));
-  },
+const createReservationsPort = (): ReservationsPort => ({
+  getBookingPaymentPlan: async (paymentDocId) =>
+    (await getReservation(paymentDocId))?.bookingPaymentPlan ?? null,
+  syncStatus: syncReservationStatus,
+  discard: discardReservation,
 });
 
 export const createDefaultReservationSideEffects = ({
-  db,
   router,
 }: {
-  db: Firestore;
   router: RouterLike;
 }): ReservationSideEffects => ({
   storage: createStoragePort(),
   navigation: createNavigationPort(router),
   notification: createNotificationPort(),
   http: createHttpPort(),
-  firestore: createFirestorePort(db),
+  reservations: createReservationsPort(),
 });

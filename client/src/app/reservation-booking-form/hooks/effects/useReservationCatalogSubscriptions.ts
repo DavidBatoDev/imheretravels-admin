@@ -4,6 +4,7 @@ import type {
   ReservationPaymentTerm,
   ReservationTourPackage,
 } from "../state/useReservationCatalogState";
+import { toDateString } from "@/lib/reservation-pricing";
 
 type UseReservationCatalogSubscriptionsOptions = {
   db: Firestore;
@@ -19,37 +20,6 @@ const slugify = (s: string) =>
     .replace(/[^a-z0-9\s-]/g, "")
     .trim()
     .replace(/\s+/g, "-");
-
-const toDateString = (value: unknown): string | null => {
-  if (!value) return null;
-
-  let dateObj: Date | null = null;
-
-  if (
-    typeof value === "object" &&
-    value !== null &&
-    "seconds" in value &&
-    typeof (value as { seconds?: unknown }).seconds === "number"
-  ) {
-    dateObj = new Date(((value as { seconds: number }).seconds ?? 0) * 1000);
-  } else if (
-    typeof value === "object" &&
-    value !== null &&
-    "toDate" in value &&
-    typeof (value as { toDate?: unknown }).toDate === "function"
-  ) {
-    try {
-      dateObj = (value as { toDate: () => Date }).toDate();
-    } catch {
-      dateObj = null;
-    }
-  } else {
-    dateObj = new Date(value as string);
-  }
-
-  if (!dateObj || isNaN(dateObj.getTime())) return null;
-  return dateObj.toISOString().slice(0, 10);
-};
 
 export const useReservationCatalogSubscriptions = ({
   db,

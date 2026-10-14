@@ -1,6 +1,6 @@
 ﻿import { useEffect } from "react";
+import { getReservation } from "../../api/reservationsApi";
 import { getCountries, type Country } from "react-phone-number-input";
-import type { Firestore } from "firebase/firestore";
 import { parseWhatsAppInternationalNumber } from "../../utils/phoneNumberParser";
 import { buildAdditionalGuestsSessionKey } from "../../utils/sessionRestore";
 import type { PersonPaymentPlan } from "../../utils/step3PaymentPlan";
@@ -16,7 +16,6 @@ type GuestDetail = {
 };
 
 type UseReservationGuestPersistenceOptions = {
-  db: Firestore;
   bookingType: string;
   additionalGuests: string[];
   email: string;
@@ -37,7 +36,6 @@ type UseReservationGuestPersistenceOptions = {
 };
 
 export const useReservationGuestPersistence = ({
-  db,
   bookingType,
   additionalGuests,
   email,
@@ -106,13 +104,8 @@ export const useReservationGuestPersistence = ({
 
       try {
         console.log("ðŸ”„ Restoring guest details from Firestore...");
-        const { doc, getDoc } = await import("firebase/firestore");
-        const paymentDocRef = doc(db, "stripePayments", paymentDocId);
-        const paymentDocSnap = await getDoc(paymentDocRef);
-
-        if (!paymentDocSnap.exists()) return;
-
-        const paymentData = paymentDocSnap.data();
+        const paymentData = await getReservation(paymentDocId);
+        if (!paymentData) return;
         const storedGuestDetails = paymentData.booking?.guestDetails || [];
         const storedGroupSize = paymentData.booking?.groupSize || 1;
 
@@ -173,7 +166,6 @@ export const useReservationGuestPersistence = ({
 
     restoreGuestDetailsFromFirestore();
   }, [
-    db,
     paymentDocId,
     guestDetails.length,
     bookingType,

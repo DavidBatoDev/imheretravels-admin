@@ -18,7 +18,6 @@ describe("defaultSideEffects", () => {
     };
 
     const effects = createDefaultReservationSideEffects({
-      db: {} as any,
       router: { replace },
     });
 

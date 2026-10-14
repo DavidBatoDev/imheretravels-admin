@@ -69,7 +69,7 @@ export const discardExistingPaymentAction = async ({
   }
 
   try {
-    await effects.firestore.deleteDocById("stripePayments", recId);
+    await effects.reservations.discard(recId);
     const updatedRecords = foundStripePayments.filter((d) => d.id !== recId);
 
     if (updatedRecords.length === 0) {
@@ -226,9 +226,7 @@ export const reuseReservePaidAction = async ({
       );
 
       if (!response.ok || response.data?.status !== "succeeded") {
-        await effects.firestore.updateDocById("stripePayments", rec.id, {
-          "payment.status": "reserve_pending",
-        });
+        await effects.reservations.syncStatus(rec.id);
         effects.notification.alert(
           "Payment verification failed. The payment was not completed successfully. Please try again.",
         );
@@ -252,13 +250,11 @@ export const reuseReservePaidAction = async ({
 
   if (bookingDocId && bookingDocId !== "PENDING" && bookingDocId !== "") {
     try {
-      const bookingDoc = await effects.firestore.getDocById<{
-        paymentPlan?: unknown;
-      }>("bookings", bookingDocId);
+      const bookingPlan = await effects.reservations.getBookingPaymentPlan(rec.id);
 
-      if (bookingDoc.exists && bookingDoc.data?.paymentPlan) {
+      if (bookingPlan) {
         hasPaymentPlan = true;
-        selectedPaymentPlan = bookingDoc.data.paymentPlan;
+        selectedPaymentPlan = bookingPlan;
       }
     } catch (err) {
       effects.notification.error(
@@ -311,12 +307,10 @@ export const reuseTermsSelectedAction = async ({
 
   if (bookingDocId && bookingDocId !== "PENDING" && bookingDocId !== "") {
     try {
-      const bookingDoc = await effects.firestore.getDocById<{
-        paymentPlan?: unknown;
-      }>("bookings", bookingDocId);
+      const bookingPlan = await effects.reservations.getBookingPaymentPlan(rec.id);
 
-      if (bookingDoc.exists && bookingDoc.data?.paymentPlan) {
-        selectedPaymentPlan = bookingDoc.data.paymentPlan;
+      if (bookingPlan) {
+        selectedPaymentPlan = bookingPlan;
       }
     } catch (err) {
       effects.notification.error("Error fetching booking payment plan:", err);

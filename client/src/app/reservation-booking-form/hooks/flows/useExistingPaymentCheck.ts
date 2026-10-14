@@ -1,22 +1,16 @@
 ﻿import { useCallback } from "react";
-import {
-  collection,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  where,
-  type Firestore,
-} from "firebase/firestore";
 import { runExistingPaymentsFlowAction } from "../../actions/checkExistingPaymentsAction";
+import {
+  lookupReservations,
+  updateReservationDraft,
+  type PublicReservation,
+} from "../../api/reservationsApi";
 
 type UseExistingPaymentCheckOptions = {
-  db: Firestore;
   email: string;
   selectedPackageName: string;
   tourDate: string;
   replaceWithPaymentId: (paymentDocId: string | null) => void;
-  serverTimestampValue: unknown;
   formSlice: {
     validate: () => boolean;
     isCreatingPayment: boolean;
@@ -38,12 +32,10 @@ type UseExistingPaymentCheckOptions = {
 };
 
 export const useExistingPaymentCheck = ({
-  db,
   email,
   selectedPackageName,
   tourDate,
   replaceWithPaymentId,
-  serverTimestampValue,
   formSlice,
   flowSlice,
   uiSlice,
@@ -64,17 +56,16 @@ export const useExistingPaymentCheck = ({
   } = uiSlice;
 
   const checkExistingPaymentsAndMaybeProceed = useCallback(async () => {
+    // The lookup also returns each reservation's booking plan, so the
+    // per-booking check below needs no second request.
+    let found: PublicReservation[] = [];
     await runExistingPaymentsFlowAction({
       validate,
       isCreatingPayment,
       paymentDocId,
       updateExistingPaymentDoc: async (existingPaymentDocId) => {
         try {
-          const { updateDoc, doc } = await import("firebase/firestore");
-          await updateDoc(doc(db, "stripePayments", existingPaymentDocId), {
-            ...getReservationDraftPayload(),
-            "timestamps.updatedAt": serverTimestampValue,
-          });
+          await updateReservationDraft(existingPaymentDocId, getReservationDraftPayload());
           return true;
         } catch (err) {
           console.error("Error updating payment document:", err);
@@ -93,25 +84,18 @@ export const useExistingPaymentCheck = ({
       replaceWithPaymentId,
       checkInput: {
         fetchPayments: async () => {
-          const paymentsRef = collection(db, "stripePayments");
-          const q = query(
-            paymentsRef,
-            where("customer.email", "==", email),
-            orderBy("timestamps.createdAt", "desc"),
-            limit(10),
-          );
-          const snap = await getDocs(q);
-          return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as any);
+          const draft = getReservationDraftPayload() as {
+            customer?: { birthdate?: string };
+          };
+          found = await lookupReservations(email, draft.customer?.birthdate || "");
+          return found;
         },
-        fetchBookingHasPaymentPlan: async (bookingDocId) => {
-          const { doc, getDoc } = await import("firebase/firestore");
-          const bookingDoc = await getDoc(doc(db, "bookings", bookingDocId));
-          if (!bookingDoc.exists()) {
-            return false;
-          }
-          const bookingData = bookingDoc.data();
-          return !!bookingData?.paymentPlan;
-        },
+        fetchBookingHasPaymentPlan: async (bookingDocId) =>
+          found.some(
+            (r) =>
+              (r.booking?.documentId === bookingDocId || r.booking?.id === bookingDocId) &&
+              !!r.bookingPaymentPlan,
+          ),
         selectedPackageName,
         tourDate,
         onBookingLookupError: (error) => {
@@ -129,9 +113,7 @@ export const useExistingPaymentCheck = ({
     validate,
     isCreatingPayment,
     paymentDocId,
-    db,
     getReservationDraftPayload,
-    serverTimestampValue,
     createPlaceholder,
     completedSteps,
     setCompletedSteps,

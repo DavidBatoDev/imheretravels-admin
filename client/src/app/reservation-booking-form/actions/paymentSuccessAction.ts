@@ -1,20 +1,13 @@
-import type { Firestore } from "firebase/firestore";
+import {
+  confirmReservationPayment,
+  getReservation,
+} from "../api/reservationsApi";
 
 type PaymentSuccessActionInput = {
-  db: Firestore;
   paymentIntentId?: string;
   paymentDocId?: string;
   email: string;
-  firstName: string;
-  lastName: string;
-  birthdate: string;
-  nationality: string;
-  bookingType: string;
-  groupSize: number;
   tourPackage: string;
-  tourDate: string;
-  selectedPackageName: string;
-  selectedPackageDeposit: number;
   completedSteps: number[];
   setCompletedSteps: (
     update: number[] | ((prev: number[]) => number[]),
@@ -22,76 +15,52 @@ type PaymentSuccessActionInput = {
   setPaymentConfirmed: (value: boolean) => void;
   setBookingId: (value: string) => void;
   onError: (error: unknown) => void;
+  /** Test seam: how long to wait for the webhook's booking, and how often to look. */
+  bookingWait?: { timeoutMs: number; intervalMs: number };
 };
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Polls the reservation until the webhook has created its booking. */
+async function waitForBookingId(
+  paymentDocId: string,
+  { timeoutMs, intervalMs }: { timeoutMs: number; intervalMs: number },
+): Promise<string | null> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const reservation = await getReservation(paymentDocId).catch(() => null);
+    const bookingId = reservation?.booking?.id;
+    if (bookingId && bookingId !== "PENDING" && reservation?.booking?.documentId) {
+      return bookingId;
+    }
+    await sleep(intervalMs);
+  }
+  return null;
+}
+
 export const runPaymentSuccessAction = async ({
-  db,
   paymentIntentId,
   paymentDocId,
   email,
-  firstName,
-  lastName,
-  birthdate,
-  nationality,
-  bookingType,
-  groupSize,
   tourPackage,
-  tourDate,
-  selectedPackageName,
-  selectedPackageDeposit,
   completedSteps,
   setCompletedSteps,
   setPaymentConfirmed,
   setBookingId,
   onError,
+  bookingWait = { timeoutMs: 30000, intervalMs: 1500 },
 }: PaymentSuccessActionInput): Promise<void> => {
   try {
-    const {
-      doc,
-      updateDoc,
-      serverTimestamp,
-      collection,
-      query,
-      where,
-      getDocs,
-    } = await import("firebase/firestore");
-
-    const updateData: Record<string, unknown> = {
-      "customer.email": email,
-      "customer.firstName": firstName,
-      "customer.lastName": lastName,
-      "customer.birthdate": birthdate,
-      "customer.nationality": nationality,
-      "booking.type": bookingType,
-      "booking.groupSize":
-        bookingType === "Group Booking"
-          ? groupSize
-          : bookingType === "Duo Booking"
-            ? 2
-            : 1,
-      "tour.packageId": tourPackage,
-      "tour.packageName": selectedPackageName,
-      "tour.date": tourDate,
-      "payment.status": "reserve_paid",
-      "payment.stripeIntentId": paymentIntentId,
-      "timestamps.updatedAt": serverTimestamp(),
-    };
-
+    // The server checks the payment with Stripe and records "reserve_paid";
+    // the browser no longer writes the status or the intent id itself.
     let actualPaymentDocId = paymentDocId;
-    if (paymentDocId) {
-      await updateDoc(doc(db, "stripePayments", paymentDocId), updateData);
-    } else {
-      const paymentsRef = collection(db, "stripePayments");
-      const q = query(
-        paymentsRef,
-        where("payment.stripeIntentId", "==", paymentIntentId),
-      );
-      const querySnapshot = await getDocs(q);
-
-      if (!querySnapshot.empty) {
-        const paymentDoc = querySnapshot.docs[0];
-        actualPaymentDocId = paymentDoc.id;
-        await updateDoc(doc(db, "stripePayments", paymentDoc.id), updateData);
+    if (paymentIntentId) {
+      try {
+        const confirmed = await confirmReservationPayment(paymentIntentId, paymentDocId);
+        actualPaymentDocId = confirmed.paymentDocId;
+      } catch (error) {
+        // The webhook records the payment too; don't block the customer.
+        console.error("Payment confirmation check failed:", error);
       }
     }
 
@@ -110,48 +79,15 @@ export const runPaymentSuccessAction = async ({
 
       if (response.ok) {
         setBookingId(result.bookingId);
-
       }
     } else if (
       actualPaymentDocId &&
       process.env.NEXT_PUBLIC_ENV === "production"
     ) {
-      try {
-        const { onSnapshot } = await import("firebase/firestore");
-
-        const createdBookingId = await new Promise<string>(
-          (resolve, reject) => {
-            const timeoutId = setTimeout(() => {
-              reject(new Error("Timeout waiting for booking creation"));
-            }, 30000);
-
-            const unsubscribe = onSnapshot(
-              doc(db, "stripePayments", actualPaymentDocId),
-              (docSnapshot) => {
-                const data = docSnapshot.data();
-                const bookingId = data?.booking?.id;
-                const bookingDocId = data?.booking?.documentId;
-
-                if (bookingId && bookingId !== "PENDING" && bookingDocId) {
-                  clearTimeout(timeoutId);
-                  unsubscribe();
-                  setBookingId(bookingId);
-                  resolve(bookingId);
-                }
-              },
-              (error) => {
-                clearTimeout(timeoutId);
-                reject(error);
-              },
-            );
-          },
-        );
-
-        if (createdBookingId) {
-          setBookingId(createdBookingId);
-        }
-      } catch {
-        // Preserve current behavior: continue even if webhook wait fails.
+      // Preserve current behavior: continue even if the webhook wait times out.
+      const createdBookingId = await waitForBookingId(actualPaymentDocId, bookingWait);
+      if (createdBookingId) {
+        setBookingId(createdBookingId);
       }
     }
 

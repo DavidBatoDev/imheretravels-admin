@@ -1,19 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { format } from "date-fns";
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  onSnapshot,
-  query,
-  where,
-} from "firebase/firestore";
+import { Timestamp, collection, onSnapshot } from "firebase/firestore";
 import {
   Download,
   Calendar,
@@ -50,6 +41,7 @@ import {
 import PayNowModal from "@/components/booking-status/PayNowModal";
 import { getLateFeeGraceDays } from "@/lib/late-fee-policy";
 import { getDisplayedBalanceDue } from "@/lib/finance/balance-due";
+import { timestampsFromWire } from "@/lib/public-booking-view";
 
 
 interface PaymentTokenData {
@@ -182,10 +174,6 @@ export default function BookingStatusPage() {
     description?: string;
     schedule?: Array<{ date: string; amount: number }>;
   } | null>(null);
-  const packCacheRef = useRef<{
-    bookingDocId: string;
-    pack: BookingData["preDeparturePack"] | null;
-  } | null>(null);
 
   // Pay Now Modal state
   const [payNowModalOpen, setPayNowModalOpen] = useState(false);
@@ -304,232 +292,66 @@ export default function BookingStatusPage() {
     }
   }, [searchParams, bookingDocumentId, booking]);
 
-  useEffect(() => {
-    let didCancel = false;
-
-    const fetchPreDeparturePack = async (
-      bookingDocId: string,
-    ): Promise<BookingData["preDeparturePack"] | null> => {
-      try {
-        const confirmedBookingsQuery = query(
-          collection(db, "confirmedBookings"),
-          where("bookingDocumentId", "==", bookingDocId),
-        );
-        const confirmedBookingsSnap = await getDocs(confirmedBookingsQuery);
-
-        if (confirmedBookingsSnap.empty) return null;
-
-        const confirmedBooking = confirmedBookingsSnap.docs[0].data();
-        if (!confirmedBooking.preDeparturePackId) return null;
-
-        const packRef = doc(
-          db,
-          "fileObjects",
-          confirmedBooking.preDeparturePackId,
-        );
-        const packSnap = await getDoc(packRef);
-
-        if (!packSnap.exists()) return null;
-
-        const packData = packSnap.data();
-        return {
-          id: packSnap.id,
-          fileName: packData.fileName,
-          originalName: packData.originalName,
-          fileDownloadURL: packData.fileDownloadURL,
-          contentType: packData.contentType,
-          size: packData.size,
-          uploadedAt: packData.uploadedAt,
-        };
-      } catch (error) {
-        console.error("Error fetching pre-departure pack:", error);
-        return null;
+  // Booking data comes from the server (api/public/booking), not Firestore
+  // reads in the browser. Refreshed when the tab regains focus, after a plan
+  // is selected, and while a returning Stripe payment is being confirmed.
+  const loadBooking = useCallback(
+    async ({ quiet = false }: { quiet?: boolean } = {}) => {
+      if (!quiet) {
+        setLoading(true);
+        setError(null);
       }
-    };
-
-    const buildPublicData = (
-      bookingData: any,
-      preDeparturePack: BookingData["preDeparturePack"] | null,
-    ): BookingData => {
-      const totalCost =
-        (bookingData.isMainBooker && bookingData.discountedTourCost
-          ? bookingData.discountedTourCost
-          : bookingData.originalTourCost) || 0;
-      const paid = bookingData.paid || 0;
-
-      const fallbackProgress =
-        totalCost === 0 ? 0 : Math.round((paid / totalCost) * 100);
-      const paymentProgressValue =
-        typeof bookingData.paymentProgress === "string"
-          ? parseFloat(bookingData.paymentProgress.replace(/%/g, "")) ||
-            fallbackProgress
-          : typeof bookingData.paymentProgress === "number"
-            ? bookingData.paymentProgress
-            : fallbackProgress;
-
-      return {
-        bookingDocumentId: bookingData.bookingDocumentId,
-        bookingId: bookingData.bookingId,
-        bookingCode: bookingData.bookingCode,
-        tourCode: bookingData.tourCode,
-        emailAddress: bookingData.emailAddress,
-        fullName: bookingData.fullName,
-        firstName: bookingData.firstName,
-        travellerInitials: bookingData.travellerInitials,
-        tourPackageName: bookingData.tourPackageName,
-        tourDate: bookingData.tourDate,
-        returnDate: bookingData.returnDate,
-        tourDuration: bookingData.tourDuration,
-        formattedDate: bookingData.formattedDate,
-        reservationDate: bookingData.reservationDate,
-        originalTourCost: bookingData.originalTourCost,
-        discountedTourCost: bookingData.discountedTourCost,
-        reservationFee: bookingData.reservationFee,
-        manualCredit: bookingData.manualCredit,
-        creditFrom: bookingData.creditFrom,
-        paid,
-        remainingBalance: bookingData.remainingBalance,
-        paymentProgress: paymentProgressValue,
-        paymentPlan: bookingData.paymentPlan,
-        bookingStatus: bookingData.bookingStatus,
-        fullPaymentDueDate: bookingData.fullPaymentDueDate,
-        fullPaymentAmount: bookingData.fullPaymentAmount,
-        fullPaymentDatePaid: bookingData.fullPaymentDatePaid,
-        p1DueDate: bookingData.p1DueDate,
-        p1Amount: bookingData.p1Amount,
-        p1DatePaid: bookingData.p1DatePaid,
-        p2DueDate: bookingData.p2DueDate,
-        p2Amount: bookingData.p2Amount,
-        p2DatePaid: bookingData.p2DatePaid,
-        p3DueDate: bookingData.p3DueDate,
-        p3Amount: bookingData.p3Amount,
-        p3DatePaid: bookingData.p3DatePaid,
-        p4DueDate: bookingData.p4DueDate,
-        p4Amount: bookingData.p4Amount,
-        p4DatePaid: bookingData.p4DatePaid,
-        p1LateFeesPenalty: bookingData.p1LateFeesPenalty,
-        p1LateFeeAppliedAt: bookingData.p1LateFeeAppliedAt,
-        p2LateFeesPenalty: bookingData.p2LateFeesPenalty,
-        p2LateFeeAppliedAt: bookingData.p2LateFeeAppliedAt,
-        p3LateFeesPenalty: bookingData.p3LateFeesPenalty,
-        p3LateFeeAppliedAt: bookingData.p3LateFeeAppliedAt,
-        p4LateFeesPenalty: bookingData.p4LateFeesPenalty,
-        p4LateFeeAppliedAt: bookingData.p4LateFeeAppliedAt,
-        addOns: bookingData.addOns,
-        sentEmailLink: bookingData.sentEmailLink,
-        eventName: bookingData.eventName,
-        discountRate: bookingData.discountRate,
-        discountType: bookingData.discountType,
-        bookingType: bookingData.bookingType,
-        isMainBooker: bookingData.isMainBooker,
-        enablePaymentReminder: bookingData.enablePaymentReminder,
-        preDeparturePack: preDeparturePack ?? undefined,
-        revolutPayments: bookingData.revolutPayments,
-        ...(process.env.NEXT_PUBLIC_ENV === "development" && {
-          paymentTokens: bookingData.paymentTokens,
-        }),
-      };
-    };
-
-    setLoading(true);
-    setError(null);
-
-    const bookingsQuery = query(
-      collection(db, "bookings"),
-      where("access_token", "==", bookingDocumentId),
-      limit(1),
-    );
-
-    const unsubscribe = onSnapshot(
-      bookingsQuery,
-      (snapshot) => {
-        if (didCancel) return;
-
-        if (snapshot.empty) {
+      try {
+        const base = `/api/public/booking/${encodeURIComponent(bookingDocumentId)}`;
+        const url = email ? `${base}?email=${encodeURIComponent(email)}` : base;
+        const response = await fetch(url, { cache: "no-store" });
+        const result = await response.json().catch(() => null);
+        if (!response.ok || !result?.success) {
+          // A failed background refresh keeps the last good data on screen.
+          if (quiet && response.status >= 500) return;
           setBooking(null);
-          setError("Booking not found");
-          setLoading(false);
+          setError(result?.error || "Failed to load booking details");
           return;
         }
-
-        const bookingDoc = snapshot.docs[0];
-        const bookingData = {
-          id: bookingDoc.id,
-          ...bookingDoc.data(),
-          bookingDocumentId: bookingDoc.id,
-        } as any;
-
-        const requiredFields = [
-          "bookingId",
-          "fullName",
-          "tourPackageName",
-          "tourDate",
-          "formattedDate",
-          "tourDuration",
-          "originalTourCost",
-          "paid",
-          "remainingBalance",
-          "bookingType",
-        ];
-        const hasMissingRequired = requiredFields.some(
-          (field) =>
-            bookingData[field] === undefined || bookingData[field] === null,
+        setBooking(
+          timestampsFromWire(result.data, (s, n) => new Timestamp(s, n)) as BookingData,
         );
-
-        if (hasMissingRequired) {
-          setBooking(null);
-          setError(
-            "This is an invalid booking. Contact bella@imheretravels.com if this is a mistake.",
-          );
-          setLoading(false);
-          return;
-        }
-
-        if (email) {
-          const bookingEmail = bookingData.emailAddress?.toLowerCase();
-          const providedEmail = email.toLowerCase();
-          if (bookingEmail !== providedEmail) {
-            setBooking(null);
-            setError("Email does not match booking records");
-            setLoading(false);
-            return;
-          }
-        }
-
-        const cachedPack =
-          packCacheRef.current?.bookingDocId === bookingDoc.id
-            ? packCacheRef.current.pack
-            : null;
-
-        setBooking(buildPublicData(bookingData, cachedPack));
-        setLoading(false);
-
-        if (!cachedPack) {
-          void (async () => {
-            const pack = await fetchPreDeparturePack(bookingDoc.id);
-            if (didCancel) return;
-            packCacheRef.current = {
-              bookingDocId: bookingDoc.id,
-              pack,
-            };
-            setBooking((prev) =>
-              prev ? { ...prev, preDeparturePack: pack ?? undefined } : prev,
-            );
-          })();
-        }
-      },
-      (err) => {
+        setError(null);
+      } catch (err) {
         console.error("Failed to load booking details:", err);
-        setError("Failed to load booking details");
-        setLoading(false);
-      },
-    );
+        if (!quiet) setError("Failed to load booking details");
+      } finally {
+        if (!quiet) setLoading(false);
+      }
+    },
+    [bookingDocumentId, email],
+  );
 
-    return () => {
-      didCancel = true;
-      unsubscribe();
+  useEffect(() => {
+    void loadBooking();
+  }, [loadBooking]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void loadBooking({ quiet: true });
     };
-  }, [bookingDocumentId, email]);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [loadBooking]);
+
+  // Back from Stripe Checkout: the webhook records the payment a few seconds
+  // later, so poll for up to two minutes.
+  const isPaymentReturn = searchParams.get("payment_success") === "true";
+  useEffect(() => {
+    if (!isPaymentReturn) return;
+    let ticks = 0;
+    const timer = setInterval(() => {
+      ticks += 1;
+      void loadBooking({ quiet: true });
+      if (ticks >= 30) clearInterval(timer);
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [isPaymentReturn, loadBooking]);
 
   // Fetch payment terms from Firestore (for payment plan options)
   useEffect(() => {
@@ -666,6 +488,7 @@ export default function BookingStatusPage() {
         throw new Error(data.error || "Failed to select payment plan");
       }
 
+      await loadBooking({ quiet: true });
       setPaymentMessage({
         type: "success",
         text: `Successfully selected ${plan.label}. Your payment schedule is now active.`,

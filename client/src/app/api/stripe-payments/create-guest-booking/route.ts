@@ -546,8 +546,8 @@ export async function POST(req: NextRequest) {
       // Guest-specific fields
       nationality: guestData.nationality,
       birthdate: guestData.birthdate,
-      phoneNumber: guestData.phoneNumber,
-      dietaryRestrictions: guestData.dietaryRestrictions,
+      phoneNumber: guestData.phoneNumber ?? "",
+      dietaryRestrictions: guestData.dietaryRestrictions ?? "",
       // Calculated fields
       bookingStatus: bookingStatus,
       paymentProgress: paymentProgress,

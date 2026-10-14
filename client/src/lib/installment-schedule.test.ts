@@ -288,15 +288,27 @@ describe("second-to-last Friday for 2027+ tours", () => {
     ]);
   });
 
-  it("snap-back is a no-op: the fallback is always an existing anchor", () => {
+  it("snap-back falls back to any Friday before the cutoff", () => {
     // Tour 20 Mar 2027 -> cutoff 20 Jan 2027. Jan's second-to-last Friday
-    // (22nd) overshoots; the fallback is Dec 18, which is already scheduled.
+    // (22nd) overshoots; the latest Friday on/before the cutoff is Jan 15.
     const dates = getEligibleInstallmentDates(utc(2026, 10, 6), utc(2027, 3, 20));
-    expect(iso(dates)).toEqual(["2026-10-23", "2026-11-20", "2026-12-18"]);
-    expect(new Set(iso(dates)).size).toBe(dates.length);
+    expect(iso(dates)).toEqual([
+      "2026-10-23",
+      "2026-11-20",
+      "2026-12-18",
+      "2027-01-15",
+    ]);
   });
 
-  it("sweep: every date is a second-to-last Friday, on time and spaced", () => {
+  it("snap-back: the Davies case (SB-PHSS-20270116-FD059)", () => {
+    // Reserved 11 Oct 2026, tour 16 Jan 2027 -> cutoff 16 Nov 2026. Nov's
+    // second-to-last Friday (20th) overshoots, so the 2nd instalment falls
+    // back to Fri 13 Nov instead of the booking being P1 only.
+    const dates = getEligibleInstallmentDates(utc(2026, 10, 11), utc(2027, 1, 16));
+    expect(iso(dates)).toEqual(["2026-10-23", "2026-11-13"]);
+  });
+
+  it("sweep: every date but a snapped final one is a second-to-last Friday, on time and spaced", () => {
     let covered = 0;
     for (let r = 0; r < 365; r += 7) {
       const resUTC = new Date(res.getTime() + r * DAY);
@@ -314,7 +326,9 @@ describe("second-to-last Friday for 2027+ tours", () => {
         // getPaymentCondition downstream (see "caps at four terms" above).
         const dates = computeEligibleInstallmentDates(resUTC, tourUTC);
         for (let i = 0; i < dates.length; i++) {
-          expect(isSecondToLastFriday(dates[i])).toBe(true);
+          // Only the final date may be a snapped (non-anchor) Friday.
+          if (i < dates.length - 1) expect(isSecondToLastFriday(dates[i])).toBe(true);
+          expect(dates[i].getUTCDay()).toBe(5);
           expect(dates[i].getTime()).toBeLessThanOrEqual(cutoff.getTime());
           expect(dates[i].getTime()).toBeGreaterThan(resUTC.getTime() + 2 * DAY);
           if (i > 0) {

@@ -19,7 +19,8 @@ import {
 
 /**
  * Guest booking checks for API routes, through firebase-admin.
- * Same rules as the browser version (guest-booking-utils.ts).
+ * The only invitation check: the guest page goes through
+ * api/public/guest-reservations.
  */
 export async function validateGuestInvitation(
   parentBookingId: string,

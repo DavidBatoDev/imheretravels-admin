@@ -6,19 +6,40 @@ import { Suspense } from "react";
 import React, { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { db } from "@/lib/firebase";
 import { Timestamp } from "firebase/firestore";
 import BirthdatePicker from "../reservation-booking-form/components/BirthdatePicker";
 import Select from "../reservation-booking-form/components/Select";
 import StripePayment from "../reservation-booking-form/components/StripePayment";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import {
-  validateGuestInvitation,
   getDaysUntilExpiration,
   formatExpirationDate,
   type ParentBookingData,
   type GuestInvitation,
-} from "@/lib/guest-booking-utils";
+} from "@/lib/guest-booking-shared";
+import { timestampsFromWire } from "@/lib/public-booking-view";
+
+// The invitation, parent booking and fee come from the server
+// (api/public/guest-reservations); this page no longer reads or writes
+// Firestore itself.
+type GuestContext = {
+  parentBooking: ParentBookingData;
+  invitation: GuestInvitation;
+  depositAmount: number;
+  parentPaymentPlanDetails: any;
+  parentSelectedPaymentPlan: any;
+};
+
+async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error || "Request failed");
+  return data as T;
+}
 
 const GuestReservationPage = () => {
   // URL Parameters
@@ -98,163 +119,35 @@ const GuestReservationPage = () => {
         return;
       }
 
-      const result = await validateGuestInvitation(parentBookingId, guestEmail);
-
-      if (!result.isValid) {
-        setValidationError(result.error || "Invalid invitation");
-        setIsValidating(false);
-        return;
-      }
-
-      // Validation passed
-      setParentBooking(result.parentBooking!);
-      setInvitation(result.invitation!);
-      setDaysRemaining(getDaysUntilExpiration(result.invitation!.expiresAt));
-
-      // Fetch tour package to get the cover image
-      if (result.parentBooking?.tourPackageId) {
-        try {
-          const { getDoc, doc } = await import("firebase/firestore");
-          const tourPackageRef = doc(
-            db,
-            "tourPackages",
-            result.parentBooking.tourPackageId,
-          );
-          const tourPackageSnap = await getDoc(tourPackageRef);
-
-          if (tourPackageSnap.exists()) {
-            const tourData = tourPackageSnap.data();
-            const coverImage =
-              tourData?.media?.coverImage || tourData?.coverImage || "";
-
-            // Update parent booking with image
-            setParentBooking((prev) =>
-              prev ? { ...prev, tourImage: coverImage } : prev,
-            );
-          }
-        } catch (error) {
-          console.warn("Error fetching tour package image:", error);
-        }
-      }
-
-      // Fetch the main booker's booking document to get accurate pricing
       try {
-        // First, fetch the payment document to get the booking document ID
-        const { getDoc, doc } = await import("firebase/firestore");
-        const paymentDocRef = doc(db, "stripePayments", parentBookingId);
-        const paymentDocSnap = await getDoc(paymentDocRef);
+        const response = await fetch(
+          `/api/public/guest-reservations?parent=${encodeURIComponent(parentBookingId)}&email=${encodeURIComponent(guestEmail)}`,
+          { cache: "no-store" },
+        );
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          setValidationError(data?.error || "Invalid invitation");
+          setIsValidating(false);
+          return;
+        }
 
-        if (paymentDocSnap.exists()) {
-          const paymentData = paymentDocSnap.data();
-          const bookingDocId = paymentData?.booking?.documentId;
-
-          // Store payment plan details from parent's stripePayment document
-          if (paymentData?.payment?.paymentPlanDetails) {
-            setParentPaymentPlanDetails(paymentData.payment.paymentPlanDetails);
-          }
-          if (paymentData?.payment?.selectedPaymentPlan) {
-            setParentSelectedPaymentPlan(
-              paymentData.payment.selectedPaymentPlan,
-            );
-          }
-
-          console.log("📝 Payment document fetched:", {
-            paymentDocId: parentBookingId,
-            bookingDocId,
-            paymentData: paymentData?.booking,
-            paymentPlanDetails: paymentData?.payment?.paymentPlanDetails,
-            selectedPaymentPlan: paymentData?.payment?.selectedPaymentPlan,
-          });
-
-          if (bookingDocId) {
-            // Now fetch the actual booking document
-            const bookingDocRef = doc(db, "bookings", bookingDocId);
-            const bookingDocSnap = await getDoc(bookingDocRef);
-
-            if (bookingDocSnap.exists()) {
-              const bookingData = bookingDocSnap.data();
-              // Use the reservationFee field instead of payment plan deposit
-              const amount = bookingData?.reservationFee || 0;
-              const paymentPlan = bookingData?.paymentPlan || "";
-              const paymentMethod = bookingData?.paymentMethod || "";
-
-              console.log("✅ Found booking via payment document reference:", {
-                reservationFee: amount,
-                paymentPlan,
-                paymentMethod,
-                bookingData,
-              });
-
-              setDepositAmount(amount);
-
-              // Update parentBooking with payment plan info
-              setParentBooking((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      paymentPlan,
-                      paymentMethod,
-                    }
-                  : prev,
-              );
-
-              setIsValidating(false);
-              return;
-            } else {
-              console.warn("❌ Booking document not found:", bookingDocId);
-            }
-          } else {
-            console.warn("❌ No booking.documentId in payment document");
-          }
-        } else {
-          console.warn("❌ Payment document not found:", parentBookingId);
+        const context = timestampsFromWire(
+          data.context,
+          (s, n) => new Timestamp(s, n),
+        ) as GuestContext;
+        setParentBooking(context.parentBooking);
+        setInvitation(context.invitation);
+        setDaysRemaining(getDaysUntilExpiration(context.invitation.expiresAt));
+        setDepositAmount(context.depositAmount);
+        if (context.parentPaymentPlanDetails) {
+          setParentPaymentPlanDetails(context.parentPaymentPlanDetails);
+        }
+        if (context.parentSelectedPaymentPlan) {
+          setParentSelectedPaymentPlan(context.parentSelectedPaymentPlan);
         }
       } catch (error) {
-        console.warn("Error fetching payment/booking documents:", error);
-      }
-
-      // Fallback: try using parentBookingId as booking document ID directly
-      try {
-        console.log(
-          "📝 Trying fallback: using parentBookingId as booking doc ID",
-        );
-        const { getDoc, doc } = await import("firebase/firestore");
-        const bookingRef = doc(db, "bookings", parentBookingId);
-        const bookingSnap = await getDoc(bookingRef);
-
-        if (bookingSnap.exists()) {
-          const bookingData = bookingSnap.data();
-          // Use the reservationFee field instead of payment plan deposit
-          const amount = bookingData?.reservationFee || 0;
-          const paymentPlan = bookingData?.paymentPlan || "";
-          const paymentMethod = bookingData?.paymentMethod || "";
-
-          console.log("✅ Fallback: Found booking via direct doc ID:", {
-            reservationFee: amount,
-            paymentPlan,
-            paymentMethod,
-            bookingData,
-          });
-
-          setDepositAmount(amount);
-
-          // Update parentBooking with payment plan info
-          setParentBooking((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  paymentPlan,
-                  paymentMethod,
-                }
-              : prev,
-          );
-        } else {
-          console.warn("❌ Fallback: No booking found via direct doc ID");
-          setDepositAmount(0);
-        }
-      } catch (e) {
-        console.warn("Error with fallback booking fetch:", e);
-        setDepositAmount(0);
+        console.error("Error validating invitation:", error);
+        setValidationError("Error validating invitation");
       }
 
       setIsValidating(false);
@@ -313,145 +206,23 @@ const GuestReservationPage = () => {
       return;
     }
 
-    // If we already have a paymentDocId, update it with current form data
-    if (paymentDocId) {
-      try {
-        const {
-          updateDoc,
-          doc: firestoreDoc,
-          serverTimestamp,
-        } = await import("firebase/firestore");
-
-        const paymentUpdateData: any = {
-          amount: depositAmount || 0,
-          currency: "GBP",
-          status: "reserve_pending",
-          type: "reservationFee",
-        };
-
-        // Inherit payment plan details if available
-        if (parentPaymentPlanDetails) {
-          paymentUpdateData.paymentPlanDetails = parentPaymentPlanDetails;
-        }
-        if (parentSelectedPaymentPlan) {
-          paymentUpdateData.selectedPaymentPlan = parentSelectedPaymentPlan;
-        }
-
-        await updateDoc(firestoreDoc(db, "stripePayments", paymentDocId), {
-          customer: {
-            email: guestEmail,
-            firstName,
-            lastName,
-            birthdate,
-            nationality,
-          },
-          booking: {
-            type: parentBooking?.bookingType || "Single Booking",
-            groupSize: parentBooking?.groupSize || 1,
-            isGuest: true,
-            id: "PENDING",
-            documentId: "",
-          },
-          tour: {
-            packageId: parentBooking?.tourPackageId || "",
-            packageName: parentBooking?.tourName || "",
-            date: parentBooking?.tourDate || "",
-          },
-          payment: paymentUpdateData,
-          guestBooking: {
-            parentBookingId: parentBookingId,
-            guestEmail: guestEmail,
-          },
-          "timestamps.updatedAt": serverTimestamp(),
-        });
-
-        console.log(
-          "✅ Updated existing guest payment document:",
-          paymentDocId,
-        );
-      } catch (error) {
-        console.error("Error updating payment document:", error);
-        alert("Unable to update payment record. Please try again.");
-        return;
-      }
-
-      setStep(2);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-
-    // Create a placeholder payment document for guest
+    // The server creates the draft (or updates it while unpaid), copying the
+    // tour, group, fee and plan from the main booker.
     try {
-      const {
-        collection,
-        addDoc,
-        serverTimestamp,
-        doc: firestoreDoc,
-        setDoc,
-      } = await import("firebase/firestore");
-
-      const paymentsRef = collection(db, "stripePayments");
-
-      const paymentData: any = {
-        amount: depositAmount || 0,
-        currency: "GBP",
-        status: "reserve_pending",
-        type: "reservationFee",
-      };
-
-      // Inherit payment plan details if available
-      if (parentPaymentPlanDetails) {
-        paymentData.paymentPlanDetails = parentPaymentPlanDetails;
-      }
-      if (parentSelectedPaymentPlan) {
-        paymentData.selectedPaymentPlan = parentSelectedPaymentPlan;
-      }
-
-      const newDoc = await addDoc(paymentsRef, {
-        customer: {
-          email: guestEmail,
-          firstName,
-          lastName,
-          birthdate,
-          nationality,
-        },
-        booking: {
-          type: parentBooking?.bookingType || "Single Booking",
-          groupSize: parentBooking?.groupSize || 1,
-          isGuest: true,
-          id: "PENDING",
-          documentId: "",
-        },
-        tour: {
-          packageId: parentBooking?.tourPackageId || "",
-          packageName: parentBooking?.tourName || "",
-          date: parentBooking?.tourDate || "",
-        },
-        payment: paymentData,
-        guestBooking: {
-          parentBookingId: parentBookingId,
-          guestEmail: guestEmail,
-        },
-        timestamps: {
-          createdAt: serverTimestamp(),
-        },
+      const { id } = await postJson<{ id: string }>("/api/public/guest-reservations", {
+        parentBookingId,
+        guestEmail,
+        paymentDocId: paymentDocId || undefined,
+        customer: { firstName, lastName, birthdate, nationality },
       });
-
-      // Write the id into the document for convenience
-      await setDoc(
-        firestoreDoc(db, "stripePayments", newDoc.id),
-        { id: newDoc.id },
-        { merge: true },
-      );
-
-      setPaymentDocId(newDoc.id);
-
-      // Proceed to step 2 (payment)
+      setPaymentDocId(id);
       setStep(2);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
-      console.error("Error creating payment placeholder:", error);
-      alert("Unable to create payment record. Please try again.");
+      console.error("Error saving guest payment record:", error);
+      alert(
+        (error as Error)?.message || "Unable to create payment record. Please try again.",
+      );
     }
   };
 
@@ -472,36 +243,16 @@ const GuestReservationPage = () => {
     try {
       console.log("🎉 Guest payment succeeded! Creating booking...");
 
-      // Determine payment status based on parent's payment plan
-      const hasPaymentPlan =
-        parentBooking?.paymentPlan &&
-        parentBooking.paymentPlan.toUpperCase() !== "FULL PAYMENT";
-      const paymentStatus = hasPaymentPlan ? "terms_selected" : "reserve_paid";
-
-      console.log("💳 Payment status decision:", {
-        parentPaymentPlan: parentBooking?.paymentPlan,
-        hasPaymentPlan,
-        paymentStatus,
-      });
-
-      // First, update the stripePayments document with guest details
-      const { doc, updateDoc, serverTimestamp } =
-        await import("firebase/firestore");
-
-      const updateData: any = {
-        "customer.email": guestEmail,
-        "customer.firstName": firstName,
-        "customer.lastName": lastName,
-        "customer.birthdate": birthdate,
-        "customer.nationality": nationality,
-        "payment.status": paymentStatus,
-        "timestamps.updatedAt": serverTimestamp(),
-      };
-
-      console.log("📤 Updating guest payment document with:", updateData);
-
-      await updateDoc(doc(db, "stripePayments", docId), updateData);
-      console.log("✅ Guest payment document updated!");
+      // The server checks the payment with Stripe and records the status
+      // (on the parent's plan: "terms_selected", else "reserve_paid").
+      try {
+        await postJson("/api/public/guest-reservations/confirm-payment", {
+          paymentDocId: docId,
+        });
+      } catch (error) {
+        // create-guest-booking re-checks the payment; don't block here.
+        console.error("Guest payment confirmation check failed:", error);
+      }
 
       // Call the create-guest-booking API
       const response = await fetch(

@@ -1,5 +1,5 @@
 /**
- * Guest booking logic shared by the browser (guest-booking-utils.ts) and the
+ * Guest booking logic shared by the guest page and the
  * server (guest-booking-server.ts): types, the payment-doc → parent-booking
  * mapping and the invitation checks. No Firestore access here, so both sides
  * can use it with their own SDK.

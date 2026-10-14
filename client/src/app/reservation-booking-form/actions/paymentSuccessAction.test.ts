@@ -15,10 +15,6 @@ vi.mock("firebase/firestore", () => ({
   onSnapshot: vi.fn(),
 }));
 
-vi.mock("@/utils/notification-service", () => ({
-  createReservationPaymentNotification: vi.fn(async () => undefined),
-}));
-
 describe("runPaymentSuccessAction", () => {
   it("sets payment confirmed and completed steps when payment doc id provided", async () => {
     updateDocMock.mockResolvedValue(undefined);

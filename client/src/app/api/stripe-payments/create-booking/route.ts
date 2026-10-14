@@ -11,6 +11,12 @@ import {
   createBookingsForReservationPayment,
   CreateBookingsError,
 } from "@/lib/create-bookings-from-payment";
+import Stripe from "stripe";
+import { assertReservationPaidWithStripe } from "@/lib/reservation-payment-check";
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: "2025-10-29.clover",
+});
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,6 +28,12 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    // Public route: prove the payment with Stripe instead of trusting the
+    // browser-writable payment.status, then record reserve_paid ourselves.
+    await assertReservationPaidWithStripe(stripe, paymentDocId, {
+      markStatus: "reserve_paid",
+    });
 
     const result = await createBookingsForReservationPayment({
       paymentDocId,
@@ -36,6 +48,22 @@ export async function POST(req: NextRequest) {
         message: "Booking already exists",
         alreadyExists: true,
       });
+    }
+
+    // Notify staff only from the run that created the bookings (the webhook
+    // does the same), never from the browser.
+    try {
+      const { createReservationPaymentNotification } = await import("@/lib/notification-server");
+      await createReservationPaymentNotification({
+        bookingId: result.bookingIds[0],
+        bookingDocumentId: result.bookingDocumentIds[0],
+        travelerName: `${result.mainBooker.firstName} ${result.mainBooker.lastName}`,
+        tourPackageName: result.tourPackageName,
+        amount: result.reservationFeeTotal,
+        currency: "EUR",
+      });
+    } catch (notificationError) {
+      console.error("❌ Failed to create notification:", notificationError);
     }
 
     return NextResponse.json({

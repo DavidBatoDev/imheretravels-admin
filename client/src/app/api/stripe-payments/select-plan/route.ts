@@ -182,7 +182,7 @@ export async function POST(req: NextRequest) {
     // Create notification for payment plan selection (don't block if it fails)
     try {
       const { createNotification } =
-        await import("@/utils/notification-service");
+        await import("@/lib/notification-server");
 
       const travelerName =
         `${bookingData.firstName || ""} ${bookingData.lastName || ""}`.trim();

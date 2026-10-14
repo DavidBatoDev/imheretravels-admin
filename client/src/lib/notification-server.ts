@@ -1,9 +1,11 @@
-import { db } from "@/lib/firebase";
-import { collection, addDoc, Timestamp } from "firebase/firestore";
+import "server-only";
+
+import { db, collection, addDoc, Timestamp } from "@/lib/server-firestore";
 import { NotificationType } from "@/types/notifications";
 
 // ============================================================================
-// NOTIFICATION SERVICE
+// NOTIFICATION SERVICE (server-only: firebase-admin via server-firestore, so
+// the browser can no longer forge admin notifications)
 // ============================================================================
 
 interface CreateNotificationParams {

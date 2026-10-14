@@ -111,22 +111,6 @@ export const runPaymentSuccessAction = async ({
       if (response.ok) {
         setBookingId(result.bookingId);
 
-        if (result.bookingId && result.bookingDocumentId) {
-          try {
-            const { createReservationPaymentNotification } =
-              await import("@/utils/notification-service");
-            await createReservationPaymentNotification({
-              bookingId: result.bookingId,
-              bookingDocumentId: result.bookingDocumentId,
-              travelerName: `${firstName} ${lastName}`,
-              tourPackageName: selectedPackageName,
-              amount: selectedPackageDeposit || 0,
-              currency: "EUR",
-            });
-          } catch {
-            // Preserve current behavior: notification failures should not block flow.
-          }
-        }
       }
     } else if (
       actualPaymentDocId &&

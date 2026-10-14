@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/firebase";
-import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { db, doc, getDoc, updateDoc, serverTimestamp } from "@/lib/server-firestore";
 
 /**
  * TEST ENDPOINT - Manually trigger installment payment confirmation
@@ -68,7 +67,7 @@ export async function POST(req: NextRequest) {
     else if (checkout_session_id) {
       console.log(`📝 Looking up by checkout session: ${checkout_session_id}`);
       const { collection, query, where, getDocs } =
-        await import("firebase/firestore");
+        await import("@/lib/server-firestore");
 
       const paymentsQuery = query(
         collection(db, "stripePayments"),

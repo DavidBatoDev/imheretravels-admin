@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
               // Notify only for the main booker
               try {
                 const { createReservationPaymentNotification } =
-                  await import("@/utils/notification-service");
+                  await import("@/lib/notification-server");
                 await createReservationPaymentNotification({
                   bookingId: result.bookingIds[0],
                   bookingDocumentId: result.bookingDocumentIds[0],

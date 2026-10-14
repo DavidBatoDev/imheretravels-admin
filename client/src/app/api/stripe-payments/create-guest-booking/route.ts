@@ -29,6 +29,13 @@ import {
   normalizeTourDateToUTCPlus8Nine,
   type BookingCreationInput,
 } from "@/lib/booking-calculations";
+import Stripe from "stripe";
+import { CreateBookingsError } from "@/lib/create-bookings-from-payment";
+import { assertReservationPaidWithStripe } from "@/lib/reservation-payment-check";
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: "2025-10-29.clover",
+});
 
 /**
  * Generate a unique booking ID in format "YYMM-XXXX"
@@ -231,6 +238,17 @@ export async function POST(req: NextRequest) {
         message: "Booking already exists",
         alreadyExists: true,
       });
+    }
+
+    // The doc's status and intent id are browser-writable, so prove the
+    // payment with Stripe before creating anything.
+    try {
+      await assertReservationPaidWithStripe(stripe, paymentDocId);
+    } catch (err) {
+      if (err instanceof CreateBookingsError) {
+        return NextResponse.json({ error: err.message }, { status: err.status });
+      }
+      throw err;
     }
 
     // 2. Validate the guest invitation
@@ -578,6 +596,21 @@ export async function POST(req: NextRequest) {
       });
 
       console.log("✅ Parent booking invitation status updated to 'accepted'");
+    }
+
+    try {
+      const { createGuestReservationPaymentNotification } = await import("@/lib/notification-server");
+      await createGuestReservationPaymentNotification({
+        bookingId: bookingData.bookingId,
+        bookingDocumentId: newBookingRef.id,
+        travelerName: `${guestData.firstName || ""} ${guestData.lastName || ""}`.trim(),
+        mainBookerName: parentBookingMainBookerName || "Main Booker",
+        tourPackageName: paymentData.tour?.packageName || parentBooking.tourName || "",
+        amount: Number(paymentData.payment?.amount) || 0,
+        currency: "EUR",
+      });
+    } catch (notificationError) {
+      console.error("❌ Failed to create guest notification:", notificationError);
     }
 
     // 16. Return success response

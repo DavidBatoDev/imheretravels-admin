@@ -570,24 +570,6 @@ const GuestReservationPage = () => {
           // Don't block the user flow if email fails
         }
 
-        // Create notification for guest payment
-        try {
-          const { createGuestReservationPaymentNotification } =
-            await import("@/utils/notification-service");
-          await createGuestReservationPaymentNotification({
-            bookingId: result.bookingId || result.guestBookingId,
-            bookingDocumentId: result.bookingDocumentId || "",
-            travelerName: `${firstName} ${lastName}`,
-            mainBookerName:
-              (parentBooking as any)?.travelerName || "Main Booker",
-            tourPackageName: parentBooking?.tourName || "",
-            amount: depositAmount || parentBooking?.depositAmount || 0,
-            currency: "EUR",
-          });
-        } catch (error) {
-          console.error("Failed to create guest notification:", error);
-          // Continue anyway - don't block user
-        }
       } else {
         console.error("❌ Failed to create guest booking:", result.error);
         alert(`Failed to create booking: ${result.error}`);

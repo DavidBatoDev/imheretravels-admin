@@ -4,6 +4,7 @@ import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import crypto from "crypto";
 import { useAuthStore } from "@/store/auth-store";
 import { bookingVersionHistoryService } from "@/services/booking-version-history-service";
+import { normalizeBookingEmailFields } from "@/lib/email-normalize";
 
 const COLLECTION_NAME = "bookings";
 
@@ -28,7 +29,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const bookingData = await request.json();
+    const bookingData = normalizeBookingEmailFields(await request.json());
 
     const docRef = doc(db, COLLECTION_NAME, id);
     const docSnap = await getDoc(docRef);

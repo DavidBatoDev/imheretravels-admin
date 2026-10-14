@@ -14,6 +14,7 @@ import {
 } from "firebase/firestore";
 import Stripe from "stripe";
 import crypto from "crypto";
+import { isValidEmail, normalizeEmail } from "@/lib/email-normalize";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2025-10-29.clover",
@@ -92,19 +93,25 @@ export async function POST(req: NextRequest) {
 
     console.log(`✅ Found booking: ${booking.bookingId}`);
 
-    // Support both email field names for backward compatibility
-    const customerEmail = booking.emailAddress || booking.email;
-    console.log(`📧 Customer email:`, customerEmail);
+    // Support both email field names for backward compatibility. Normalise
+    // before use: Stripe rejects addresses with stray whitespace, which admins
+    // can paste into the sheet without noticing.
+    const rawEmail = booking.emailAddress || booking.email;
+    const customerEmail =
+      normalizeEmail(booking.emailAddress) || normalizeEmail(booking.email);
+    console.log(`📧 Customer email:`, JSON.stringify(rawEmail));
 
-    // Validate email exists and is valid
-    if (
-      !customerEmail ||
-      typeof customerEmail !== "string" ||
-      !customerEmail.includes("@")
-    ) {
-      console.log(`❌ Invalid or missing email address: ${customerEmail}`);
+    // Validate email exists and is valid before writing anything or calling
+    // Stripe, so a bad address doesn't leave a pending stripePayments doc.
+    if (!isValidEmail(customerEmail)) {
+      console.log(
+        `❌ Invalid or missing email address on booking ${booking.bookingId}: ${JSON.stringify(rawEmail)}`,
+      );
       return NextResponse.json(
-        { error: `Invalid email address: ${customerEmail}` },
+        {
+          error:
+            "We couldn't start your payment because the email address on your booking looks invalid. Please contact us so we can correct it.",
+        },
         { status: 400 },
       );
     }
@@ -235,7 +242,7 @@ export async function POST(req: NextRequest) {
       customer: {
         firstName: booking.firstName || "",
         lastName: booking.lastName || "",
-        email: customerEmail || "",
+        email: customerEmail,
         // Add additional fields if available in booking
         ...(booking.birthdate && { birthdate: booking.birthdate }),
         ...(booking.nationality && { nationality: booking.nationality }),
@@ -334,7 +341,7 @@ export async function POST(req: NextRequest) {
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       payment_method_types: ["card", "revolut_pay"],
-      customer_email: customerEmail || undefined,
+      customer_email: customerEmail,
       line_items: [
         {
           price_data: {

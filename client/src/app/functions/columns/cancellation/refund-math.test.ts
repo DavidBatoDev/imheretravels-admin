@@ -13,6 +13,7 @@ async function run(opts: {
   paidTerms?: number;
   eligibleRefund: string;
   lateFees?: Array<[number, string]>;
+  addOns?: unknown;
 }) {
   const late = [0, 1, 2, 3].flatMap((i) => opts.lateFees?.[i] ?? [0, ""]);
   const reason = "Guest - Change of plans";
@@ -27,6 +28,7 @@ async function run(opts: {
     reason,
     opts.paid,
     ...late,
+    opts.addOns,
   );
   const refundable = await getRefundableAmount(
     reason,
@@ -39,6 +41,7 @@ async function run(opts: {
     "2026-09-28",
     opts.eligibleRefund,
     ...late,
+    opts.addOns,
   );
   const nonRefundable = await getNonRefundableAmount(
     "Guest",
@@ -101,5 +104,44 @@ describe("paid late fees are never refunded", () => {
       lateFees: [[50, ""]],
     });
     expect(r.refundable).toBeCloseTo(1304.1);
+  });
+});
+
+describe("paid add-ons follow the tour's cancellation tier (T&C §12)", () => {
+  const privateRoom = [{ id: "a", item: "Private room", amount: 200, datePaid: "2026-08-01" }];
+  const unpaidTransfer = [{ id: "b", item: "Transfer", amount: 40, datePaid: null }];
+
+  it("instalments: paid add-on joins the 50% base and the 10% fee base", async () => {
+    // RF 250 + terms 666 + private room 200
+    const r = await run({
+      paid: 1116,
+      paidTerms: 666,
+      eligibleRefund: "50% of paid terms minus admin fee",
+      addOns: privateRoom,
+    });
+    expect(r.adminFee).toBeCloseTo(86.6);
+    expect(r.refundable).toBeCloseTo(346.4);
+    expect(r.nonRefundable).toBeCloseTo(769.6);
+  });
+
+  it("instalments: unpaid add-on changes nothing", async () => {
+    const r = await run({
+      paid: 916,
+      paidTerms: 666,
+      eligibleRefund: "50% of paid terms minus admin fee",
+      addOns: unpaidTransfer,
+    });
+    expect(r.refundable).toBeCloseTo(266.4);
+  });
+
+  it("full payment: add-on is already in Paid, not counted twice", async () => {
+    const r = await run({
+      paid: 1899,
+      fullPaymentAmount: 1449,
+      eligibleRefund: EARLY,
+      addOns: privateRoom,
+    });
+    expect(r.adminFee).toBeCloseTo(164.9);
+    expect(r.refundable).toBeCloseTo(1484.1);
   });
 });

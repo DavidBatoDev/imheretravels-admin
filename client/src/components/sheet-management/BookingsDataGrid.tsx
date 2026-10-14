@@ -619,8 +619,9 @@ export default function BookingsDataGrid({
   const [showFilters, setShowFilters] = useState(false);
   const [showColumnsDialog, setShowColumnsDialog] = useState(false);
 
-  // Preview shown before committing a Manual Credit / Credit From edit, so an
-  // admin can see the resulting P1–P4 due amounts before they hit Firestore.
+  // Preview shown before committing a per-slot Amount Paid (or legacy Manual
+  // Credit / Credit From) edit, so an admin can see the resulting P1–P4 due
+  // amounts before they hit Firestore.
   const [creditPreview, setCreditPreview] = useState<{
     rowId: string;
     columnId: string;
@@ -5457,8 +5458,6 @@ export default function BookingsDataGrid({
         allBookingsData={localData.length > 0 ? localData : data}
       />
 
-      {/* Manual Credit / Credit From preview — shows the resulting P1–P4 due
-          amounts before the edit is committed to Firestore. */}
       <Dialog
         open={addOnsDialog !== null}
         onOpenChange={(open) => {
@@ -5489,6 +5488,9 @@ export default function BookingsDataGrid({
         </DialogContent>
       </Dialog>
 
+      {/* Dues preview — shows the resulting P1–P4 due amounts before a
+          per-slot Amount Paid (or legacy Manual Credit / Credit From) edit is
+          committed to Firestore. */}
       <Dialog
         open={creditPreview !== null}
         onOpenChange={(open) => {

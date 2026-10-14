@@ -83,3 +83,68 @@ export function isDueDateChargeable(
   const from = toDateValue(chargeDueFrom);
   return !from || dueDate.getTime() >= from.getTime();
 }
+
+/**
+ * Coerce a stored date (Date, ISO/display string, Firestore Timestamp or its
+ * serialised {seconds}/{_seconds} form) to a Date. Anything else → null.
+ */
+export function asDate(value: any): Date | null {
+  if (!value) return null;
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  if (typeof value === "object") {
+    if (typeof value.toDate === "function") {
+      const parsed = value.toDate();
+      return parsed instanceof Date && !Number.isNaN(parsed.getTime())
+        ? parsed
+        : null;
+    }
+
+    if (typeof value.seconds === "number") {
+      const parsed = new Date(value.seconds * 1000);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    if (typeof value._seconds === "number") {
+      const parsed = new Date(value._seconds * 1000);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * A term's due date. `pNDueDate` can hold the whole schedule as one string
+ * ("Jul 31, 2026, Aug 28, 2026, …"), so take the termIndex-th "Mon D, YYYY" pair.
+ */
+export function parseTermDueDate(dueDateRaw: any, termIndex: number): Date | null {
+  if (!dueDateRaw) return null;
+
+  if (typeof dueDateRaw === "string" && dueDateRaw.includes(",")) {
+    const parts = dueDateRaw.split(",").map((part) => part.trim());
+    const partStart = termIndex * 2;
+    const partEnd = partStart + 1;
+
+    if (parts.length > partEnd) {
+      return asDate(`${parts[partStart]}, ${parts[partEnd]}`);
+    }
+  }
+
+  return asDate(dueDateRaw);
+}
+
+/** The overdue guard: a fee may apply once `now >= dueDate + graceDays`. */
+export function isPastGrace(dueDate: Date, graceDays: number, now: Date): boolean {
+  const graceCutoff = new Date(dueDate.getTime());
+  graceCutoff.setDate(graceCutoff.getDate() + graceDays);
+  return now >= graceCutoff;
+}

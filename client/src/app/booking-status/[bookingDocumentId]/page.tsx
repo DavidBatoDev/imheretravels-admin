@@ -48,7 +48,7 @@ import {
   getPaymentCondition,
 } from "@/lib/booking-calculations";
 import PayNowModal from "@/components/booking-status/PayNowModal";
-import { getLateFeeGraceDays } from "@/lib/late-fee-policy";
+import { getLateFeeGraceDays, isPastGrace } from "@/lib/late-fee-policy";
 import { getDisplayedBalanceDue } from "@/lib/finance/balance-due";
 
 
@@ -1000,12 +1000,10 @@ export default function BookingStatusPage() {
       // ever showing a customer a fee on a payment that is not actually overdue.
       const dueDateForFee = getDateFromValue(dueDate);
       const graceDays = getLateFeeGraceDays(booking.reservationDate);
-      const graceCutoff = dueDateForFee
-        ? new Date(dueDateForFee.getTime() + graceDays * 24 * 60 * 60 * 1000)
-        : null;
-      const isPastGrace = !!graceCutoff && new Date() >= graceCutoff;
+      const pastGrace =
+        !!dueDateForFee && isPastGrace(dueDateForFee, graceDays, new Date());
       const penalty =
-        rawPenalty > 0 && (hasPaidDate || isPastGrace) ? rawPenalty : 0;
+        rawPenalty > 0 && (hasPaidDate || pastGrace) ? rawPenalty : 0;
 
       terms.push({
         id,

@@ -5,7 +5,13 @@ import { logger } from "firebase-functions";
 import EmailTemplateService from "./email-template-service";
 import GmailApiService from "./gmail-api-service";
 import { buildBookingStatusUrl } from "./booking-status-url";
-import { getLateFeeGraceDays, isDueDateChargeable } from "./late-fee-policy";
+import {
+  asDate,
+  getLateFeeGraceDays,
+  isDueDateChargeable,
+  isPastGrace,
+  parseTermDueDate,
+} from "./late-fee-policy";
 
 if (getApps().length === 0) {
   initializeApp();
@@ -21,55 +27,6 @@ type LateFeesConfig = {
 };
 
 const TERM_KEYS = ["p1", "p2", "p3", "p4"] as const;
-
-function asDate(value: any): Date | null {
-  if (!value) return null;
-
-  if (value instanceof Date) {
-    return isNaN(value.getTime()) ? null : value;
-  }
-
-  if (typeof value === "string") {
-    const parsed = new Date(value);
-    return isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  if (typeof value === "object") {
-    if (typeof value.toDate === "function") {
-      const parsed = value.toDate();
-      return parsed instanceof Date && !isNaN(parsed.getTime()) ? parsed : null;
-    }
-
-    if (typeof value.seconds === "number") {
-      const parsed = new Date(value.seconds * 1000);
-      return isNaN(parsed.getTime()) ? null : parsed;
-    }
-
-    if (typeof value._seconds === "number") {
-      const parsed = new Date(value._seconds * 1000);
-      return isNaN(parsed.getTime()) ? null : parsed;
-    }
-  }
-
-  return null;
-}
-
-function parseTermDueDate(dueDateRaw: any, termIndex: number): Date | null {
-  if (!dueDateRaw) return null;
-
-  if (typeof dueDateRaw === "string" && dueDateRaw.includes(",")) {
-    const parts = dueDateRaw.split(",").map((part) => part.trim());
-    const partStart = termIndex * 2;
-    const partEnd = partStart + 1;
-
-    if (parts.length > partEnd) {
-      const merged = `${parts[partStart]}, ${parts[partEnd]}`;
-      return asDate(merged);
-    }
-  }
-
-  return asDate(dueDateRaw);
-}
 
 function formatGBP(value: number): string {
   return `£${value.toFixed(2)}`;
@@ -177,10 +134,7 @@ export const applyLateFeesDaily = onSchedule(
             continue;
           }
 
-          const graceCutoff = new Date(dueDate.getTime());
-          graceCutoff.setDate(graceCutoff.getDate() + graceDays);
-
-          if (now < graceCutoff) {
+          if (!isPastGrace(dueDate, graceDays, now)) {
             continue;
           }
 
@@ -269,9 +223,7 @@ export const applyLateFeesDaily = onSchedule(
               return false;
             }
 
-            const freshGraceCutoff = new Date(freshDueDate.getTime());
-            freshGraceCutoff.setDate(freshGraceCutoff.getDate() + graceDays);
-            if (now < freshGraceCutoff) {
+            if (!isPastGrace(freshDueDate, graceDays, now)) {
               return false;
             }
 

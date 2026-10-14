@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { staffFetch } from "@/lib/staff-fetch";
 import {
   Card,
   CardContent,
@@ -337,7 +338,7 @@ export default function EmailsTab() {
 
       // Handle drafts separately
       if (activeCategory === "drafts") {
-        const response = await fetch("/api/gmail/drafts/list", {
+        const response = await staffFetch("/api/gmail/drafts/list", {
           signal: newAbortController.signal,
         });
         if (!response.ok) {
@@ -365,7 +366,7 @@ export default function EmailsTab() {
         }
 
         // Call Next.js API route instead of Firebase Functions
-        const response = await fetch("/api/gmail/emails", {
+        const response = await staffFetch("/api/gmail/emails", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -551,7 +552,7 @@ export default function EmailsTab() {
     setIsLoadingFullContent(true);
     try {
       // Call Next.js API route instead of Firebase Functions
-      const response = await fetch(`/api/gmail/emails/${messageId}`, {
+      const response = await staffFetch(`/api/gmail/emails/${messageId}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -601,7 +602,7 @@ export default function EmailsTab() {
   const fetchLabels = async () => {
     try {
       // Call Next.js API route instead of Firebase Functions
-      const response = await fetch("/api/gmail/labels", {
+      const response = await staffFetch("/api/gmail/labels", {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -697,7 +698,7 @@ export default function EmailsTab() {
       // Mark email as read if it's unread
       if (!email.isRead) {
         try {
-          const response = await fetch(`/api/gmail/emails/${email.id}`, {
+          const response = await staffFetch(`/api/gmail/emails/${email.id}`, {
             method: "PATCH",
             headers: {
               "Content-Type": "application/json",
@@ -934,7 +935,7 @@ export default function EmailsTab() {
         // Coerce undefined to a boolean to satisfy the API
         const starState = !!isStarred;
   
-        const response = await fetch("/api/gmail/star", {
+        const response = await staffFetch("/api/gmail/star", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -1001,7 +1002,7 @@ export default function EmailsTab() {
       }
 
       // For regular emails, use the Gmail API message ID
-      const response = await fetch("/api/gmail/emails/" + email.id, {
+      const response = await staffFetch("/api/gmail/emails/" + email.id, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -1045,7 +1046,7 @@ export default function EmailsTab() {
       // For drafts, use draft deletion endpoint
       const isDraftIdPattern = /^r\d/.test(email.id);
       if (email.isDraft || isDraftIdPattern) {
-        const draftResponse = await fetch(
+        const draftResponse = await staffFetch(
           "/api/gmail/drafts?draftId=" + email.id,
           {
             method: "DELETE",
@@ -1077,7 +1078,7 @@ export default function EmailsTab() {
       }
 
       // For regular emails, use the Gmail API message ID
-      const response = await fetch("/api/gmail/emails/" + email.id, {
+      const response = await staffFetch("/api/gmail/emails/" + email.id, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -1132,7 +1133,7 @@ export default function EmailsTab() {
       const action = email.isRead ? "markAsUnread" : "markAsRead";
 
       // For regular emails, use the Gmail API message ID
-      const response = await fetch("/api/gmail/emails/" + email.id, {
+      const response = await staffFetch("/api/gmail/emails/" + email.id, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -1446,7 +1447,7 @@ export default function EmailsTab() {
 
           // Handle drafts separately
           if (activeCategory === "drafts") {
-            const response = await fetch("/api/gmail/drafts/list", {
+            const response = await staffFetch("/api/gmail/drafts/list", {
               signal: newAbortController.signal,
             });
             if (!response.ok) {
@@ -1469,7 +1470,7 @@ export default function EmailsTab() {
             );
             const query = category?.query || "in:sent OR in:inbox";
 
-            const response = await fetch("/api/gmail/emails", {
+            const response = await staffFetch("/api/gmail/emails", {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",

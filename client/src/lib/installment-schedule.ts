@@ -20,9 +20,12 @@
  *     ("legacy" policy — see lib/schedule-policy.ts).
  *  4. SNAP-BACK: when the final monthly anchor overshoots the cutoff, the term
  *     is no longer dropped. Instead the schedule falls back to the latest
- *     anchor-style Friday (last, or second-to-last, per rule 1) that still
- *     meets the deadline, provided it is at least MIN_INSTALLMENT_GAP_DAYS
- *     after the previous instalment.
+ *     Friday (any Friday, not just an anchor) that still meets the deadline,
+ *     provided it is at least MIN_INSTALLMENT_GAP_DAYS after the previous
+ *     instalment. It only ever appends a final date, so earlier dates (and
+ *     plans already chosen) never move. For last-Friday bookings this is the
+ *     same date as before; for second-to-last-Friday bookings it can add a
+ *     term (e.g. tour 16 Jan 2027: Oct 23 + Nov 13 instead of Oct 23 only).
  *
  * Timezone: the core works on "civil" dates (year/month/day with no time
  * component), represented as UTC-midnight Dates so the arithmetic is
@@ -150,9 +153,6 @@ export function computeEligibleInstallmentDates(
   const anchorOfMonth = secondToLast
     ? secondToLastFridayOfMonth
     : lastFridayOfMonth;
-  const anchorOnOrBefore = secondToLast
-    ? secondToLastFridayOnOrBefore
-    : lastFridayOnOrBefore;
 
   const anchors = Array.from({ length: monthCount }, (_, i) =>
     anchorOfMonth(resUTC.getUTCFullYear(), resUTC.getUTCMonth() + i),
@@ -178,8 +178,7 @@ export function computeEligibleInstallmentDates(
   );
 
   // Snap-back: when the final monthly anchor overshoots the deadline, fall back
-  // to the latest anchor-style Friday that still meets it rather than dropping
-  // the term.
+  // to the latest Friday that still meets it rather than dropping the term.
   //
   // Only extends a schedule that already has at least one instalment — a
   // Last Minute Booking stays a Last Minute Booking (48hr full payment).
@@ -189,7 +188,7 @@ export function computeEligibleInstallmentDates(
     eligible.length >= 1 &&
     eligible.length < MAX_INSTALLMENT_TERMS
   ) {
-    const snapped = anchorOnOrBefore(cutoffDate.getTime());
+    const snapped = lastFridayOnOrBefore(cutoffDate.getTime());
     const previous = eligible[eligible.length - 1].getTime();
 
     if (

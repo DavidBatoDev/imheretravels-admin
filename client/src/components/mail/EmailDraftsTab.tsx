@@ -120,11 +120,6 @@ export default function EmailDraftsTab() {
           ...doc.data(),
         })) as EmailDraft[];
 
-        console.log(
-          "📋 All drafts:",
-          allDrafts.map((d) => ({ id: d.id, to: d.to, deletedAt: d.deletedAt }))
-        );
-
         // Filter out deleted drafts on client side
         const activeDrafts = allDrafts.filter((draft) => !draft.deletedAt);
         console.log(`✅ Active drafts (not deleted): ${activeDrafts.length}`);

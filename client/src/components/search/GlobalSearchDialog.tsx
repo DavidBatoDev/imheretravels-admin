@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Fuse from "fuse.js";
-import { collection, onSnapshot, Unsubscribe } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { Unsubscribe } from "firebase/firestore";
+import { subscribeToBookings } from "@/hooks/use-bookings-store";
 import {
   CommandDialog,
   CommandEmpty,
@@ -114,38 +114,32 @@ export default function GlobalSearchDialog({
     setIsLoading(true);
     const unsubscribes: Unsubscribe[] = [];
 
-    // Fetch all category data
+    // Fetch all category data (in parallel)
     const fetchAllData = async () => {
       const data: Record<string, any[]> = {};
 
-      for (const category of searchCategories) {
-        try {
-          // Use real-time listener for bookings
-          if (category.useRealtimeListener && category.key === "bookings") {
-            const unsubscribe = onSnapshot(
-              collection(db, "bookings"),
-              (snapshot) => {
-                const bookings = snapshot.docs.map((doc) => ({
-                  id: doc.id,
-                  ...doc.data(),
-                }));
+      await Promise.all(
+        searchCategories.map(async (category) => {
+          try {
+            // Bookings come from the shared realtime store
+            if (category.useRealtimeListener && category.key === "bookings") {
+              const unsubscribe = subscribeToBookings(({ bookings }) => {
                 setCategoryData((prev) => ({
                   ...prev,
                   [category.key]: bookings,
                 }));
-              }
-            );
-            unsubscribes.push(unsubscribe);
-          } else {
-            // Static fetch for other categories
-            const items = await category.fetchData();
-            data[category.key] = items;
+              });
+              unsubscribes.push(unsubscribe);
+            } else {
+              // Static fetch for other categories
+              data[category.key] = await category.fetchData();
+            }
+          } catch (error) {
+            console.error(`Error fetching ${category.key}:`, error);
+            data[category.key] = [];
           }
-        } catch (error) {
-          console.error(`Error fetching ${category.key}:`, error);
-          data[category.key] = [];
-        }
-      }
+        })
+      );
 
       setCategoryData((prev) => ({ ...prev, ...data }));
       setIsLoading(false);

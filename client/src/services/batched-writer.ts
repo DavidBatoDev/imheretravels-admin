@@ -3,6 +3,7 @@ import { doc, getDoc, writeBatch, serverTimestamp } from "firebase/firestore";
 import { bookingVersionHistoryService } from "./booking-version-history-service";
 import { useAuthStore } from "@/store/auth-store";
 import { SheetData } from "@/types/sheet-management";
+import { normalizeBookingFieldValue } from "@/lib/email-normalize";
 
 type PendingDocUpdates = Record<string, any>; // fieldPath -> value
 
@@ -25,7 +26,9 @@ class BatchedWriter {
 
   queueFieldUpdate(docId: string, fieldPath: string, value: any) {
     const existing = this.queue.get(docId) || {};
-    existing[fieldPath] = value;
+    // Every sheet and edit-modal write lands here, so trim pasted emails once
+    // instead of in each input.
+    existing[fieldPath] = normalizeBookingFieldValue(fieldPath, value);
     this.queue.set(docId, existing);
 
     // Flush if queue is big

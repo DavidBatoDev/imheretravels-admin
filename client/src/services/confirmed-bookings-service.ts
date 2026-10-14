@@ -11,6 +11,7 @@ import {
   orderBy,
   Timestamp,
   limit,
+  getCountFromServer,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import {
@@ -110,9 +111,9 @@ export async function countConfirmedBookingsByTourPackage(
       where("tourPackageName", "==", tourPackageName),
       orderBy("createdAt", "asc")
     );
-    const querySnapshot = await getDocs(q);
+    const countSnapshot = await getCountFromServer(q);
 
-    return querySnapshot.size;
+    return countSnapshot.data().count;
   } catch (error) {
     console.error("Error counting confirmed bookings:", error);
     throw new Error("Failed to count confirmed bookings");
@@ -275,9 +276,9 @@ export async function getUnsentConfirmedBookingsCount(): Promise<number> {
       collection(db, CONFIRMED_BOOKINGS_COLLECTION),
       where("status", "==", "created")
     );
-    const querySnapshot = await getDocs(q);
+    const countSnapshot = await getCountFromServer(q);
 
-    return querySnapshot.size;
+    return countSnapshot.data().count;
   } catch (error) {
     console.error("Error counting unsent confirmed bookings:", error);
     return 0;

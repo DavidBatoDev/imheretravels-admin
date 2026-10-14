@@ -217,7 +217,7 @@ export const PAYMENT_PLAN_TYPE_DESCRIPTIONS: Record<PaymentPlanType, string> = {
   // month, or the second-to-last Friday for 2027+ tours reserved after the
   // 2027 policy date — and the balance must be settled 2 calendar months
   // before the tour. Where that deadline cuts off a month's anchor, the
-  // schedule snaps back to the latest anchor that still meets it
+  // schedule snaps back to the latest Friday that still meets it
   // (see lib/installment-schedule.ts).
   p1_single_installment:
     "Balance paid in full on one monthly Friday due date",

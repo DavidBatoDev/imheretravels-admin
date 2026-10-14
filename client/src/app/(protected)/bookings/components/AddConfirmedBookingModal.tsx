@@ -14,20 +14,19 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Search, AlertCircle, CheckCircle2, X, Mail } from "lucide-react";
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-  Timestamp,
-} from "firebase/firestore";
+import { collection, getDocs, Timestamp } from "firebase/firestore";
 import { db, functions } from "@/lib/firebase";
 import { httpsCallable } from "firebase/functions";
 import {
   createConfirmedBooking,
   getConfirmedBookingByBookingId,
 } from "@/services/confirmed-bookings-service";
-import { findPackByTourPackageName } from "@/services/pre-departure-pack-service";
+import {
+  findPackByTourPackageName,
+  getAllPreDeparturePacks,
+} from "@/services/pre-departure-pack-service";
+import { getBookingsOnce } from "@/hooks/use-bookings-store";
+import type { PreDeparturePack } from "@/types/pre-departure-pack";
 
 interface AddConfirmedBookingModalProps {
   open: boolean;
@@ -119,6 +118,7 @@ export default function AddConfirmedBookingModal({
   const validateBooking = async (
     booking: any,
     packAvailabilityMap?: Map<string, boolean>,
+    confirmedBookingIds?: Set<string>,
   ): Promise<BookingWithValidation> => {
     const errors: string[] = [];
     let isValid = true;
@@ -166,7 +166,9 @@ export default function AddConfirmedBookingModal({
     // Check if already confirmed
     let alreadyConfirmed = false;
     try {
-      const existing = await getConfirmedBookingByBookingId(booking.id);
+      const existing = confirmedBookingIds
+        ? confirmedBookingIds.has(booking.id)
+        : await getConfirmedBookingByBookingId(booking.id);
       if (existing) {
         alreadyConfirmed = true;
         errors.push("Already has confirmed booking");
@@ -216,40 +218,73 @@ export default function AddConfirmedBookingModal({
   const loadBookings = async () => {
     setLoading(true);
     try {
-      const bookingsQuery = query(collection(db, "bookings"));
-      const snapshot = await getDocs(bookingsQuery);
-
-      const bookingsData = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-
-      const uniqueTourNames = Array.from(
-        new Set(
-          bookingsData
-            .map((b: any) => String(b.tourPackageName || "").trim())
-            .filter((name: string) => name.length > 0),
-        ),
-      );
-
-      const packAvailabilityEntries = await Promise.all(
-        uniqueTourNames.map(async (tourName) => {
-          try {
-            const pack = await findPackByTourPackageName(tourName);
-            return [tourName.toLowerCase().trim(), !!pack] as const;
-          } catch {
-            return [tourName.toLowerCase().trim(), false] as const;
-          }
+      // Fetch everything once and join in memory (instead of one
+      // confirmed-booking query + one pack lookup per booking).
+      const [bookingsData, confirmedSnapshot, packs] = await Promise.all([
+        getBookingsOnce(),
+        // On failure, fall back to per-booking lookups (as before).
+        getDocs(collection(db, "confirmedBookings")).catch((error) => {
+          console.error("Error loading confirmedBookings:", error);
+          return null;
         }),
-      );
+        // On failure, fall back to per-tour lookups (as before).
+        getAllPreDeparturePacks().catch((error): PreDeparturePack[] | null => {
+          console.error("Error loading pre-departure packs:", error);
+          return null;
+        }),
+      ]);
 
-      const packAvailabilityMap = new Map<string, boolean>(
-        packAvailabilityEntries,
-      );
+      const confirmedBookingIds = confirmedSnapshot
+        ? new Set<string>(
+            confirmedSnapshot.docs
+              .map((doc) => doc.data().bookingDocumentId)
+              .filter((id): id is string => typeof id === "string"),
+          )
+        : undefined;
+
+      const packAvailabilityMap = new Map<string, boolean>();
+      if (!packs) {
+        // Bulk load failed: look up each unique tour once (previous behavior).
+        const uniqueTourNames = Array.from(
+          new Set(
+            bookingsData
+              .map((b: any) => String(b.tourPackageName || "").trim())
+              .filter((name: string) => name.length > 0),
+          ),
+        );
+        const entries = await Promise.all(
+          uniqueTourNames.map(async (tourName) => {
+            try {
+              const pack = await findPackByTourPackageName(tourName);
+              return [tourName.toLowerCase().trim(), !!pack] as const;
+            } catch {
+              return [tourName.toLowerCase().trim(), false] as const;
+            }
+          }),
+        );
+        entries.forEach(([key, value]) => packAvailabilityMap.set(key, value));
+      } else {
+        packs.forEach((pack) =>
+          (pack.tourPackages || []).forEach((tp) =>
+            packAvailabilityMap.set(
+              String(tp.tourPackageName || "").toLowerCase().trim(),
+              true,
+            ),
+          ),
+        );
+        bookingsData.forEach((b: any) => {
+          const key = String(b.tourPackageName || "").toLowerCase().trim();
+          if (key && !packAvailabilityMap.has(key)) {
+            packAvailabilityMap.set(key, false);
+          }
+        });
+      }
 
       // Validate each booking
       const validatedBookings = await Promise.all(
-        bookingsData.map((b) => validateBooking(b, packAvailabilityMap)),
+        bookingsData.map((b) =>
+          validateBooking(b, packAvailabilityMap, confirmedBookingIds),
+        ),
       );
 
       // Sort: valid bookings first, then by booking ID

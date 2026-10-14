@@ -9,7 +9,7 @@
 
 import { auth, db } from "@/lib/firebase";
 import { collection, getDocs } from "firebase/firestore";
-import { bookingService } from "./booking-service";
+import { getBookingsOnce } from "@/hooks/use-bookings-store";
 import {
   CustomerReport,
   CustomerReportRow,
@@ -312,7 +312,7 @@ export async function generateCustomerReport(
 ): Promise<CustomerReport> {
   const { startDate, endDate } = dateRange;
 
-  const allBookings = await bookingService.getAllBookings();
+  const allBookings = (await getBookingsOnce()) as Record<string, any>[];
   const filtered = allBookings.filter((b) => {
     const d = toDate(b.reservationDate);
     if (!d) return false;

@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { getNextBookingRow } from "@/lib/booking-row-queries";
+import { useBookingsStore } from "@/hooks/use-bookings-store";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -43,7 +45,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import { collection, onSnapshot, query, Timestamp } from "firebase/firestore";
+import { collection, onSnapshot, query, where, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Booking } from "@/types/bookings";
 import { bookingService } from "@/services/booking-service";
@@ -69,8 +71,6 @@ import { useToast } from "@/hooks/use-toast";
 export default function DashboardOverview() {
   const router = useRouter();
   const { toast } = useToast();
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isCreatingBooking, setIsCreatingBooking] = useState(false);
   const [paymentRemindersCount, setPaymentRemindersCount] = useState(0);
   const [paymentReminderStats, setPaymentReminderStats] = useState({
@@ -80,16 +80,15 @@ export default function DashboardOverview() {
     cancelled: 0,
   });
 
-  // Fetch real booking data from Firebase
-  useEffect(() => {
-    const bookingsQuery = query(collection(db, "bookings"));
-
-    const unsubscribe = onSnapshot(bookingsQuery, (snapshot) => {
-      const bookingData = snapshot.docs.map((doc) => {
-        const data = doc.data();
+  // Bookings come from the shared realtime store (one listener app-wide).
+  const bookingsStore = useBookingsStore();
+  const isLoading = bookingsStore.isLoading;
+  const bookings = useMemo(
+    () =>
+      bookingsStore.bookings.map((raw) => {
+        const data = raw as any;
         // Convert Firebase Timestamps to JavaScript Date objects
         return {
-          id: doc.id,
           ...data,
           reservationDate: data.reservationDate?.toDate
             ? data.reservationDate.toDate()
@@ -103,28 +102,19 @@ export default function DashboardOverview() {
             ? new Date(data.returnDate)
             : null,
         };
-      }) as Booking[];
-
-      setBookings(bookingData);
-      setIsLoading(false);
-      console.log("Loaded bookings:", bookingData.length, bookingData);
-    });
-
-    return () => unsubscribe();
-  }, []);
+      }) as Booking[],
+    [bookingsStore.bookings]
+  );
 
   // Fetch payment reminders count from scheduledEmails
   useEffect(() => {
     const scheduledEmailsQuery = query(
-      collection(db, "scheduledEmails")
-      // Optionally filter by status if needed
+      collection(db, "scheduledEmails"),
+      where("emailType", "==", "payment-reminder")
     );
 
     const unsubscribe = onSnapshot(scheduledEmailsQuery, (snapshot) => {
-      const paymentReminderEmails = snapshot.docs.filter((doc) => {
-        const data = doc.data();
-        return data.emailType === "payment-reminder";
-      });
+      const paymentReminderEmails = snapshot.docs;
 
       setPaymentRemindersCount(paymentReminderEmails.length);
 
@@ -146,11 +136,6 @@ export default function DashboardOverview() {
       });
 
       setPaymentReminderStats(stats);
-      console.log(
-        "Loaded payment reminders:",
-        paymentReminderEmails.length,
-        stats
-      );
     });
 
     return () => unsubscribe();
@@ -368,19 +353,9 @@ export default function DashboardOverview() {
       onClick: async () => {
         setIsCreatingBooking(true);
         try {
-          // Compute next row number (fill gaps)
-          const rowNumbers = (bookings || [])
-            .map((b) => (typeof b.row === "number" ? b.row : 0))
-            .filter((n) => n > 0)
-            .sort((a, b) => a - b);
-          let nextRowNumber = 1;
-          for (let i = 0; i < rowNumbers.length; i++) {
-            if (rowNumbers[i] !== i + 1) {
-              nextRowNumber = i + 1;
-              break;
-            }
-            nextRowNumber = i + 2;
-          }
+          // Next free row, read from Firestore (dedupes rows; sees
+          // bookings other admins just created)
+          const nextRowNumber = await getNextBookingRow();
 
           // Create minimal doc then update with id/row/timestamps
           const newBookingId = await bookingService.createBooking({});
@@ -487,19 +462,9 @@ export default function DashboardOverview() {
             onClick={async () => {
               setIsCreatingBooking(true);
               try {
-                // Compute next row number (fill gaps)
-                const rowNumbers = (bookings || [])
-                  .map((b) => (typeof b.row === "number" ? b.row : 0))
-                  .filter((n) => n > 0)
-                  .sort((a, b) => a - b);
-                let nextRowNumber = 1;
-                for (let i = 0; i < rowNumbers.length; i++) {
-                  if (rowNumbers[i] !== i + 1) {
-                    nextRowNumber = i + 1;
-                    break;
-                  }
-                  nextRowNumber = i + 2;
-                }
+                // Next free row, read from Firestore (dedupes rows; sees
+                // bookings other admins just created)
+                const nextRowNumber = await getNextBookingRow();
 
                 // Create minimal doc then update with id/row/timestamps
                 const newBookingId = await bookingService.createBooking({});

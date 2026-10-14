@@ -12,6 +12,7 @@ import {
 import crypto from "crypto";
 import { useAuthStore } from "@/store/auth-store";
 import { bookingVersionHistoryService } from "@/services/booking-version-history-service";
+import { normalizeBookingEmailFields } from "@/lib/email-normalize";
 
 const COLLECTION_NAME = "bookings";
 
@@ -64,7 +65,7 @@ export async function GET() {
  */
 export async function POST(request: NextRequest) {
   try {
-    const bookingData = await request.json();
+    const bookingData = normalizeBookingEmailFields(await request.json());
 
     // Generate access token for new booking
     const access_token = generateAccessToken();

@@ -17,6 +17,10 @@ import {
   where,
 } from "@/lib/server-firestore";
 import {
+  countBookingsForTourPackage,
+  getLastContiguousBookingRow,
+} from "@/lib/booking-row-queries";
+import {
   validateGuestInvitation,
   checkDuplicateGuestBooking,
 } from "@/lib/guest-booking-server";
@@ -114,25 +118,7 @@ function toDate(input: unknown): Date | null {
  */
 async function getTotalBookingsCount(): Promise<number> {
   try {
-    const bookingsRef = collection(db, "bookings");
-    const snapshot = await getDocs(bookingsRef);
-
-    const existingRows = new Set<number>();
-    snapshot.forEach((doc) => {
-      const data = doc.data();
-      if (data.row && typeof data.row === "number") {
-        existingRows.add(data.row);
-      }
-    });
-
-    if (existingRows.size === 0) return 0;
-
-    let nextRow = 1;
-    while (existingRows.has(nextRow)) {
-      nextRow++;
-    }
-
-    return nextRow - 1;
+    return await getLastContiguousBookingRow();
   } catch (error) {
     console.error("Error getting next row number:", error);
     return 0;
@@ -162,13 +148,7 @@ async function getExistingBookingsCountForTourPackage(
   tourPackageName: string,
 ): Promise<number> {
   try {
-    const bookingsRef = collection(db, "bookings");
-    const q = query(
-      bookingsRef,
-      where("tourPackageName", "==", tourPackageName),
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.size;
+    return await countBookingsForTourPackage(tourPackageName);
   } catch (error) {
     console.error("Error counting bookings for tour package:", error);
     return 0;

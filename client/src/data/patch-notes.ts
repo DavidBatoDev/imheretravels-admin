@@ -12,6 +12,37 @@ export type PatchNote = {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    slug: "snap-back-any-friday",
+    title: "Final Instalment Can Fall on Any Friday Before the Deadline",
+    description:
+      "When the balance deadline (2 months before the tour) cuts off a month's due date, the final instalment now falls on the latest Friday before the deadline instead of being dropped. Earlier due dates never move.",
+    date: "2026-10-14",
+    version: "1.4.3",
+    categories: ["improvement"],
+    content: `# Final Instalment Can Fall on Any Friday Before the Deadline
+
+## Summary
+
+Instalments still fall on a monthly Friday (the second-to-last Friday for 2027+ tours). When the balance deadline, 2 months before the tour, lands before that month's Friday, the last instalment now falls on **the latest Friday before the deadline**. Before, it could only fall back to an earlier monthly Friday, which often meant the term was dropped.
+
+## Example: SB-PHSS-20270116-FD059
+
+Reserved Oct 11, 2026, tour Jan 16, 2027, so the balance is due by **Nov 16, 2026**.
+
+| | Due dates | Plans offered |
+|---|---|---|
+| Before | Oct 23 | P1 |
+| Now | Oct 23, **Nov 13** | P1, P2 |
+
+## What does not change
+
+- Only a final date is ever added. Earlier due dates stay the same, so plans already chosen keep their dates.
+- The new date is always at least 14 days after the previous one, and there are still at most 4 terms.
+- Bookings on the last-Friday anchor get the same dates as before.
+- Last-minute bookings stay last-minute.
+`,
+  },
+  {
     slug: "late-fees-restart-and-refund-fix",
     title: "Late Fees Back On, Refund Fix and Schedule Exceptions",
     description:

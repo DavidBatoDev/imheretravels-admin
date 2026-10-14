@@ -13,6 +13,7 @@ import {
 } from "firebase/firestore";
 import { useAuthStore } from "@/store/auth-store";
 import { bookingVersionHistoryService } from "@/services/booking-version-history-service";
+import { normalizeBookingEmailFields } from "@/lib/email-normalize";
 
 const COLLECTION_NAME = "bookings";
 
@@ -59,7 +60,7 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const updates = await request.json();
+    const updates = normalizeBookingEmailFields(await request.json());
 
     console.log(`🔍 [UPDATE BOOKING API] Called for ${id}, updates:`, Object.keys(updates));
 

@@ -16,6 +16,7 @@ import {
   Unsubscribe,
   DocumentData,
   serverTimestamp,
+  getCountFromServer,
 } from "firebase/firestore";
 import {
   BookingVersionSnapshot,
@@ -599,9 +600,14 @@ class BookingVersionHistoryServiceImpl implements BookingVersionHistoryService {
         where("bookingId", "==", bookingId)
       );
 
-      // Apply limit if specified
+      // Apply limit if specified — newest first, so the limit keeps the
+      // latest versions (uses the bookingId + metadata.createdAt index).
       if (options?.limit) {
-        q = query(q, firestoreLimit(options.limit));
+        q = query(
+          q,
+          orderBy("metadata.createdAt", "desc"),
+          firestoreLimit(options.limit)
+        );
       }
 
       const querySnapshot = await getDocs(q);
@@ -694,12 +700,16 @@ class BookingVersionHistoryServiceImpl implements BookingVersionHistoryService {
       //   VERSIONS_COLLECTION
       // );
 
-      // Simple query without ordering to avoid index requirements
       let q = query(collection(db, VERSIONS_COLLECTION));
 
-      // Apply limit if specified
+      // Apply limit if specified — newest first, so the limit keeps the
+      // latest versions rather than an arbitrary set.
       if (options?.limit) {
-        q = query(q, firestoreLimit(options.limit));
+        q = query(
+          q,
+          orderBy("metadata.createdAt", "desc"),
+          firestoreLimit(options.limit)
+        );
       }
 
       const querySnapshot = await getDocs(q);
@@ -1451,8 +1461,13 @@ class BookingVersionHistoryServiceImpl implements BookingVersionHistoryService {
 
   async getVersionCount(bookingId: string): Promise<number> {
     try {
-      const versions = await this.getVersionsForBooking(bookingId);
-      return versions.length;
+      const snapshot = await getCountFromServer(
+        query(
+          collection(db, VERSIONS_COLLECTION),
+          where("bookingId", "==", bookingId)
+        )
+      );
+      return snapshot.data().count;
     } catch (error) {
       console.error(
         `❌ Failed to get version count for booking ${bookingId}:`,
@@ -1879,6 +1894,27 @@ class BookingVersionHistoryServiceImpl implements BookingVersionHistoryService {
 
         // Get all versions that happened AFTER the restore and BEFORE/AT the target
         const versionsAfterRestore: BookingVersionSnapshot[] = [];
+
+        // Chronological position of every version, computed once (was
+        // re-sorted for every version inside the loop below).
+        const chronologicalIndex = new Map<string, number>();
+        if (upToVersionId) {
+          Array.from(querySnapshot.docs)
+            .map((d) => ({
+              ...(d.data() as BookingVersionSnapshot),
+              id: d.id,
+            }))
+            .sort(
+              (a, b) =>
+                this.getVersionTimestamp(a) - this.getVersionTimestamp(b)
+            )
+            .forEach((v, index) => {
+              if (!chronologicalIndex.has(v.id)) {
+                chronologicalIndex.set(v.id, index);
+              }
+            });
+        }
+
         querySnapshot.forEach((doc) => {
           const versionData = doc.data() as BookingVersionSnapshot;
           const versionId = doc.id;
@@ -1889,30 +1925,14 @@ class BookingVersionHistoryServiceImpl implements BookingVersionHistoryService {
 
           // If upToVersionId is specified, check if this version should be included
           if (upToVersionId) {
-            const allVersionsArray = Array.from(querySnapshot.docs).map(
-              (d) => ({
-                ...(d.data() as BookingVersionSnapshot),
-                id: d.id,
-              })
-            );
-            allVersionsArray.sort(
-              (a, b) =>
-                this.getVersionTimestamp(a) - this.getVersionTimestamp(b)
-            );
-            const targetIndex = allVersionsArray.findIndex(
-              (v) => v.id === upToVersionId
-            );
-            const currentIndex = allVersionsArray.findIndex(
-              (v) => v.id === versionId
-            );
+            const targetIndex = chronologicalIndex.get(upToVersionId) ?? -1;
+            const currentIndex = chronologicalIndex.get(versionId) ?? -1;
 
             if (targetIndex >= 0 && currentIndex >= 0) {
-              // Compute a stable baseline index (avoid referencing latestRestoreBaseline
-              // inside the findIndex callback which may run later and cause narrowing issues)
               const baselineVersionId =
                 latestRestoreBaseline?.version?.id ?? null;
               const baselineIndex = baselineVersionId
-                ? allVersionsArray.findIndex((v) => v.id === baselineVersionId)
+                ? chronologicalIndex.get(baselineVersionId) ?? -1
                 : -1;
 
               // Include only if this version comes after restore but up to target version
@@ -2074,28 +2094,18 @@ class BookingVersionHistoryServiceImpl implements BookingVersionHistoryService {
       //   ).toISOString()}`
       // );
 
+      // Index of the target version (looked up once, not per version)
+      const targetVersionIndex = upToVersionId
+        ? allVersions.findIndex((v) => v.id === upToVersionId)
+        : -1;
+
       // Filter versions up to and including the target timestamp or specific version
       const versionsUpToTarget = allVersions.filter((version, index) => {
         const versionTime = this.getVersionTimestamp(version);
 
         // If upToVersionId is specified, include versions up to and including that specific version
-        if (upToVersionId) {
-          // Find the index of the target version
-          const targetVersionIndex = allVersions.findIndex(
-            (v) => v.id === upToVersionId
-          );
-          if (targetVersionIndex >= 0) {
-            // Include all versions up to and including the target version by index
-            const shouldInclude = index <= targetVersionIndex;
-            console.log(
-              `🔍 [VERSION FILTER] Version ${version.id} (${
-                version.metadata.changeType
-              }) index ${index}: ${
-                shouldInclude ? "INCLUDED" : "EXCLUDED"
-              } (target index: ${targetVersionIndex})`
-            );
-            return shouldInclude;
-          }
+        if (upToVersionId && targetVersionIndex >= 0) {
+          return index <= targetVersionIndex;
         }
 
         // Otherwise use timestamp-based filtering

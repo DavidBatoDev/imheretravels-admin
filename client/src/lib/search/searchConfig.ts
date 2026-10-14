@@ -9,7 +9,7 @@ import {
   Bell,
 } from "lucide-react";
 import { CategoryConfig, SearchResult } from "@/types/search";
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { getTours } from "@/services/tours-service";
 import { PaymentTermsService } from "@/services/payment-terms-service";
@@ -233,8 +233,9 @@ export const searchCategories: CategoryConfig[] = [
     icon: Bell,
     fetchData: async () => {
       const q = query(
-        collection(db, "scheduled_emails"),
-        orderBy("scheduledFor", "desc")
+        collection(db, "scheduledEmails"),
+        orderBy("scheduledFor", "desc"),
+        limit(200)
       );
       const snapshot = await getDocs(q);
       return snapshot.docs.map((doc) => ({

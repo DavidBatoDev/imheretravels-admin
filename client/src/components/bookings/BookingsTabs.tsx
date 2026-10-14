@@ -2,14 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import {
-  collection,
-  doc,
-  onSnapshot,
-  query,
-  Timestamp,
-  where,
-} from "firebase/firestore";
+import { doc, onSnapshot, Timestamp } from "firebase/firestore";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -28,6 +21,7 @@ import LateFeesSection from "@/app/(protected)/bookings/components/LateFeesSecti
 import { getUnsentConfirmedBookingsCount } from "@/services/confirmed-bookings-service";
 import { getUnsentGuestInvitationsCount } from "@/services/guest-invitations-service";
 import { db } from "@/lib/firebase";
+import { useBookingsStore } from "@/hooks/use-bookings-store";
 
 // Tab mapping utilities
 const urlToInternalTab = (urlTab: string | null): string => {
@@ -140,8 +134,18 @@ export default function BookingsTabs() {
     };
 
     fetchCounts();
-    const interval = setInterval(fetchCounts, 30000);
-    return () => clearInterval(interval);
+    // Count aggregations are cheap (1 read per poll); skip while hidden.
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") fetchCounts();
+    }, 30000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") fetchCounts();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   // Subscribe to late-fees effective date from config
@@ -169,69 +173,50 @@ export default function BookingsTabs() {
     return () => unsubscribe();
   }, []);
 
-  // Subscribe to bookings and compute overdue terms with no notice sent yet
+  // Overdue terms with no notice sent yet, computed from the shared bookings
+  // store (no extra Firestore listener).
+  const { bookings: allBookings } = useBookingsStore();
   useEffect(() => {
-    const bookingsRef = collection(db, "bookings");
-    const bookingsQuery = lateFeesEffectiveDate
-      ? query(
-          bookingsRef,
-          where(
-            "reservationDate",
-            ">=",
-            Timestamp.fromDate(new Date(`${lateFeesEffectiveDate}T00:00:00`)),
-          ),
-        )
-      : query(bookingsRef);
+    const now = new Date();
+    const effectiveDateStart = lateFeesEffectiveDate
+      ? new Date(`${lateFeesEffectiveDate}T00:00:00`)
+      : null;
 
-    const unsubscribe = onSnapshot(
-      bookingsQuery,
-      (snapshot) => {
-        const now = new Date();
-        const effectiveDateStart = lateFeesEffectiveDate
-          ? new Date(`${lateFeesEffectiveDate}T00:00:00`)
-          : null;
+    let count = 0;
 
-        let count = 0;
+    allBookings.forEach((bookingDoc) => {
+      const booking = bookingDoc as unknown as Record<string, any>;
+      const rawReservationDate = booking.reservationDate;
+      const reservationDate = asDate(rawReservationDate);
+      // Matches the former Firestore filter (reservationDate >= Timestamp):
+      // only Timestamp-typed dates qualify, never legacy string dates.
+      if (
+        effectiveDateStart &&
+        (!(rawReservationDate instanceof Timestamp) ||
+          !reservationDate ||
+          reservationDate.getTime() < effectiveDateStart.getTime())
+      ) {
+        return;
+      }
 
-        snapshot.docs.forEach((bookingDoc) => {
-          const booking = bookingDoc.data() as Record<string, any>;
-          const reservationDate = asDate(booking.reservationDate);
-          if (
-            effectiveDateStart &&
-            (!reservationDate ||
-              reservationDate.getTime() < effectiveDateStart.getTime())
-          ) {
-            return;
-          }
+      ["p1", "p2", "p3", "p4"].forEach((termKey, index) => {
+        const dueDate = parseTermDueDate(booking[`${termKey}DueDate`], index);
+        const datePaid = asDate(booking[`${termKey}DatePaid`]);
+        const noticeLink = String(
+          booking[`${termKey}LateFeesNoticeLink`] || "",
+        ).trim();
 
-          ["p1", "p2", "p3", "p4"].forEach((termKey, index) => {
-            const dueDate = parseTermDueDate(
-              booking[`${termKey}DueDate`],
-              index,
-            );
-            const datePaid = asDate(booking[`${termKey}DatePaid`]);
-            const noticeLink = String(
-              booking[`${termKey}LateFeesNoticeLink`] || "",
-            ).trim();
+        const hasOverdueUnpaid =
+          !!dueDate && !datePaid && dueDate.getTime() < now.getTime();
 
-            const hasOverdueUnpaid =
-              !!dueDate && !datePaid && dueDate.getTime() < now.getTime();
+        if (hasOverdueUnpaid && !noticeLink) {
+          count += 1;
+        }
+      });
+    });
 
-            if (hasOverdueUnpaid && !noticeLink) {
-              count += 1;
-            }
-          });
-        });
-
-        setLateFeesPendingCount(count);
-      },
-      (error) => {
-        console.error("Error fetching late-fees pending count:", error);
-      },
-    );
-
-    return () => unsubscribe();
-  }, [lateFeesEffectiveDate]);
+    setLateFeesPendingCount(count);
+  }, [allBookings, lateFeesEffectiveDate]);
 
   // Initialize tab from URL parameters
   useEffect(() => {

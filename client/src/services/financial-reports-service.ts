@@ -6,10 +6,11 @@
  * @/lib/finance/booking-finance and are shared with the Dashboard.
  *
  * Data flow:
- *   getAllBookings() (API) → extractBookingEvents() → sumEvents(range) → report
+ *   getBookingsOnce() (shared store) → extractBookingEvents() → sumEvents(range) → report
  */
 
 import { bookingService } from "./booking-service";
+import { getBookingsOnce } from "@/hooks/use-bookings-store";
 import {
   FinancialEvent,
 
@@ -316,12 +317,13 @@ function aggregateMetrics(
 // ---------------------------------------------------------------------------
 
 /**
- * Scans all bookings to find the earliest reservation date and the latest
- * payment due date (so "All time" captures expected future revenues).
+ * Finds the earliest reservation date and the latest payment due date across
+ * the given bookings (so "All time" captures expected future revenues).
+ * Pure — pass bookings already in memory to avoid refetching the collection.
  */
-async function fetchDataBounds(): Promise<{ startDate: string; endDate: string }> {
-  const rawBookings = await bookingService.getAllBookings();
-
+export function computeDataBounds(
+  rawBookings: ReadonlyArray<unknown>
+): { startDate: string; endDate: string } {
   let earliest: string | null = null;
   let latest: string | null = null;
 
@@ -364,6 +366,47 @@ async function fetchDataBounds(): Promise<{ startDate: string; endDate: string }
   };
 }
 
+async function fetchDataBounds(): Promise<{ startDate: string; endDate: string }> {
+  return computeDataBounds(await getBookingsOnce());
+}
+
+/**
+ * Build a complete FinancialReport from bookings already in memory.
+ * Pure — no Firestore reads.
+ */
+export function buildReport(
+  rawBookings: ReadonlyArray<unknown>,
+  dateRange: DateRangeFilter
+): FinancialReport {
+  const today = new Date();
+  const summaries: BookingFinancialSummary[] = rawBookings.map((b) => {
+    const events = extractBookingEvents(b as RawBooking, today);
+    return buildBookingSummary(b as RawBooking, events);
+  });
+
+  // Flat list of all events (for timeline chart and overall drill-down)
+  const allEvents = summaries
+    .flatMap((s) => s.events)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const metrics = aggregateMetrics(summaries, allEvents, dateRange);
+
+  // Filter booking summaries to only those with at least one event in range
+  const rangedSummaries = summaries.filter((s) =>
+    s.events.some((e) =>
+      dateInRange(e.date, dateRange.startDate, dateRange.endDate)
+    )
+  );
+
+  return {
+    generatedAt: new Date().toISOString(),
+    dateRange,
+    metrics,
+    bookingSummaries: rangedSummaries,
+    allEvents,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -375,35 +418,7 @@ export const financialReportsService = {
    * drill-down event timelines.
    */
   async generateReport(dateRange: DateRangeFilter): Promise<FinancialReport> {
-    const rawBookings = await bookingService.getAllBookings();
-
-    const today = new Date();
-    const summaries: BookingFinancialSummary[] = rawBookings.map((b) => {
-      const events = extractBookingEvents(b as RawBooking, today);
-      return buildBookingSummary(b as RawBooking, events);
-    });
-
-    // Flat list of all events (for timeline chart and overall drill-down)
-    const allEvents = summaries
-      .flatMap((s) => s.events)
-      .sort((a, b) => a.date.localeCompare(b.date));
-
-    const metrics = aggregateMetrics(summaries, allEvents, dateRange);
-
-    // Filter booking summaries to only those with at least one event in range
-    const rangedSummaries = summaries.filter((s) =>
-      s.events.some((e) =>
-        dateInRange(e.date, dateRange.startDate, dateRange.endDate)
-      )
-    );
-
-    return {
-      generatedAt: new Date().toISOString(),
-      dateRange,
-      metrics,
-      bookingSummaries: rangedSummaries,
-      allEvents,
-    };
+    return buildReport(await getBookingsOnce(), dateRange);
   },
 
   /**

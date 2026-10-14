@@ -99,7 +99,7 @@ export function getSchedulePolicy(
         key: "standard",
         label: "Standard schedule (2nd-to-last Friday)",
         description:
-          "Reserved on/after the 2027 policy date for a tour departing in 2027 or later. Instalments fall on the second-to-last Friday of each month; must be paid in full by 2 months before the tour.",
+          "Reserved on/after the 2027 policy date for a tour departing in 2027 or later. Instalments fall on the second-to-last Friday of each month (the final one may fall on an earlier Friday to meet the deadline); must be paid in full by 2 months before the tour.",
         anchor: "second-to-last-friday",
       }
     : {

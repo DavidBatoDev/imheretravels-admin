@@ -15,6 +15,21 @@ const makeDocRef = (collectionPath: string, id: string): DocRef => ({
 
 vi.mock("server-only", () => ({}));
 
+// Row queries evaluated against the same in-memory bookings.
+vi.mock("@/lib/booking-row-queries-server", async () => {
+  const { firstFreeRow } = await import("@/lib/booking-row-math");
+  const bookings = () =>
+    [...store.entries()]
+      .filter(([path]) => path.startsWith("bookings/"))
+      .map(([, data]) => data);
+  return {
+    getLastContiguousBookingRow: async () =>
+      firstFreeRow(bookings().map((b) => b.row)) - 1,
+    countBookingsForTourPackage: async (name: string) =>
+      bookings().filter((b) => b.tourPackageName === name).length,
+  };
+});
+
 vi.mock("@/lib/server-firestore", () => {
   return {
     db: { __fake: true },

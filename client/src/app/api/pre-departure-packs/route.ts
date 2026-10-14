@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/firebase";
 import {
+  db,
   collection,
   getDocs,
   addDoc,
   query,
   orderBy,
   Timestamp,
-} from "firebase/firestore";
-import { uploadFile, STORAGE_BUCKET } from "@/utils/file-upload";
-import { useAuthStore } from "@/store/auth-store";
+} from "@/lib/server-firestore";
+import { uploadFile, STORAGE_BUCKET } from "@/lib/server-storage";
+import { requireStaff } from "@/lib/require-staff";
 import type {
   PreDeparturePack,
   PreDeparturePackFormData,
@@ -57,9 +57,15 @@ export async function GET() {
  * POST /api/pre-departure-packs - Create a new pre-departure pack with file upload
  */
 export async function POST(request: NextRequest) {
+  const staff = await requireStaff(request.headers.get("authorization"));
+  if (!staff.ok) {
+    return NextResponse.json(
+      { success: false, error: staff.error },
+      { status: staff.status },
+    );
+  }
   try {
-    const { user } = useAuthStore.getState();
-    const userId = user?.uid || "anonymous";
+    const userId = staff.uid;
 
     // Parse FormData for file upload
     const formData = await request.formData();
@@ -122,7 +128,8 @@ export async function POST(request: NextRequest) {
       contentType: file.type,
       storagePath: uploadResult.data.path,
       size: file.size,
-      uploadedAt: Timestamp.now(),
+      // firebase-admin Timestamp; stored identically to the client type
+      uploadedAt: Timestamp.now() as unknown as PreDeparturePack["uploadedAt"],
       uploadedBy: userId,
       metadata,
     };

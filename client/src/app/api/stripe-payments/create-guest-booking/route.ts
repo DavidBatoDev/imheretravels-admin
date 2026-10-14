@@ -19,7 +19,7 @@ import {
 import {
   countBookingsForTourPackage,
   getLastContiguousBookingRow,
-} from "@/lib/booking-row-queries";
+} from "@/lib/booking-row-queries-server";
 import {
   validateGuestInvitation,
   checkDuplicateGuestBooking,

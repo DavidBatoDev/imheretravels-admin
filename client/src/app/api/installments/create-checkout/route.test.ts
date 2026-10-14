@@ -17,9 +17,10 @@ vi.mock("stripe", () => ({
   },
 }));
 
-vi.mock("@/lib/firebase", () => ({ db: { __fake: true } }));
+vi.mock("server-only", () => ({}));
 
-vi.mock("firebase/firestore", () => ({
+vi.mock("@/lib/server-firestore", () => ({
+  db: { __fake: true },
   collection: (_db: unknown, collectionPath: string) => ({ collectionPath }),
   doc: (_db: unknown, collectionPath: string, id: string) => ({
     path: `${collectionPath}/${id}`,

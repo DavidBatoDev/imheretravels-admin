@@ -8,6 +8,9 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { firstFreeRow } from "@/lib/booking-row-math";
+
+export { firstFreeRow };
 
 const BOOKINGS = "bookings";
 
@@ -44,21 +47,6 @@ export async function getLastContiguousBookingRow(): Promise<number> {
   // Gap somewhere — find the smallest free row.
   const snapshot = await getDocs(bookingsRef);
   return firstFreeRow(snapshot.docs.map((doc) => doc.data().row)) - 1;
-}
-
-/**
- * Smallest positive row number not already taken. Duplicated rows count once
- * — sorting and comparing positions instead (the old client logic) treats
- * every duplicate as a "gap" and keeps handing out the same row.
- */
-export function firstFreeRow(rows: ReadonlyArray<unknown>): number {
-  const taken = new Set<number>();
-  for (const row of rows) {
-    if (row && typeof row === "number") taken.add(row);
-  }
-  let next = 1;
-  while (taken.has(next)) next++;
-  return next;
 }
 
 /** Number of bookings for a tour package, counted server-side. */

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/firebase";
-import { doc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
-import { deleteFile, STORAGE_BUCKET } from "@/utils/file-upload";
+import { db, doc, getDoc, updateDoc, deleteDoc } from "@/lib/server-firestore";
+import { deleteFile, STORAGE_BUCKET } from "@/lib/server-storage";
+import { requireStaff } from "@/lib/require-staff";
 import type { PreDeparturePack } from "@/types/pre-departure-pack";
 
 const COLLECTION_NAME = "preDeparturePack";
@@ -51,6 +51,13 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const staff = await requireStaff(request.headers.get("authorization"));
+  if (!staff.ok) {
+    return NextResponse.json(
+      { success: false, error: staff.error },
+      { status: staff.status },
+    );
+  }
   try {
     const { id } = await params;
     const { tourPackages } = await request.json();
@@ -100,6 +107,13 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const staff = await requireStaff(request.headers.get("authorization"));
+  if (!staff.ok) {
+    return NextResponse.json(
+      { success: false, error: staff.error },
+      { status: staff.status },
+    );
+  }
   try {
     const { id } = await params;
     const docRef = doc(db, COLLECTION_NAME, id);

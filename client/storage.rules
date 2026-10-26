@@ -1,0 +1,29 @@
+rules_version = '2';
+
+// Default-deny Storage rules (portal/docs/06-phase0-admin-lockdown.md, step 7).
+// Replaces the test-mode rule that opens the bucket to anyone until 2026-10-31.
+//
+// - Approved staff (users/{uid}.isApproved, role admin or agent) can read,
+//   list, upload and delete. Every browser upload in the app is a staff screen.
+// - API routes and Cloud Functions use firebase-admin, which bypasses rules.
+// - Public pages (www, booking-status, emails) use stored download URLs. Those
+//   carry a token and are not checked against these rules.
+// - traveller-documents/ (portal passports etc.) is server-only: no client
+//   access at all, staff included.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isApprovedStaff() {
+      return request.auth != null
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isApproved == true
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin', 'agent'];
+    }
+
+    // Matches are OR'd, so the exclusion has to live in the condition: a
+    // separate "if false" block for traveller-documents/ would not override
+    // a broader allow. {rest=**} also matches zero segments (root-level files).
+    match /{top}/{rest=**} {
+      allow read, write: if top != 'traveller-documents' && isApprovedStaff();
+    }
+  }
+}

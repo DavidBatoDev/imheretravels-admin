@@ -7,7 +7,10 @@ import {
 import { getAuth } from "firebase-admin/auth";
 
 function getFirebaseAdminAuth() {
-  if (getApps().length === 0) {
+  // Look for the DEFAULT app by name, not "any app": firebase-admin-db.ts
+  // creates a named app, and if that one exists first, a length check would
+  // skip this init and getAuth() would fail on every request (401 for all).
+  if (!getApps().some((a) => a.name === "[DEFAULT]")) {
     // ID tokens must be verified against the project they were ISSUED for —
     // i.e. the client project the user signed into. If the service-account
     // cert belongs to a different project (e.g. a dev service account while the

@@ -4,6 +4,7 @@ import {
   PreDeparturePackFormData,
   PreDepartureConfig,
 } from "@/types/pre-departure-pack";
+import { staffFetch } from "@/lib/staff-fetch";
 
 const API_BASE = "/api/pre-departure-packs";
 
@@ -140,7 +141,7 @@ export async function createPreDeparturePack(
       uploadFormData.append("metadata", JSON.stringify(formData.metadata));
     }
 
-    const response = await fetch(API_BASE, {
+    const response = await staffFetch(API_BASE, {
       method: "POST",
       body: uploadFormData,
     });
@@ -179,7 +180,7 @@ export async function updatePackTourPackages(
       );
     }
 
-    const response = await fetch(`${API_BASE}/${packId}`, {
+    const response = await staffFetch(`${API_BASE}/${packId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tourPackages }),
@@ -210,7 +211,7 @@ export async function replacePackFile(
     const formData = new FormData();
     formData.append("file", newFile);
 
-    const response = await fetch(`${API_BASE}/${packId}/replace-file`, {
+    const response = await staffFetch(`${API_BASE}/${packId}/replace-file`, {
       method: "PATCH",
       body: formData,
     });
@@ -233,7 +234,7 @@ export async function replacePackFile(
  */
 export async function deletePreDeparturePack(packId: string): Promise<void> {
   try {
-    const response = await fetch(`${API_BASE}/${packId}`, {
+    const response = await staffFetch(`${API_BASE}/${packId}`, {
       method: "DELETE",
     });
 

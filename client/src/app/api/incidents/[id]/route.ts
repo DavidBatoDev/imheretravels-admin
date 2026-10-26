@@ -5,7 +5,7 @@ import {
   uploadFile,
   deleteFile,
   STORAGE_BUCKET,
-} from "@/utils/file-upload";
+} from "@/lib/server-storage";
 import { requireAdmin } from "@/lib/require-admin";
 import type { Incident, IncidentAttachment } from "@/types/incidents";
 

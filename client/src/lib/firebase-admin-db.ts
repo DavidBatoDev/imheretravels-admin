@@ -2,6 +2,7 @@ import "server-only";
 
 import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 
 /**
  * Server-only Firestore via firebase-admin, for data that must never reach
@@ -40,4 +41,17 @@ let db: Firestore | undefined;
 export function adminDb(): Firestore {
   db ??= getFirestore(getServerDbApp());
   return db;
+}
+
+type Bucket = ReturnType<ReturnType<typeof getStorage>["bucket"]>;
+let bucket: Bucket | undefined;
+
+/** The app's default Storage bucket via firebase-admin (bypasses Storage rules). */
+export function adminBucket(): Bucket {
+  if (!bucket) {
+    const name = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+    if (!name) throw new Error("firebase-admin-db: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET is not set");
+    bucket = getStorage(getServerDbApp()).bucket(name);
+  }
+  return bucket;
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, addDoc, Timestamp } from "firebase/firestore";
-import { uploadFile, STORAGE_BUCKET } from "@/utils/file-upload";
+import { uploadFile, STORAGE_BUCKET } from "@/lib/server-storage";
 import { requireAdmin } from "@/lib/require-admin";
 import type { Incident, IncidentAttachment } from "@/types/incidents";
 

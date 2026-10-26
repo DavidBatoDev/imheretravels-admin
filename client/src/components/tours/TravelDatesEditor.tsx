@@ -61,6 +61,18 @@ export default function TravelDatesEditor({ form }: TravelDatesEditorProps) {
     hasCustomOriginal: false, hasCustomDiscounted: false, hasCustomDeposit: false,
   });
 
+  // New dates reuse the tour length (last date's Days, else the "11 days"
+  // duration) and pop the calendar open so adding one is a single click.
+  const [openNewest, setOpenNewest] = React.useState(false);
+  const addDate = () => {
+    const rows = (gv("travelDates") as any[]) ?? [];
+    const lastDays = rows[rows.length - 1]?.tourDays;
+    const durationDays = parseInt(String(gv("duration") ?? ""), 10);
+    const tourDays = lastDays > 0 ? lastDays : durationDays > 0 ? durationDays : undefined;
+    appendTravelDate({ ...emptyDate(), tourDays });
+    setOpenNewest(true);
+  };
+
   return (
     <div className="space-y-4">
       {travelDateFields.map((field, index) => {
@@ -158,6 +170,13 @@ export default function TravelDatesEditor({ form }: TravelDatesEditorProps) {
                     label="Tour Start Date"
                     minYear={2000}
                     maxYear={2050}
+                    spanDays={days}
+                    defaultMonth={
+                      index > 0 ? (w(`travelDates.${index - 1}.startDate`) as string) || undefined : undefined
+                    }
+                    autoOpen={openNewest && index === travelDateFields.length - 1}
+                    onAutoOpened={() => setOpenNewest(false)}
+                    className="mt-0 h-10 rounded-lg border bg-white"
                   />
                 </div>
 
@@ -258,7 +277,7 @@ export default function TravelDatesEditor({ form }: TravelDatesEditorProps) {
 
       <button
         type="button"
-        onClick={() => appendTravelDate(emptyDate())}
+        onClick={addDate}
         className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-crimson-red/40 py-3 text-sm font-semibold text-crimson-red transition-colors hover:border-crimson-red hover:bg-crimson-red/5"
       >
         <Plus className="h-4 w-4" /> Add Tour Date

@@ -5,7 +5,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { adminDb } from "@/lib/firebase-admin-db";
 import type { PublicSaleAvailability, SaleEvent, SaleInventory } from "@/types/sale-events";
-import { MAX_PARTY_SIZE, effectiveStatus, isSaleOpen, publicState, salePriceFor } from "./slots";
+import { MAX_PARTY_SIZE, MAX_SLOTS, effectiveStatus, isSaleOpen, publicState, salePriceFor } from "./slots";
 import { SaleError } from "./holds";
 import {
   SALE_COL,
@@ -25,17 +25,49 @@ import {
 
 const isoOrNull = z.string().datetime({ offset: true }).nullable();
 
+/**
+ * A sale tour is just a link to a tour package plus its discount ladder. Name,
+ * slug, cover and original price come from the tour itself (see tourFacts);
+ * any of those sent by the client are ignored.
+ */
 export const SaleTourInput = z.object({
   tourPackageId: z.string().min(1).max(128).regex(/^[^/]+$/),
-  tourSlug: z.string().max(200).default(""),
-  displayName: z.string().min(1).max(80),
-  tourName: z.string().max(200).default(""),
-  originalPrice: z.number().nonnegative(),
+  tourSlug: z.string().max(200).optional(),
+  displayName: z.string().max(200).optional(),
+  tourName: z.string().max(200).optional(),
+  originalPrice: z.number().nonnegative().optional(),
   coverImage: z.string().max(2000).optional(),
   order: z.number().int().nonnegative(),
-  /** Discount £ per slot, slot 1 first. */
-  ladder: z.array(z.number().nonnegative()).min(1).max(8),
+  /** Discount £ per slot, slot 1 first. 1 slot = 1 person. */
+  ladder: z.array(z.number().nonnegative()).min(1).max(MAX_SLOTS),
 });
+
+export interface TourFacts {
+  name: string;
+  slug: string;
+  coverImage: string;
+  /** Base original price per person (`pricing.original`). */
+  originalPrice: number;
+}
+
+/** Live tour data for sale tours, keyed by tourPackages id. Missing tours are absent. */
+export async function tourFacts(ids: string[]): Promise<Map<string, TourFacts>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const out = new Map<string, TourFacts>();
+  if (!unique.length) return out;
+  const snaps = await adminDb().getAll(...unique.map((id) => adminDb().collection("tourPackages").doc(id)));
+  for (const s of snaps) {
+    if (!s.exists) continue;
+    out.set(s.id, {
+      name: s.get("name") ?? "",
+      // The www tour page and the reservation form both key on `slug`.
+      slug: s.get("slug") || "",
+      coverImage: s.get("media.coverImage") ?? "",
+      originalPrice: Number(s.get("pricing.original")) || 0,
+    });
+  }
+  return out;
+}
 
 export const SaleInput = z.object({
   slug: z.string().min(1).max(80).regex(/^[a-z0-9-]+$/),
@@ -75,14 +107,37 @@ export async function listSales(): Promise<SaleWithInventory[]> {
   return Promise.all(snap.docs.map((d) => getSale(d.id) as Promise<SaleWithInventory>));
 }
 
+/**
+ * A sale with live tour data: names, slugs, covers and original prices come
+ * from the tour packages now, and every unsold slot is re-priced from the
+ * tour's current price. Sold slots keep the price they sold at.
+ */
 export async function getSale(saleId: string): Promise<SaleWithInventory | null> {
   const s = await saleRef(saleId).get();
   if (!s.exists) return null;
   const inv = await saleRef(saleId).collection(SALE_COL.inventory).get();
-  return {
-    ...serializeSale(s),
-    inventory: Object.fromEntries(inv.docs.map((d) => [d.id, serializeInventory(d)])),
-  };
+  const sale = serializeSale(s);
+  const facts = await tourFacts(sale.tours.map((t) => t.tourPackageId));
+  const tours = sale.tours.map((t) => {
+    const f = facts.get(t.tourPackageId);
+    return f
+      ? { ...t, tourName: f.name, displayName: f.name, tourSlug: f.slug, coverImage: f.coverImage || t.coverImage, originalPrice: f.originalPrice }
+      : t;
+  });
+  const priceOf = new Map(tours.map((t) => [t.tourPackageId, t.originalPrice]));
+  const inventory = Object.fromEntries(
+    inv.docs.map((d) => {
+      const i = serializeInventory(d);
+      const base = priceOf.get(d.id);
+      return [
+        d.id,
+        base === undefined
+          ? i
+          : { ...i, slots: i.slots.map((sl) => (sl.status === "sold" ? sl : { ...sl, salePrice: salePriceFor(base, sl.discountGBP) })) },
+      ];
+    }),
+  );
+  return { ...sale, tours, inventory };
 }
 
 export async function getSaleIdBySlug(slug: string): Promise<string | null> {
@@ -133,7 +188,22 @@ export async function saveSale(saleId: string | null, input: SaleInputT, uid: st
   const existing = saleId ? await ref.get() : null;
   if (saleId && !existing?.exists) throw new SaleError(404, "sale_not_found");
 
-  const tours = input.tours.map(({ ladder: _ladder, ...t }) => t);
+  // Each sale tour must be a real tour; its data is copied from it (and read live on display).
+  const facts = await tourFacts(input.tours.map((t) => t.tourPackageId));
+  const missing = input.tours.find((t) => !facts.has(t.tourPackageId));
+  if (missing) throw new SaleError(400, "tour_not_found", { tourPackageId: missing.tourPackageId });
+  const tours = input.tours.map((t) => {
+    const f = facts.get(t.tourPackageId)!;
+    return {
+      tourPackageId: t.tourPackageId,
+      tourSlug: f.slug,
+      displayName: f.name,
+      tourName: f.name,
+      originalPrice: f.originalPrice,
+      ...(f.coverImage ? { coverImage: f.coverImage } : {}),
+      order: t.order,
+    };
+  });
   const hero = Object.fromEntries(Object.entries(input.hero).filter(([, v]) => v !== "" && v !== undefined));
   const fields = {
     slug: input.slug,
@@ -155,7 +225,9 @@ export async function saveSale(saleId: string | null, input: SaleInputT, uid: st
   // mergeFields replaces each listed field whole (a nested merge would keep a removed banner).
   await ref.set(fields, { mergeFields: Object.keys(fields) });
 
-  for (const t of input.tours) await syncLadder(ref.id, t.tourPackageId, t.originalPrice, t.ladder);
+  for (const t of input.tours) {
+    await syncLadder(ref.id, t.tourPackageId, facts.get(t.tourPackageId)!.originalPrice, t.ladder);
+  }
 
   // A tour dropped from the sale keeps its inventory only if something was sold or is held.
   const keep = new Set(input.tours.map((t) => t.tourPackageId));
@@ -216,4 +288,4 @@ export async function deleteSale(saleId: string) {
   await ref.delete();
 }
 
-export { MAX_PARTY_SIZE };
+export { MAX_PARTY_SIZE, MAX_SLOTS };

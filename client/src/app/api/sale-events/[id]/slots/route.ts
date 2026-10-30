@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { SaleError, adminUpdateSlot } from "@/lib/sale/holds";
 import { requireSaleStaff } from "@/lib/sale/require-sale-staff";
+import { MAX_SLOTS } from "@/lib/sale/slots";
 
 export const dynamic = "force-dynamic";
 
 /** POST /api/sale-events/:id/slots — staff actions on one slot from the tracking table. */
 const Body = z.object({
   tourPackageId: z.string().min(1).max(128).regex(/^[^/]+$/),
-  index: z.number().int().min(1).max(8),
+  index: z.number().int().min(1).max(MAX_SLOTS),
   op: z.discriminatedUnion("action", [
     z.object({ action: z.literal("release") }),
     z.object({ action: z.literal("reopen") }),

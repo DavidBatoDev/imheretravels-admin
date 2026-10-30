@@ -7,7 +7,9 @@ import type { PublicSlotState, SlotStatus } from "@/types/sale-events";
 export const HOLD_GRACE_MS = 2 * 60_000;
 /** Pressing Pay extends the hold once by this much, so 3-D Secure isn't cut off. */
 export const PAYING_EXTENSION_MS = 5 * 60_000;
-export const MAX_PARTY_SIZE = 4;
+/** 1 slot = 1 person; a party takes the next free slots. */
+export const MAX_PARTY_SIZE = 10;
+export const MAX_SLOTS = 20;
 
 export interface SlotLike {
   index: number;

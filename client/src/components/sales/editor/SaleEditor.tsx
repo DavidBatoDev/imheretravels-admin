@@ -42,6 +42,7 @@ import {
   newSaleDraft,
   previewSlots,
   toSaleInput,
+  tourView,
   tourHasLocked,
   type DraftTour,
   type SaleDraft,
@@ -115,6 +116,7 @@ export default function SaleEditor({ sale: initialSale, tours, allSales }: SaleE
   const phase = salePhase({ status: draft.status, startAt: startIso, endAt: endIso }, now);
   const statusText = heroStatusLabel({ startAt: startIso, endAt: endIso }, phase);
   const firstTour = draft.tours[0];
+  const firstView = firstTour ? tourView(firstTour, tourById.get(firstTour.tourPackageId)) : null;
   const siteBadge = sale
     ? sale.status === "draft"
       ? { label: "Draft · not public", className: SALE_STATUS_META.draft.className }
@@ -165,7 +167,7 @@ export default function SaleEditor({ sale: initialSale, tours, allSales }: SaleE
     if (!t || tourHasLocked(inventory, t.tourPackageId, Date.now())) return;
     setDraft((d) => ({ ...d, tours: d.tours.filter((x) => x.key !== key) }));
     if (editingKey === key) setEditingKey(null);
-    toast({ title: `${t.displayName || t.tourName} removed`, description: "Save to apply. Leave without saving to undo." });
+    toast({ title: `${tourView(t, tourById.get(t.tourPackageId)).name} removed`, description: "Save to apply. Leave without saving to undo." });
   }
 
   function reorder(from: number, to: number) {
@@ -226,7 +228,7 @@ export default function SaleEditor({ sale: initialSale, tours, allSales }: SaleE
 
   async function save() {
     if (busy) return;
-    const { input, errors } = toSaleInput(draft, { unmatched: unmatched.length, otherSlugs });
+    const { input, errors, warnings } = toSaleInput(draft, { unmatched: unmatched.length, otherSlugs, tourById, toursLoaded: tours.length > 0 });
     if (!input) {
       toast({
         title: errors.length === 1 ? "Fix 1 problem before saving" : `Fix ${errors.length} problems before saving`,
@@ -246,7 +248,7 @@ export default function SaleEditor({ sale: initialSale, tours, allSales }: SaleE
         const id = await SaleEventsService.create(input);
         setBaseline(draftSnapshot(draft)); // nothing unsaved: the route change mustn't prompt
         dirtyRef.current = false;
-        toast({ title: "Sale created", description: "Your private preview link is ready in the toolbar." });
+        toast({ title: "Sale created", description: ["Your private preview link is ready in the toolbar.", ...warnings.slice(0, 3)].join("\n") });
         router.replace(`/tours/sales/${encodeURIComponent(id)}/edit`);
         return;
       }
@@ -261,11 +263,11 @@ export default function SaleEditor({ sale: initialSale, tours, allSales }: SaleE
       } catch {
         setBaseline(draftSnapshot(draft));
       }
-      toast({ title: "Changes saved", description: `${input.name} · /${input.slug}` });
+      toast({ title: "Changes saved", description: [`${input.name} · /${input.slug}`, ...warnings.slice(0, 3)].join("\n") });
     } catch (e) {
       const { title, description } = describeSaleError(
         e,
-        (id) => tourById.get(id)?.name ?? draft.tours.find((t) => t.tourPackageId === id)?.tourName ?? id,
+        (id) => tourById.get(id)?.name ?? draft.tours.find((t) => t.tourPackageId === id)?.saved.name ?? id,
       );
       toast({ title, description, variant: "destructive" });
     } finally {
@@ -289,7 +291,7 @@ export default function SaleEditor({ sale: initialSale, tours, allSales }: SaleE
 
   // ---- Render ---------------------------------------------------------------
 
-  const firstSlots = firstTour ? previewSlots(inventory, firstTour, now) : [];
+  const firstSlots = firstTour && firstView ? previewSlots(inventory, firstTour, firstView.originalPrice, now) : [];
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -353,7 +355,7 @@ export default function SaleEditor({ sale: initialSale, tours, allSales }: SaleE
             startAt={startIso}
             upTo={maxDiscount(draft)}
             hasTours={draft.tours.length > 0}
-            fallbackImage={firstTour?.coverImage}
+            fallbackImage={firstView?.coverImage}
             mode={heroMode}
             onModeChange={setHeroMode}
             uploading={uploading}
@@ -363,7 +365,7 @@ export default function SaleEditor({ sale: initialSale, tours, allSales }: SaleE
           <SaleFixedContent
             part="how"
             holdMinutes={Number.isFinite(numOrNaN(draft.holdMinutes)) ? Number(draft.holdMinutes) : 15}
-            example={firstTour ? { name: firstTour.displayName, originalPrice: numOrNaN(firstTour.originalPrice) || 0, slots: firstSlots } : undefined}
+            example={firstView ? { name: firstView.name, originalPrice: firstView.originalPrice, slots: firstSlots } : undefined}
           />
 
           <SaleDealsEditor
@@ -374,7 +376,6 @@ export default function SaleEditor({ sale: initialSale, tours, allSales }: SaleE
             now={now}
             unmatched={unmatched}
             hasLocked={(t) => tourHasLocked(inventory, t.tourPackageId, now)}
-            onPatchTour={patchTour}
             onAddTour={addTour}
             onRemoveTour={removeTour}
             onReorder={reorder}

@@ -1,26 +1,35 @@
 "use client";
 
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Lock, Package, Plus, Trash2, X } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ExternalLink, Lock, Package, Plus, Trash2, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { TourPackage } from "@/types/tours";
 import { MAX_SLOTS, SLOT_STATUS_META, formatGBP, numOrNaN, slotDisplayStatus } from "../sale-utils";
-import { FieldInput, FieldLabel, HelpText, LockTip, PanelSectionHead } from "./fields";
+import { FieldInput, HelpText, LockTip, PanelSectionHead } from "./fields";
 import SaleDrawer from "./SaleDrawer";
 import {
   canRemoveSlot,
+  fillSlots,
+  freeSlots,
   invSlot,
   isLockedAt,
   newKey,
   previewSlots,
+  slotList,
+  tourView,
   type DraftTour,
   type Inventory,
+  type TourView,
 } from "./sale-draft";
 
 const ICON_BTN =
   "inline-flex size-9 items-center justify-center rounded-full border-2 border-dark-gray/70 text-midnight transition-colors hover:border-midnight hover:bg-light-grey focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crimson-red disabled:cursor-not-allowed disabled:border-light-grey disabled:text-dark-gray/50 disabled:hover:bg-transparent";
+const OUTLINE_PILL =
+  "inline-flex h-9 items-center gap-1.5 rounded-full border-2 border-midnight px-4 font-body text-sm font-bold text-midnight transition-colors hover:bg-midnight hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crimson-red disabled:cursor-not-allowed disabled:border-light-grey disabled:text-dark-gray/60 disabled:hover:bg-transparent";
+const WARN = "text-[#9A4A00]";
 
-/** Side editor for one tour: card text, original price and the slot ladder. */
+/** Side editor for one sale tour: the linked tour (read-only) and its slot ladder. */
 export default function SaleTourDrawer({
   tour,
   tourPkg,
@@ -46,14 +55,14 @@ export default function SaleTourDrawer({
   onRemove: () => void;
   onClose: () => void;
 }) {
-  const open = !!tour;
+  const view = tour ? tourView(tour, tourPkg) : null;
   return (
     <SaleDrawer
-      open={open}
+      open={!!tour}
       onOpenChange={(o) => !o && onClose()}
       icon={Package}
-      title={tour ? `Edit deal · ${tour.displayName || tour.tourName}` : "Edit deal"}
-      description={tour ? tour.tourName : undefined}
+      title={view ? `Edit deal · ${view.name}` : "Edit deal"}
+      description="1 slot = 1 person. Slots sell in order, slot 1 first."
       footer={
         tour && (
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -82,31 +91,30 @@ export default function SaleTourDrawer({
         )
       }
     >
-      {tour && <TourEditorBody tour={tour} tourPkg={tourPkg} inventory={inventory} now={now} onPatch={onPatch} />}
+      {tour && view && <TourEditorBody key={tour.key} tour={tour} view={view} inventory={inventory} now={now} onPatch={onPatch} />}
     </SaleDrawer>
   );
 }
 
 function TourEditorBody({
   tour: t,
-  tourPkg,
+  view,
   inventory,
   now,
   onPatch,
 }: {
   tour: DraftTour;
-  tourPkg?: TourPackage;
+  view: TourView;
   inventory: Inventory;
   now: number;
   onPatch: (patch: Partial<DraftTour>) => void;
 }) {
   const locked = (pos: number) => isLockedAt(inventory, t.tourPackageId, pos, now);
-  const original = numOrNaN(t.originalPrice);
-  const tourPrice = tourPkg?.pricing?.original;
-  const priceDiffers = typeof tourPrice === "number" && Number.isFinite(original) && Math.abs(original - tourPrice) > 0.009;
-  const preview = previewSlots(inventory, t, now);
+  const original = view.originalPrice;
+  const preview = previewSlots(inventory, t, original, now);
   const ladder = t.discounts.map((d) => numOrNaN(d.value));
   const notDescending = ladder.some((d, i) => i > 0 && Number.isFinite(d) && Number.isFinite(ladder[i - 1]) && d > ladder[i - 1]);
+  const free = freeSlots(t, original);
 
   const setDiscount = (pos: number, value: string) => onPatch({ discounts: t.discounts.map((d, i) => (i === pos ? { ...d, value } : d)) });
   const moveSlot = (pos: number, dir: -1 | 1) => {
@@ -127,48 +135,36 @@ function TourEditorBody({
 
   return (
     <div className="flex flex-col gap-7">
-      <section aria-labelledby={`${t.key}-card-head`}>
-        <PanelSectionHead id={`${t.key}-card-head`}>Card</PanelSectionHead>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="flex flex-col gap-1.5">
-            <span className="font-body text-sm font-bold text-midnight">Card title</span>
-            <p className="flex min-h-11 items-center rounded-md border-2 border-dashed border-dark-gray/40 bg-light-grey/50 px-3 font-body text-midnight">
-              {t.displayName || t.tourName}
-            </p>
-            <HelpText id={`${t.key}-display-help`}>The tour&apos;s name. Rename the tour in Tour Packages to change it.</HelpText>
+      <section aria-labelledby={`${t.key}-tour-head`}>
+        <PanelSectionHead id={`${t.key}-tour-head`}>Tour</PanelSectionHead>
+        <div className="flex gap-4">
+          <div className="size-20 shrink-0 overflow-hidden rounded-md bg-light-grey">
+            {view.coverImage && <img src={view.coverImage} alt="" className="h-full w-full object-cover" />}
           </div>
-          <div className="flex flex-col gap-1.5">
-            <FieldLabel htmlFor={`${t.key}-price`} required>
-              Original price (£ per person)
-            </FieldLabel>
-            <FieldInput
-              id={`${t.key}-price`}
-              type="number"
-              inputMode="decimal"
-              min={0}
-              step="1"
-              value={t.originalPrice}
-              onChange={(e) => onPatch({ originalPrice: e.target.value })}
-              aria-invalid={!Number.isFinite(original) || original < 0}
-              aria-describedby={priceDiffers ? `${t.key}-price-warn` : `${t.key}-price-help`}
-            />
-            {priceDiffers ? (
-              <p id={`${t.key}-price-warn`} className="flex flex-wrap items-center gap-1 font-body text-xs text-[#9A4A00]">
-                <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
-                Tour page price is {formatGBP(tourPrice)}.
-                <button
-                  type="button"
-                  className="font-bold underline underline-offset-2 hover:text-midnight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crimson-red"
-                  onClick={() => onPatch({ originalPrice: String(tourPrice) })}
-                >
-                  Use {formatGBP(tourPrice)}
-                </button>
-              </p>
-            ) : (
-              <HelpText id={`${t.key}-price-help`}>Shown struck through on the card.</HelpText>
-            )}
-          </div>
+          <dl className="grid min-w-0 flex-1 grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 font-body text-sm">
+            <dt className="font-bold text-midnight">Name</dt>
+            <dd className="min-w-0 truncate text-midnight">{view.name}</dd>
+            <dt className="font-bold text-midnight">Price</dt>
+            <dd className="tabular-nums text-midnight">{formatGBP(original)} per person</dd>
+            <dt className="font-bold text-midnight">Page</dt>
+            <dd>
+              {view.publicUrl ? (
+                <a href={view.publicUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium text-midnight underline underline-offset-2 hover:text-crimson-red">
+                  View tour <ExternalLink className="h-3 w-3" aria-hidden />
+                  <span className="sr-only">(opens in a new tab)</span>
+                </a>
+              ) : view.status === "missing" ? (
+                <span className="font-bold text-[#B4232E]">Tour not found — remove it from the sale</span>
+              ) : (
+                <span className="text-dark-gray">{view.status === "draft" ? "Draft — no public page" : "Archived — no public page"}</span>
+              )}
+            </dd>
+          </dl>
         </div>
+        <HelpText className="mt-3">
+          Name, cover and price come from the tour package and update automatically. Change them in Tour Packages. Sale prices are always the tour&apos;s current price minus
+          each slot&apos;s discount; sold slots keep the price they sold at.
+        </HelpText>
         {t.notes.length > 0 && (
           <div className="mt-4 rounded-md border-2 border-vivid-orange/60 bg-light-yellow/40 p-3">
             <div className="mb-1 flex items-center justify-between">
@@ -184,7 +180,7 @@ function TourEditorBody({
             <ul className="flex flex-col gap-1">
               {t.notes.map((n, i) => (
                 <li key={i} className="flex gap-1.5 font-body text-xs text-midnight">
-                  <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-[#9A4A00]" aria-hidden />
+                  <AlertTriangle className={cn("mt-0.5 h-3 w-3 shrink-0", WARN)} aria-hidden />
                   {n}
                 </li>
               ))}
@@ -195,14 +191,22 @@ function TourEditorBody({
 
       <section aria-labelledby={`${t.key}-slots-head`}>
         <PanelSectionHead id={`${t.key}-slots-head`}>Slot ladder</PanelSectionHead>
-        <HelpText className="mb-3">
-          Slots sell in order: slot 1 first. A party of N takes the next N free slots. Held and sold slots keep the price they were shown.
-        </HelpText>
-        <table className="w-full">
-          <caption className="sr-only">Slots for {t.displayName}</caption>
+        <p className="mb-3 flex items-start gap-2 rounded-md bg-light-grey/70 px-3 py-2 font-body text-xs text-midnight">
+          <Users className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span>
+            <span className="font-bold">1 slot = 1 person.</span> {t.discounts.length} slot{t.discounts.length === 1 ? "" : "s"} means up to {t.discounts.length}{" "}
+            {t.discounts.length === 1 ? "person" : "people"} can book at a discount. Slots sell in order (slot 1 first); a party of N takes the next N free slots. Held and sold slots
+            keep their discount.
+          </span>
+        </p>
+
+        <QuickFill tour={t} locked={locked} onApply={(discounts) => onPatch({ discounts })} />
+
+        <table className="mt-4 w-full">
+          <caption className="sr-only">Slots for {view.name}</caption>
           <thead>
             <tr className="text-left font-sans text-xs font-bold text-midnight">
-              <th scope="col" className="w-8 pb-2">#</th>
+              <th scope="col" className="w-10 pb-2">Slot</th>
               <th scope="col" className="pb-2">Discount £</th>
               <th scope="col" className="pb-2">Sale price</th>
               <th scope="col" className="pb-2">Status</th>
@@ -218,11 +222,11 @@ function TourEditorBody({
               const p = preview[pos];
               const st = saved ? slotDisplayStatus(saved, now) : null;
               const disc = numOrNaN(d.value);
-              const overOriginal = Number.isFinite(disc) && Number.isFinite(original) && disc > original;
+              const isFree = Number.isFinite(disc) && disc >= original;
               return (
                 <tr key={d.key} className="border-t border-light-grey align-middle">
-                  <td className="py-2 font-sans text-sm font-bold text-midnight">{pos + 1}</td>
-                  <td className="py-2 pr-2">
+                  <td className="py-1.5 font-sans text-sm font-bold text-midnight">{pos + 1}</td>
+                  <td className="py-1.5 pr-2">
                     <LockTip show={isLocked} text="Held/sold slots keep their price">
                       <div className="relative w-28">
                         <FieldInput
@@ -241,11 +245,11 @@ function TourEditorBody({
                       </div>
                     </LockTip>
                   </td>
-                  <td className="py-2 pr-2 font-body text-sm font-bold tabular-nums text-midnight">
+                  <td className="py-1.5 pr-2 font-body text-sm font-bold tabular-nums text-midnight">
                     {p?.salePrice == null ? <span className="font-normal text-dark-gray">—</span> : formatGBP(p.salePrice)}
-                    {overOriginal && <span className="block font-normal text-xs text-[#9A4A00]">More than the price</span>}
+                    {isFree && !isLocked && <span className={cn("block text-xs font-normal", WARN)}>Free: discount ≥ price</span>}
                   </td>
-                  <td className="py-2 pr-2">
+                  <td className="py-1.5 pr-2">
                     {st ? (
                       <Badge variant="outline" className={SLOT_STATUS_META[st].className}>
                         {SLOT_STATUS_META[st].label}
@@ -254,7 +258,7 @@ function TourEditorBody({
                       <span className="font-body text-xs text-dark-gray">New</span>
                     )}
                   </td>
-                  <td className="py-2">
+                  <td className="py-1.5">
                     <div className="flex justify-end gap-1">
                       <button
                         type="button"
@@ -276,7 +280,7 @@ function TourEditorBody({
                       </button>
                       <button
                         type="button"
-                        className={cn(ICON_BTN, "size-8 hover:border-crimson-red hover:text-crimson-red")}
+                        className={cn(ICON_BTN, "size-8 hover:border-crimson-red hover:text-[#B4232E]")}
                         disabled={!canRemoveSlot(inventory, t, pos, now)}
                         onClick={() => removeSlot(pos)}
                         aria-label={`Remove slot ${pos + 1}`}
@@ -291,24 +295,68 @@ function TourEditorBody({
           </tbody>
         </table>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={addSlot}
-            disabled={t.discounts.length >= MAX_SLOTS}
-            className="inline-flex h-9 items-center gap-1.5 rounded-full border-2 border-midnight px-4 font-body text-sm font-bold text-midnight transition-colors hover:bg-midnight hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crimson-red disabled:cursor-not-allowed disabled:border-light-grey disabled:text-dark-gray/60 disabled:hover:bg-transparent"
-          >
+          <button type="button" onClick={addSlot} disabled={t.discounts.length >= MAX_SLOTS} className={OUTLINE_PILL}>
             <Plus className="h-4 w-4" aria-hidden /> Add slot
           </button>
           <span className="font-body text-xs text-dark-gray">
-            {t.discounts.length} of {MAX_SLOTS} slots
+            {t.discounts.length} of {MAX_SLOTS} slots · “Add slot” copies the last discount
           </span>
         </div>
+        {free.length > 0 && (
+          <p className={cn("mt-3 flex items-start gap-1.5 font-body text-xs", WARN)}>
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+            Slot {slotList(free)} would sell at £0: the discount is the whole {formatGBP(original)} price or more.
+          </p>
+        )}
         {notDescending && (
-          <p className="mt-3 flex items-center gap-1.5 font-body text-xs text-[#9A4A00]">
-            <AlertTriangle className="h-3.5 w-3.5" aria-hidden />A later slot has a bigger discount than an earlier one. Slot 1 is usually the cheapest.
+          <p className={cn("mt-2 flex items-start gap-1.5 font-body text-xs", WARN)}>
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />A later slot has a bigger discount than an earlier one. Slot 1 is usually the biggest discount.
           </p>
         )}
       </section>
     </div>
+  );
+}
+
+/** "Set slots N–M to £X": fills a range in one go (and adds slots up to M if needed). */
+function QuickFill({ tour: t, locked, onApply }: { tour: DraftTour; locked: (pos: number) => boolean; onApply: (discounts: DraftTour["discounts"]) => void }) {
+  const [from, setFrom] = useState("1");
+  const [to, setTo] = useState(String(Math.max(1, t.discounts.length)));
+  const [value, setValue] = useState("");
+  const f = Number(from);
+  const tt = Number(to);
+  const v = numOrNaN(value);
+  const valid = Number.isInteger(f) && Number.isInteger(tt) && f >= 1 && tt >= 1 && f <= MAX_SLOTS && tt <= MAX_SLOTS && Number.isFinite(v) && v >= 0;
+  const id = `${t.key}-fill`;
+  return (
+    <form
+      className="flex flex-wrap items-end gap-2 rounded-md border-2 border-dashed border-dark-gray/50 p-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (valid) onApply(fillSlots(t, f, tt, String(v), locked));
+      }}
+      aria-labelledby={`${id}-label`}
+    >
+      <span id={`${id}-label`} className="w-full font-sans text-xs font-bold text-midnight">
+        Quick fill
+      </span>
+      <label className="flex items-center gap-1.5 font-body text-sm text-midnight">
+        Set slots
+        <FieldInput type="number" min={1} max={MAX_SLOTS} value={from} onChange={(e) => setFrom(e.target.value)} className="h-9 w-16" aria-label="From slot" />
+      </label>
+      <label className="flex items-center gap-1.5 font-body text-sm text-midnight">
+        to
+        <FieldInput type="number" min={1} max={MAX_SLOTS} value={to} onChange={(e) => setTo(e.target.value)} className="h-9 w-16" aria-label="To slot" />
+      </label>
+      <label className="flex items-center gap-1.5 font-body text-sm text-midnight">
+        at £
+        <FieldInput type="number" min={0} step="1" inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} className="h-9 w-24" aria-label="Discount in pounds" placeholder="200" />
+        off
+      </label>
+      <button type="submit" disabled={!valid} className={OUTLINE_PILL}>
+        Apply
+      </button>
+      <HelpText className="w-full">Adds slots up to the last number if needed (max {MAX_SLOTS}). Held and sold slots are skipped.</HelpText>
+    </form>
   );
 }

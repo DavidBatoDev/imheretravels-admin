@@ -1,6 +1,11 @@
 // Editor state for a sale, and the pure rules around it: building a draft from
 // a saved sale or a tour, applying CSV rows, slot locking, and turning the
 // draft into the API's SaleInput. No React here.
+//
+// A sale tour is a link to a tour package plus a discount ladder. 1 slot =
+// 1 person: a party of N takes the next N free slots. The tour's name, slug,
+// cover and price always come from the tour package (the server copies them on
+// save and reads them live on display), so the editor never edits them.
 
 import type { SaleInput, SaleWithInventory } from "@/services/sale-events-service";
 import type { SaleCheckoutMode, SaleSlot, SaleStatus } from "@/types/sale-events";
@@ -8,6 +13,7 @@ import type { TourPackage } from "@/types/tours";
 import {
   DEFAULT_SLOTS,
   MAX_SLOTS,
+  WWW_ORIGIN,
   formatGBP,
   isoToLocalInput,
   isSlotLocked,
@@ -30,12 +36,9 @@ export interface DraftSlot {
 export interface DraftTour {
   key: string;
   tourPackageId: string;
-  tourSlug: string;
-  tourName: string;
-  coverImage?: string;
-  displayName: string;
-  originalPrice: string;
-  /** Discount per ladder position, slot 1 first. */
+  /** Last known tour data (from the saved sale), used if the tour isn't in the loaded list. */
+  saved: { name: string; slug: string; coverImage?: string; originalPrice: number };
+  /** Discount per ladder position, slot 1 first. One slot per person. */
   discounts: DraftSlot[];
   /** CSV import notes for this tour. */
   notes: string[];
@@ -74,6 +77,34 @@ export const SEO_TITLE_MAX = 70;
 export const SEO_DESCRIPTION_MAX = 200;
 
 // ---------------------------------------------------------------------------
+// Live tour data
+// ---------------------------------------------------------------------------
+
+export interface TourView {
+  name: string;
+  coverImage?: string;
+  /** Current price per person (tour `pricing.original`). */
+  originalPrice: number;
+  status: TourPackage["status"] | "missing";
+  /** Public tour page, only for active tours. */
+  publicUrl: string | null;
+}
+
+/** What the card shows for a sale tour: the tour package's data, else the last saved copy. */
+export function tourView(t: DraftTour, pkg: TourPackage | undefined): TourView {
+  if (!pkg) {
+    return { name: t.saved.name || "Unknown tour", coverImage: t.saved.coverImage, originalPrice: t.saved.originalPrice, status: "missing", publicUrl: null };
+  }
+  return {
+    name: pkg.name || t.saved.name,
+    coverImage: pkg.media?.coverImage || t.saved.coverImage,
+    originalPrice: Number(pkg.pricing?.original) || 0,
+    status: pkg.status,
+    publicUrl: pkg.status === "active" && pkg.slug ? `${WWW_ORIGIN}/tours/${pkg.slug}` : null,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Building drafts
 // ---------------------------------------------------------------------------
 
@@ -102,12 +133,7 @@ export function draftFromSale(sale: SaleWithInventory): SaleDraft {
       return {
         key: newKey(),
         tourPackageId: t.tourPackageId,
-        tourSlug: t.tourSlug,
-        tourName: t.tourName,
-        coverImage: t.coverImage,
-        // Card title is always the tour name.
-        displayName: t.tourName || t.displayName,
-        originalPrice: String(t.originalPrice),
+        saved: { name: t.tourName || t.displayName, slug: t.tourSlug, coverImage: t.coverImage, originalPrice: t.originalPrice },
         discounts: slots.length ? slots.map((s) => ({ key: newKey(), value: String(s.discountGBP) })) : emptyLadder(),
         notes: [],
       };
@@ -142,11 +168,7 @@ export function draftFromTour(tour: TourPackage, csv?: CsvTourGroup): DraftTour 
   return {
     key: newKey(),
     tourPackageId: tour.id,
-    tourSlug: tour.slug ?? "",
-    tourName: tour.name ?? "",
-    coverImage: tour.media?.coverImage || undefined,
-    displayName: (tour.name || tour.cardSubHeader || "").slice(0, 80),
-    originalPrice: String(csv?.originalPrice ?? tour.pricing?.original ?? 0),
+    saved: { name: tour.name ?? "", slug: tour.slug ?? "", coverImage: tour.media?.coverImage || undefined, originalPrice: Number(tour.pricing?.original) || 0 },
     discounts: ladder.length ? ladder.map((d) => ({ key: newKey(), value: String(d) })) : emptyLadder(),
     notes: [],
   };
@@ -155,10 +177,7 @@ export function draftFromTour(tour: TourPackage, csv?: CsvTourGroup): DraftTour 
 /** Comparable form of a draft, for the unsaved-changes check (ignores React keys and notes). */
 export function draftSnapshot(d: SaleDraft): string {
   const { tours, slugTouched: _touched, ...rest } = d;
-  return JSON.stringify([
-    rest,
-    tours.map((t) => [t.tourPackageId, t.displayName, t.originalPrice, t.discounts.map((s) => s.value)]),
-  ]);
+  return JSON.stringify([rest, tours.map((t) => [t.tourPackageId, t.discounts.map((s) => s.value)])]);
 }
 
 // ---------------------------------------------------------------------------
@@ -190,17 +209,19 @@ export interface PreviewSlot {
   locked: boolean;
 }
 
-/** What the sale page would show for this tour's ladder right now. */
-export function previewSlots(inv: Inventory, t: DraftTour, now: number): PreviewSlot[] {
-  const original = numOrNaN(t.originalPrice);
+/**
+ * What the sale page would show for this tour's ladder right now. Unsold
+ * slots are priced from the tour's current price (as the server does); sold
+ * slots keep the price they sold at; held slots keep their discount.
+ */
+export function previewSlots(inv: Inventory, t: DraftTour, originalPrice: number, now: number): PreviewSlot[] {
   return t.discounts.map((d, pos) => {
     const saved = invSlot(inv, t.tourPackageId, pos);
     const st = saved ? slotDisplayStatus(saved, now) : "available";
     const locked = isSlotLocked(saved, now);
     const disc = numOrNaN(d.value);
     const discount = locked && saved ? saved.discountGBP : Number.isFinite(disc) ? disc : null;
-    const salePrice =
-      locked && saved ? saved.salePrice : Number.isFinite(original) && discount !== null ? salePriceFor(original, discount) : null;
+    const salePrice = st === "sold" && saved ? saved.salePrice : discount !== null ? salePriceFor(originalPrice, discount) : null;
     return {
       index: pos + 1,
       discount,
@@ -221,18 +242,42 @@ export function maxDiscount(d: SaleDraft): number {
   return max;
 }
 
+/** Slot numbers (1-based) whose discount is the whole price or more, so they'd sell at £0. */
+export function freeSlots(t: DraftTour, originalPrice: number): number[] {
+  return t.discounts
+    .map((d, i) => ({ n: numOrNaN(d.value), i }))
+    .filter(({ n }) => Number.isFinite(n) && n >= originalPrice)
+    .map(({ i }) => i + 1);
+}
+
+/** "1, 2, 5–7" from sorted slot numbers. */
+export function slotList(nums: number[]): string {
+  const out: string[] = [];
+  for (let i = 0; i < nums.length; i++) {
+    let j = i;
+    while (j + 1 < nums.length && nums[j + 1] === nums[j] + 1) j++;
+    out.push(j > i ? `${nums[i]}–${nums[j]}` : String(nums[i]));
+    i = j;
+  }
+  return out.join(", ");
+}
+
+/**
+ * Sets slots `from`..`to` (1-based, inclusive) to `value`, growing the ladder
+ * up to MAX_SLOTS if needed. Held/sold slots are left alone.
+ */
+export function fillSlots(t: DraftTour, from: number, to: number, value: string, locked: (pos: number) => boolean): DraftSlot[] {
+  const end = Math.min(Math.max(from, to), MAX_SLOTS);
+  const start = Math.max(1, Math.min(from, to));
+  const next = [...t.discounts];
+  while (next.length < end) next.push({ key: newKey(), value: "" });
+  for (let pos = start - 1; pos < end; pos++) if (!locked(pos)) next[pos] = { ...next[pos], value };
+  return next;
+}
+
 // ---------------------------------------------------------------------------
 // CSV
 // ---------------------------------------------------------------------------
-
-export function csvNotes(group: CsvTourGroup, tour: TourPackage): string[] {
-  const notes = [...group.warnings];
-  const tourPrice = tour.pricing?.original;
-  if (group.originalPrice !== null && typeof tourPrice === "number" && Math.abs(group.originalPrice - tourPrice) > 0.009) {
-    notes.unshift(`CSV original price ${formatGBP(group.originalPrice)} differs from the tour's price ${formatGBP(tourPrice)}`);
-  }
-  return notes;
-}
 
 /** Applies a CSV group to a tour (adding it if needed), keeping held/sold slots' discount. */
 export function applyCsvGroup(
@@ -241,7 +286,7 @@ export function applyCsvGroup(
   tour: TourPackage,
   locked: (tourPackageId: string, pos: number) => boolean,
 ): DraftTour[] {
-  const notes = csvNotes(group, tour);
+  const notes = [...group.warnings];
   const existing = tours.find((t) => t.tourPackageId === tour.id);
   if (!existing) return [...tours, { ...draftFromTour(tour, group), notes }];
   const lastLocked = existing.discounts.reduce((n, _, i) => (locked(tour.id, i) ? i + 1 : n), 0);
@@ -253,11 +298,7 @@ export function applyCsvGroup(
     return { key: cur?.key ?? newKey(), value: String(group.ladder[i] ?? cur?.value ?? "") };
   });
   if (discounts.some((_, i) => locked(tour.id, i))) notes.push("Held/sold slots kept their current discount");
-  return tours.map((t) =>
-    t.key === existing.key
-      ? { ...t, discounts, notes, originalPrice: group.originalPrice !== null ? String(group.originalPrice) : t.originalPrice }
-      : t,
-  );
+  return tours.map((t) => (t.key === existing.key ? { ...t, discounts, notes } : t));
 }
 
 // ---------------------------------------------------------------------------
@@ -272,9 +313,10 @@ export interface DraftError {
 
 export function toSaleInput(
   d: SaleDraft,
-  opts: { unmatched: number; otherSlugs: string[] },
-): { input: SaleInput | null; errors: DraftError[] } {
+  opts: { unmatched: number; otherSlugs: string[]; tourById: Map<string, TourPackage>; toursLoaded: boolean },
+): { input: SaleInput | null; errors: DraftError[]; warnings: string[] } {
   const errors: DraftError[] = [];
+  const warnings: string[] = [];
   const err = (area: DraftArea, message: string) => errors.push({ area, message });
 
   if (!d.name.trim()) err("page", "Sale name is required");
@@ -292,26 +334,21 @@ export function toSaleInput(
   if (opts.unmatched) err("tours", `Pick or skip the ${opts.unmatched} unmatched CSV tour(s)`);
 
   const tours = d.tours.map((t, i) => {
-    const label = t.displayName || t.tourName || `Tour ${i + 1}`;
-    const original = numOrNaN(t.originalPrice);
-    if (!t.displayName.trim()) err("tours", `${t.tourName || `Tour ${i + 1}`}: card title is required`);
-    if (!Number.isFinite(original) || original < 0) err("tours", `${label}: original price must be £0 or more`);
+    const pkg = opts.tourById.get(t.tourPackageId);
+    const view = tourView(t, pkg);
+    const label = view.name || `Tour ${i + 1}`;
+    if (opts.toursLoaded && !pkg) err("tours", `${label}: this tour no longer exists in Tour Packages. Remove it from the sale.`);
+    if (t.discounts.length < 1 || t.discounts.length > MAX_SLOTS) err("tours", `${label}: needs 1 to ${MAX_SLOTS} slots`);
     const ladder = t.discounts.map((s) => numOrNaN(s.value));
     if (ladder.some((n) => !Number.isFinite(n) || n < 0)) err("tours", `${label}: enter a discount (£0 or more) for every slot`);
-    return {
-      tourPackageId: t.tourPackageId,
-      tourSlug: t.tourSlug,
-      displayName: t.displayName.trim().slice(0, 80),
-      tourName: t.tourName,
-      originalPrice: original,
-      ...(t.coverImage ? { coverImage: t.coverImage } : {}),
-      order: i,
-      ladder,
-    };
+    const free = freeSlots(t, view.originalPrice);
+    if (free.length) warnings.push(`${label}: slot ${slotList(free)} would sell at £0 (discount ≥ ${formatGBP(view.originalPrice)})`);
+    return { tourPackageId: t.tourPackageId, order: i, ladder };
   });
-  if (errors.length) return { input: null, errors };
+  if (errors.length) return { input: null, errors, warnings };
   return {
     errors,
+    warnings,
     input: {
       slug: d.slug,
       name: d.name.trim(),

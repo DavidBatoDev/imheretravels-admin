@@ -11,6 +11,7 @@ import {
   effectiveStatus,
   isSaleOpen,
   pickSlots,
+  salePriceFor,
 } from "./slots";
 import {
   SALE_COL,
@@ -165,6 +166,11 @@ export async function claimSlots(input: ClaimInput): Promise<SaleHoldView & { to
     }
     const tour = (sale.tours ?? []).find((t: { tourPackageId: string }) => t.tourPackageId === input.tourPackageId);
     if (!tour || !invSnap.exists) throw new SaleError(404, "tour_not_in_sale");
+    // Prices come from the tour's current original price, not a stored copy.
+    const tourSnap = await tx.get(db.collection("tourPackages").doc(input.tourPackageId));
+    const basePrice = Number(tourSnap.get("pricing.original")) || Number(tour.originalPrice) || 0;
+    const tourName: string = tourSnap.get("name") || tour.tourName || "";
+    const tourSlug: string = tourSnap.get("slug") || tour.tourSlug || "";
 
     // One active hold per email: an earlier hold is released (or refused if mid-payment).
     const mine = await tx.get(
@@ -244,12 +250,12 @@ export async function claimSlots(input: ClaimInput): Promise<SaleHoldView & { to
       saleSlug: sale.slug ?? "",
       checkoutMode: sale.checkoutMode ?? "auto",
       tourPackageId: input.tourPackageId,
-      tourSlug: tour.tourSlug ?? "",
-      tourName: tour.tourName ?? "",
-      displayName: tour.displayName ?? tour.tourName ?? "",
+      tourSlug,
+      tourName,
+      displayName: tourName,
       partySize,
       slotIndexes: picked.map((s) => s.index),
-      slots: picked.map((s) => ({ index: s.index, salePrice: s.salePrice, originalPrice: Number(tour.originalPrice) || 0 })),
+      slots: picked.map((s) => ({ index: s.index, salePrice: salePriceFor(basePrice, s.discountGBP), originalPrice: basePrice })),
       email,
       tokenHash,
       status: "active",
@@ -419,9 +425,19 @@ export async function convertHold(holdId: string, paymentDocId: string, intentId
     }
 
     const now = Date.now();
+    const soldPrice = new Map(hold.slots.map((x) => [x.index, x.salePrice]));
     const sold = slots.map((s) =>
       s.holdId === holdId
-        ? { ...s, status: "sold" as SlotStatus, heldUntil: null, heldUntilMs: null, soldAt: tsFromMs(now), paymentDocId, stripeIntentId: intentId }
+        ? {
+            ...s,
+            status: "sold" as SlotStatus,
+            salePrice: soldPrice.get(s.index) ?? s.salePrice,
+            heldUntil: null,
+            heldUntilMs: null,
+            soldAt: tsFromMs(now),
+            paymentDocId,
+            stripeIntentId: intentId,
+          }
         : s,
     );
     tx.update(iRef, { slots: sold.map(toStored), updatedAt: FieldValue.serverTimestamp() });

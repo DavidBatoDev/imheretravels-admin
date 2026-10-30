@@ -105,7 +105,8 @@ export default function SaleFixedContent({
             {example && exampleSlots.length > 1 && (
               <figure className="mt-5 md:mt-0 md:flex-1">
                 <ol className="flex items-end gap-1.5 tabular-nums" aria-label={`${example.name} slot prices`}>
-                  {exampleSlots.map((s, i) => (
+                  {/* Same cap as www HowItWorks: first 5 bars, then "+N more". */}
+                  {exampleSlots.slice(0, 5).map((s, i) => (
                     <li
                       key={s.index}
                       className={`flex flex-1 flex-col justify-end rounded-sm px-2 pb-2 ${i === 0 ? "bg-crimson-red text-white" : "bg-white text-midnight"}`}
@@ -115,6 +116,12 @@ export default function SaleFixedContent({
                       <span className="font-body text-[0.875rem] font-bold">{formatGBP(s.salePrice ?? 0)}</span>
                     </li>
                   ))}
+                  {exampleSlots.length > 5 && (
+                    <li className="flex flex-col items-center justify-end rounded-sm border-2 border-dashed border-dark-gray/40 px-2 pb-2 text-midnight" style={{ minHeight: "112px" }}>
+                      <span className="font-body text-[0.875rem] font-bold">+{exampleSlots.length - 5}</span>
+                      <span className="font-body text-[0.75rem] font-medium">more</span>
+                    </li>
+                  )}
                 </ol>
                 <figcaption className="mt-2 font-body text-b4-mobile text-dark-gray md:text-b4-desktop">
                   {example.name}, usually {formatGBP(example.originalPrice)} per person. (Uses the first deal.)

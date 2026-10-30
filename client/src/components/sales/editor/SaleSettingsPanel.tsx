@@ -51,7 +51,7 @@ export default function SaleSettingsPanel({
     customTitle || `${draft.heroTitle.trim() || draft.name.trim() || "Sale title"} — I'm Here Travels`;
   const seoDesc =
     draft.seoDescription.trim() || draft.heroSubtitle.trim() || "Your sale description will appear here in search results and when the link is shared.";
-  const shareImage = draft.ogImage.trim() || draft.bannerUrl.trim() || draft.tours[0]?.coverImage;
+  const shareImage = draft.ogImage.trim() || draft.bannerUrl.trim() || draft.tours[0]?.saved.coverImage;
   const shareFallback = !draft.ogImage.trim() ? (draft.bannerUrl.trim() ? "Using the desktop banner" : shareImage ? "Using the first tour's cover" : "No image") : null;
   const previewLink = previewToken ? salePreviewUrl(previewToken) : null;
 

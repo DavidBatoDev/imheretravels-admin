@@ -18,15 +18,14 @@ export interface SaleWithInventory extends SaleEvent {
   inventory: Record<string, SaleInventory>;
 }
 
+/**
+ * A sale tour is a link to a tour package plus its ladder. The server copies
+ * name, slug, cover and price from the tour (any sent here are ignored).
+ */
 export interface SaleTourInput {
   tourPackageId: string;
-  tourSlug: string;
-  displayName: string;
-  tourName: string;
-  originalPrice: number;
-  coverImage?: string;
   order: number;
-  /** Discount £ per slot, slot 1 first. */
+  /** Discount £ per slot, slot 1 first; 1..MAX_SLOTS. 1 slot = 1 person. */
   ladder: number[];
 }
 
@@ -191,6 +190,11 @@ export function describeSaleError(
     }
     case "slug_taken":
       return { title: "URL slug already used", description: "Another sale uses this slug. Pick a different one." };
+    case "tour_not_found":
+      return {
+        title: "Tour not found",
+        description: `${tourName(tourId)} no longer exists in Tour Packages. Remove it from the sale (or restore the tour), then save.`,
+      };
     case "tour_has_active_slots":
       return {
         title: "Can't remove that tour",

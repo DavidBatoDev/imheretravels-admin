@@ -167,6 +167,9 @@ export default function SaleSlotTracker({ sale: initial, onClose, onChanged }: S
               <span className="font-medium text-foreground">
                 {totals.sold} sold · {totals.held} held · {totals.left} left
               </span>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
+                1 slot = 1 person · a party takes the next free slots
+              </span>
               <span className="ml-auto flex items-center gap-2 text-xs" aria-live="polite">
                 {loadError ? <span className="text-destructive">{loadError}</span> : <span>Updated {ago}s ago · auto-refreshes every 10s</span>}
                 <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => load(true)} disabled={refreshing}>

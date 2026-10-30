@@ -130,6 +130,53 @@ export function saleWindowLabel(sale: Pick<SaleEvent, "status" | "startAt" | "en
 }
 
 // ---------------------------------------------------------------------------
+// www page mirrors (keep in sync with www/lib/sale/ladder.ts)
+// ---------------------------------------------------------------------------
+
+export const WWW_ORIGIN = process.env.NEXT_PUBLIC_WWW_URL || "https://imheretravels.com";
+export const WWW_DOMAIN = WWW_ORIGIN.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+export const publicSaleUrl = (slug: string) => `${WWW_ORIGIN}/${slug}`;
+export const salePreviewUrl = (previewToken: string) => `${WWW_ORIGIN}/sale-preview/${previewToken}`;
+
+const londonDate = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "Europe/London" });
+const londonDateTime = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  hour: "numeric",
+  minute: "2-digit",
+  timeZone: "Europe/London",
+});
+const londonFull = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", dateStyle: "medium", timeStyle: "short" });
+
+/** "28 Nov 2026, 00:00" in UK time, for readouts next to local-time inputs. */
+export const ukDateTime = (iso: string) => londonFull.format(new Date(iso));
+
+export type SalePhase = "upcoming" | "live" | "paused" | "ended";
+
+/** Same rules as www `salePhase`; a draft previews as if it were live. */
+export function salePhase(sale: { status: SaleStatus; startAt: string | null; endAt: string | null }, nowMs: number): SalePhase {
+  if (sale.status === "paused") return "paused";
+  if (sale.status === "ended") return "ended";
+  if (sale.startAt && nowMs < Date.parse(sale.startAt)) return "upcoming";
+  if (sale.endAt && nowMs >= Date.parse(sale.endAt)) return "ended";
+  return "live";
+}
+
+/** The hero status pill copy, as www renders it. */
+export function heroStatusLabel(sale: { startAt: string | null; endAt: string | null }, phase: SalePhase): string {
+  switch (phase) {
+    case "upcoming":
+      return `Starts ${londonDateTime.format(new Date(sale.startAt!))}`;
+    case "paused":
+      return "Sale paused";
+    case "ended":
+      return "Sale ended";
+    default:
+      return sale.endAt ? `Live now · Ends ${londonDate.format(new Date(sale.endAt))}` : "Live now · Ends TBA";
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Inputs
 // ---------------------------------------------------------------------------
 

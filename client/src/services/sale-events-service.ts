@@ -4,6 +4,7 @@ import type {
   SaleEvent,
   SaleHero,
   SaleInventory,
+  SaleSeo,
   SaleStatus,
 } from "@/types/sale-events";
 
@@ -40,6 +41,8 @@ export interface SaleInput {
   holdMinutes: number;
   checkoutMode: SaleCheckoutMode;
   hero: SaleHero;
+  /** Blank strings are dropped on save (the page falls back to hero text and banner). */
+  seo: SaleSeo;
   tours: SaleTourInput[];
 }
 
@@ -72,6 +75,8 @@ export class SaleApiError extends Error {
 }
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
+  // On a hard load of an editor route the auth state may still be restoring.
+  if (!auth.currentUser) await auth.authStateReady().catch(() => undefined);
   const user = auth.currentUser;
   if (!user) throw new SaleApiError(401, "not_signed_in");
   const token = await user.getIdToken();
@@ -137,6 +142,12 @@ export const SaleEventsService = {
 // Friendly messages for the API's error codes
 // ---------------------------------------------------------------------------
 
+const SEO_LABELS: Record<string, string> = {
+  title: "SEO title",
+  description: "SEO description",
+  ogImage: "Share image",
+};
+
 const FIELD_LABELS: Record<string, string> = {
   slug: "URL slug",
   name: "Sale name",
@@ -173,7 +184,8 @@ export function describeSaleError(
       const lines = e.issues.slice(0, 4).map((i) => {
         const key = [...i.path].reverse().find((p) => typeof p === "string") as string | undefined;
         const tourIdx = i.path[0] === "tours" && typeof i.path[1] === "number" ? ` (tour ${i.path[1] + 1})` : "";
-        return `${(key && FIELD_LABELS[key]) || key || "Field"}${tourIdx}: ${i.message}`;
+        const labels = i.path[0] === "seo" ? SEO_LABELS : FIELD_LABELS;
+        return `${(key && labels[key]) || key || "Field"}${tourIdx}: ${i.message}`;
       });
       return { title: "Please fix the highlighted fields", description: lines.join("\n") || "The sale failed validation." };
     }

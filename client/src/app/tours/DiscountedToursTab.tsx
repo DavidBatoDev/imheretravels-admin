@@ -199,7 +199,7 @@ export default function DiscountedToursTab() {
 
   return (
     <div className="space-y-8">
-      <SaleEventsSection tours={tours} toursLoading={loading} />
+      <SaleEventsSection />
 
       <Collapsible open={legacyOpen} onOpenChange={setLegacyOpen}>
         <CollapsibleTrigger asChild>

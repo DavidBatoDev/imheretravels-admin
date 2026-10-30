@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { ExternalLink, ListChecks, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -18,25 +19,17 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { SaleEventsService, describeSaleError, type SaleWithInventory } from "@/services/sale-events-service";
-import type { TourPackage } from "@/types/tours";
-import SaleEventEditor from "./SaleEventEditor";
 import SaleSlotTracker from "./SaleSlotTracker";
-import { SALE_STATUS_META, saleSummary, saleWindowLabel, useNow } from "./sale-utils";
+import { SALE_STATUS_META, WWW_ORIGIN, saleSummary, saleWindowLabel, useNow } from "./sale-utils";
 
-const WWW_ORIGIN = process.env.NEXT_PUBLIC_WWW_URL || "https://imheretravels.com";
+const editUrl = (id: string) => `/tours/sales/${encodeURIComponent(id)}/edit`;
 
-interface SaleEventsSectionProps {
-  tours: TourPackage[];
-  toursLoading?: boolean;
-}
-
-/** "Sale Events" card list on the Sales & Discounts tab. */
-export default function SaleEventsSection({ tours, toursLoading }: SaleEventsSectionProps) {
+/** "Sale Events" card list on the Sales & Discounts tab. Create/Edit open the full-page editor. */
+export default function SaleEventsSection() {
   const { toast } = useToast();
   const now = useNow(30_000);
   const [sales, setSales] = useState<SaleWithInventory[] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [editor, setEditor] = useState<{ key: number; sale: SaleWithInventory | null } | null>(null);
   const [trackingId, setTrackingId] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<SaleWithInventory | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -90,12 +83,10 @@ export default function SaleEventsSection({ tours, toursLoading }: SaleEventsSec
             <Button variant="outline" size="icon" onClick={load} disabled={refreshing} aria-label="Refresh sales">
               <RefreshCw className={refreshing ? "animate-spin" : undefined} aria-hidden />
             </Button>
-            <Button
-              size="lg"
-              onClick={() => setEditor({ key: Date.now(), sale: null })}
-              disabled={sales === null || toursLoading}
-            >
-              <Plus className="mr-2 h-5 w-5" aria-hidden /> Create Sale
+            <Button size="lg" asChild>
+              <Link href="/tours/sales/new">
+                <Plus className="mr-2 h-5 w-5" aria-hidden /> Create Sale
+              </Link>
             </Button>
           </div>
         </div>
@@ -172,15 +163,10 @@ export default function SaleEventsSection({ tours, toursLoading }: SaleEventsSec
                       <Button variant="outline" onClick={() => setTrackingId(sale.id)}>
                         <ListChecks aria-hidden /> Track slots
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => setEditor({ key: Date.now(), sale })}
-                        disabled={toursLoading}
-                        aria-label={`Edit ${sale.name}`}
-                        title="Edit sale"
-                      >
-                        <Pencil aria-hidden />
+                      <Button variant="outline" asChild>
+                        <Link href={editUrl(sale.id)} aria-label={`Edit ${sale.name} page`}>
+                          <Pencil aria-hidden /> Edit
+                        </Link>
                       </Button>
                       <Button
                         variant="outline"
@@ -200,20 +186,6 @@ export default function SaleEventsSection({ tours, toursLoading }: SaleEventsSec
           </ul>
         )}
       </CardContent>
-
-      {editor && (
-        <SaleEventEditor
-          key={editor.key}
-          sale={editor.sale}
-          tours={tours}
-          isFirstSale={(sales?.length ?? 0) === 0}
-          onClose={() => setEditor(null)}
-          onSaved={() => {
-            setEditor(null);
-            load();
-          }}
-        />
-      )}
 
       {tracking && <SaleSlotTracker key={tracking.id} sale={tracking} onClose={() => setTrackingId(null)} onChanged={load} />}
 

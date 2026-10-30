@@ -19,11 +19,11 @@ export const STATUS_HELP: Record<SaleStatus, string> = {
 };
 
 const PILL =
-  "inline-flex h-9 items-center gap-1.5 rounded-full border-2 px-4 font-body text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crimson-red focus-visible:ring-offset-1";
+  "inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border-2 px-3 font-body text-sm font-bold transition-colors xl:px-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crimson-red focus-visible:ring-offset-1";
 const PILL_IDLE = "border-dark-gray/70 bg-white text-midnight hover:border-midnight hover:bg-light-grey";
 const PILL_ON = "border-crimson-red bg-crimson-red/5 text-[#B4232E]";
 const ICON_PILL =
-  "inline-flex size-9 items-center justify-center rounded-full border-2 border-dark-gray/70 bg-white text-midnight transition-colors hover:border-midnight hover:bg-light-grey focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crimson-red disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex size-9 shrink-0 items-center justify-center rounded-full border-2 border-dark-gray/70 bg-white text-midnight transition-colors hover:border-midnight hover:bg-light-grey focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crimson-red disabled:cursor-not-allowed disabled:opacity-50";
 
 export interface ScheduleValue {
   startLocal: string;
@@ -100,8 +100,9 @@ export default function SaleEditorToolbar(p: ToolbarProps) {
       <PopoverTrigger asChild>
         <button type="button" className={cn(PILL, p.scheduleOpen ? PILL_ON : PILL_IDLE, compact && "h-8 px-3 text-xs")} title={scheduleSummary(p.schedule)}>
           <Clock className="h-4 w-4 shrink-0" aria-hidden />
-          {!compact && <span className="hidden max-w-[16rem] truncate xl:inline">{scheduleSummary(p.schedule)}</span>}
-          <span className={cn(!compact && "xl:hidden")}>Schedule</span>
+          {!compact && <span className="hidden max-w-[16rem] truncate 2xl:inline">{scheduleSummary(p.schedule)}</span>}
+          <span className={cn(!compact && "hidden xl:inline 2xl:hidden")}>Schedule</span>
+          {!compact && <span className="sr-only xl:hidden">Schedule</span>}
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-80 p-4" align="end">
@@ -155,13 +156,13 @@ export default function SaleEditorToolbar(p: ToolbarProps) {
         title="View live page"
       >
         <ExternalLink className="h-4 w-4" aria-hidden />
-        {!compact && <span className="hidden lg:inline">View live</span>}
+        {!compact && <span className="hidden xl:inline">View live</span>}
         <span className="sr-only">(opens in a new tab)</span>
       </a>
     );
 
   const saveStatus = (
-    <span className="flex items-center gap-1.5 font-body text-xs font-medium text-dark-gray" role="status" aria-live="polite">
+    <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap font-body text-xs font-medium text-dark-gray" role="status" aria-live="polite">
       {p.dirty ? (
         <>
           <span className="size-2 rounded-full bg-vivid-orange" aria-hidden />
@@ -184,12 +185,21 @@ export default function SaleEditorToolbar(p: ToolbarProps) {
       onClick={p.onSave}
       disabled={p.busy}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full bg-crimson-red font-body font-bold text-white shadow-small transition-colors hover:bg-light-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-midnight focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60",
+        "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-crimson-red font-body font-bold text-white shadow-small transition-colors hover:bg-light-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-midnight focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60",
         compact ? "h-9 px-4 text-sm" : "h-9 px-5 text-sm",
       )}
     >
       {p.saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Save className="h-4 w-4" aria-hidden />}
-      {p.saving ? "Saving…" : compact ? "Save" : p.isNew ? "Create sale" : "Save changes"}
+      {p.saving ? (
+        "Saving…"
+      ) : compact ? (
+        "Save"
+      ) : (
+        <>
+          <span className="xl:hidden">{p.isNew ? "Create" : "Save"}</span>
+          <span className="hidden xl:inline">{p.isNew ? "Create sale" : "Save changes"}</span>
+        </>
+      )}
     </button>
   );
 
@@ -197,7 +207,7 @@ export default function SaleEditorToolbar(p: ToolbarProps) {
     <div className="sticky top-0 z-30 border-b border-light-grey bg-white shadow-xsmall lg:top-16">
       <div className="mx-auto max-w-7xl px-4 md:px-8">
         <div className="flex h-14 items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
             <button
               type="button"
               onClick={p.onBack}
@@ -207,28 +217,28 @@ export default function SaleEditorToolbar(p: ToolbarProps) {
               <span className="hidden sm:inline">Back to Sales</span>
               <span className="sr-only sm:hidden">Back to Sales</span>
             </button>
-            <span className="hidden h-6 w-px bg-light-grey md:block" aria-hidden />
-            <div className="hidden min-w-0 items-center gap-2 md:flex">
-              <span className="truncate font-sans text-sm font-bold text-midnight">{p.name || "Untitled sale"}</span>
-              <span className={cn("shrink-0 rounded-full border px-2 py-0.5 font-body text-[11px] font-bold", p.siteBadge.className)}>{p.siteBadge.label}</span>
+            <span className="hidden h-6 w-px shrink-0 bg-light-grey lg:block" aria-hidden />
+            <div className="hidden min-w-0 items-center gap-2 lg:flex">
+              <span className="hidden truncate font-sans text-sm font-bold text-midnight 2xl:inline">{p.name || "Untitled sale"}</span>
+              <span className={cn("shrink-0 whitespace-nowrap rounded-full border px-2 py-0.5 font-body text-[11px] font-bold", p.siteBadge.className)}>{p.siteBadge.label}</span>
             </div>
           </div>
 
           {/* Desktop */}
-          <div className="hidden items-center gap-2 md:flex">
-            <span className="hidden lg:block">{saveStatus}</span>
+          <div className="hidden shrink-0 items-center gap-2 md:flex">
+            <span className="hidden xl:block">{saveStatus}</span>
             {statusSelect(false)}
             {scheduleTrigger(false)}
             <button type="button" onClick={p.onToggleSettings} className={cn(PILL, p.settingsOpen ? PILL_ON : PILL_IDLE)} aria-pressed={p.settingsOpen}>
               <Settings className="h-4 w-4" aria-hidden />
-              <span className="hidden lg:inline">Settings</span>
-              <span className="sr-only lg:hidden">Settings</span>
+              <span className="hidden xl:inline">Settings</span>
+              <span className="sr-only xl:hidden">Settings</span>
             </button>
             {p.canTrack && (
               <button type="button" onClick={p.onTrack} className={cn(PILL, PILL_IDLE)}>
                 <ListChecks className="h-4 w-4" aria-hidden />
-                <span className="hidden lg:inline">Track slots</span>
-                <span className="sr-only lg:hidden">Track slots</span>
+                <span className="hidden xl:inline">Track slots</span>
+                <span className="sr-only xl:hidden">Track slots</span>
               </button>
             )}
             {preview(false)}

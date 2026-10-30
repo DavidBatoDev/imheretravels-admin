@@ -24,6 +24,8 @@ interface PaymentFormProps {
   onError: (error: string) => void;
   onProcessingChange?: (processing: boolean) => void;
   isGuestBooking?: boolean;
+  /** Runs before confirming; false aborts (e.g. a sale hold that ended). */
+  onBeforeConfirm?: () => Promise<boolean>;
 }
 
 function PaymentForm({
@@ -34,6 +36,7 @@ function PaymentForm({
   onError,
   onProcessingChange,
   isGuestBooking = false,
+  onBeforeConfirm,
 }: PaymentFormProps) {
   const stripe = useStripe();
   const elements = useElements();
@@ -341,6 +344,10 @@ function PaymentForm({
     e.preventDefault();
 
     if (!stripe || !elements) {
+      return;
+    }
+
+    if (onBeforeConfirm && !(await onBeforeConfirm())) {
       return;
     }
 
@@ -975,6 +982,9 @@ interface StripePaymentProps {
   onProcessingChange?: (processing: boolean) => void;
   bookingType?: string;
   numberOfGuests?: number;
+  /** Black Friday hold link param `<holdId>.<token>`; the server prices the fee from it. */
+  saleHold?: string | null;
+  onBeforeConfirm?: () => Promise<boolean>;
 
   // Guest booking specific props
   isGuestBooking?: boolean;
@@ -1005,6 +1015,8 @@ export default function StripePayment({
   onProcessingChange,
   bookingType,
   numberOfGuests,
+  saleHold,
+  onBeforeConfirm,
   isGuestBooking = false,
   parentBookingId,
   guestEmail,
@@ -1035,7 +1047,8 @@ export default function StripePayment({
       return `stripe_payment_guest_${parentBookingId}_${guestEmail}`;
     }
     if (paymentDocId) {
-      return `stripe_payment_${email}_${tourPackageId}_${paymentDocId}`;
+      const holdPart = saleHold ? `_${saleHold.split(".")[0]}` : "";
+      return `stripe_payment_${email}_${tourPackageId}_${paymentDocId}${holdPart}`;
     }
     return `stripe_payment_${email}_${tourPackageId}`;
   };
@@ -1158,6 +1171,7 @@ export default function StripePayment({
           paymentDocId,
           bookingType,
           numberOfGuests,
+          ...(saleHold ? { saleHold } : {}),
           meta: {
             source: "reservation-form",
             retryAttempt: retryCount,
@@ -1235,7 +1249,7 @@ export default function StripePayment({
     }
 
     initializePayment();
-  }, [tourPackageId, email, amountGBP, paymentDocId]);
+  }, [tourPackageId, email, amountGBP, paymentDocId, saleHold]);
 
   // Clean up session storage on unmount if payment is completed
   useEffect(() => {
@@ -1389,6 +1403,7 @@ export default function StripePayment({
           }}
           onProcessingChange={onProcessingChange}
           isGuestBooking={isGuestBooking}
+          onBeforeConfirm={onBeforeConfirm}
         />
       </Elements>
     </>

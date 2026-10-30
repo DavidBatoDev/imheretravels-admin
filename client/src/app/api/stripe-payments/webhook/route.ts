@@ -12,7 +12,10 @@ import {
   getDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { createBookingsForReservationPayment } from "@/lib/create-bookings-from-payment";
+import {
+  SaleConflictError,
+  createBookingsForReservationPayment,
+} from "@/lib/create-bookings-from-payment";
 import {
   getCreditOrder,
   getPaymentPlanTerms,
@@ -66,6 +69,12 @@ export async function POST(req: NextRequest) {
         const bookingLinked =
           !!paymentData.booking?.documentId &&
           paymentData.booking.documentId !== "PENDING";
+
+        // A Black Friday payment already refunded because its slots were taken.
+        if (paymentData.sale?.conflict) {
+          console.log("ℹ️ Sale conflict already refunded:", paymentDoc.id);
+          return NextResponse.json({ received: true });
+        }
 
         // Check if this is a reservation fee payment (Step 2)
         if (paymentData.payment?.type === "reservationFee" && !bookingLinked) {
@@ -130,6 +139,11 @@ export async function POST(req: NextRequest) {
               );
             }
           } catch (bookingError: any) {
+            if (bookingError instanceof SaleConflictError) {
+              // Refunded inside the helper; nothing for Stripe to retry.
+              console.warn("⚠️ Sale slots taken; payment refunded:", paymentDoc.id);
+              return NextResponse.json({ received: true });
+            }
             console.error(
               "❌ Failed to create booking from webhook:",
               bookingError,

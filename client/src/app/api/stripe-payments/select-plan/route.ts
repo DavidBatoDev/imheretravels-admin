@@ -133,7 +133,8 @@ export async function POST(req: NextRequest) {
       originalTourCost: bookingData.originalTourCost || 0,
       discountedTourCost: bookingData.discountedTourCost || null,
       reservationFee: bookingData.reservationFee || 250,
-      isMainBooker: bookingData.isMainBooking !== false,
+      // Sale bookings price each traveller from their own slot.
+      isMainBooker: bookingData.isMainBooking !== false || !!bookingData.saleEventId,
       creditAmount: bookingData.manualCredit || 0,
       creditFrom: bookingData.creditFrom || "",
       reminderDaysBefore: 7, // 7 days before due date

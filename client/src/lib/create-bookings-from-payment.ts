@@ -59,6 +59,27 @@ export class CreateBookingsError extends Error {
   }
 }
 
+/**
+ * A Black Friday payment whose held slots went to someone else (its hold ran
+ * out completely before payment landed). The payment has been refunded; the
+ * webhook must acknowledge it rather than retry.
+ */
+export class SaleConflictError extends CreateBookingsError {
+  readonly saleConflict = true;
+  constructor() {
+    super("Sale slots were no longer available; payment refunded", 409);
+  }
+}
+
+/** Sale snapshot stamped on the payment doc by init-payment (lib/sale/payment.ts). */
+type PaymentSaleSnapshot = {
+  saleId: string;
+  saleName: string;
+  holdId: string;
+  slots: { index: number; salePrice: number; originalPrice: number }[];
+  conflict?: boolean;
+};
+
 function toDate(input: unknown): Date | null {
   if (input === null || input === undefined) return null;
   if (typeof input === "string" && input.trim() === "") return null;
@@ -266,6 +287,35 @@ export async function createBookingsForReservationPayment(opts: {
     );
   }
 
+  // Black Friday: mark the held slots sold before any booking exists. If they
+  // were reclaimed by someone else, refund instead of booking.
+  const sale = paymentData.sale as PaymentSaleSnapshot | undefined;
+  if (sale?.holdId) {
+    const intentId: string =
+      paymentData.payment?.stripeIntentId || paymentData.stripeIntentId || "";
+    const { convertHold } = await import("@/lib/sale/holds");
+    const converted = await convertHold(sale.holdId, paymentDocId, intentId);
+    if (!converted.ok && converted.reason === "conflict") {
+      const { refundSaleConflict } = await import("@/lib/sale/payment");
+      await refundSaleConflict(paymentDocId, intentId, sale.holdId);
+      throw new SaleConflictError();
+    }
+  }
+  // Traveller i (0 = main booker) pays the i-th held slot's price.
+  const saleSlots = [...(sale?.slots ?? [])].sort((a, b) => a.index - b.index);
+  const saleFieldsFor = (travellerIndex: number) => {
+    const slot = saleSlots[travellerIndex];
+    if (!sale || !slot) return {};
+    return {
+      saleEventId: sale.saleId,
+      saleName: sale.saleName,
+      saleHoldId: sale.holdId,
+      saleSlotIndex: slot.index,
+      saleDiscountGBP: Math.max(0, (slot.originalPrice || 0) - slot.salePrice),
+      tags: ["auto", "sale"],
+    };
+  };
+
   // Creation lock: prevents webhook + client double-creation races. A lock the
   // other owner left behind (its run died) would otherwise block every retry,
   // so after STALE_LOCK_MS it is taken over; resuming is safe because
@@ -402,7 +452,8 @@ export async function createBookingsForReservationPayment(opts: {
     reservationFee: feePerPerson,
     paidAmount: feePerPerson,
     originalTourCost,
-    discountedTourCost,
+    discountedTourCost: saleSlots[0]?.salePrice ?? discountedTourCost,
+    discountAppliesToGuest: saleSlots.length > 0,
     paymentMethod: "Stripe",
     groupId,
     isMainBooking: true,
@@ -437,6 +488,7 @@ export async function createBookingsForReservationPayment(opts: {
     mainBookingRef = await addDoc(collection(db, "bookings"), {
       ...mainBookingData,
       ...partyContext,
+      ...saleFieldsFor(0),
       emailAddress: mainBookerEmail,
       access_token: mainAccessToken,
       tourDate: tourDateTimestamp,
@@ -494,7 +546,8 @@ export async function createBookingsForReservationPayment(opts: {
       reservationFee: feePerPerson,
       paidAmount: feePerPerson,
       originalTourCost,
-      discountedTourCost,
+      discountedTourCost: saleSlots[i + 1]?.salePrice ?? discountedTourCost,
+      discountAppliesToGuest: saleSlots.length > 0,
       paymentMethod: "Stripe",
       groupId,
       isMainBooking: false,
@@ -516,6 +569,7 @@ export async function createBookingsForReservationPayment(opts: {
     const guestBookingRef = await addDoc(collection(db, "bookings"), {
       ...guestBookingData,
       ...partyContext,
+      ...saleFieldsFor(i + 1),
       emailAddress: guest.email || "",
       access_token: guestAccessToken,
       tourDate: tourDateTimestamp,
@@ -554,6 +608,16 @@ export async function createBookingsForReservationPayment(opts: {
   });
 
   console.log("✅ Stripe payment record updated with all booking references");
+
+  if (sale?.holdId) {
+    try {
+      const { attachBookingsToHold } = await import("@/lib/sale/holds");
+      await attachBookingsToHold(sale.holdId, createdBookingDocIds);
+    } catch (e) {
+      // Tracking only; the bookings exist and the slots are already sold.
+      console.error("⚠️ Could not attach bookings to sale hold:", e);
+    }
+  }
 
   return {
     alreadyExists: false,

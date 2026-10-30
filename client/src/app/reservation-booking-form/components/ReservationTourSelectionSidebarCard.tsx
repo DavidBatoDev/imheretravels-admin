@@ -20,6 +20,8 @@ type ReservationTourSelectionSidebarCardProps = {
   setIsCarouselPaused: (value: boolean) => void;
   setCarouselIndex: Dispatch<SetStateAction<number>>;
   setTourDate: (value: string) => void;
+  /** A Black Friday slot hold fixes the tour; the date stays selectable. */
+  tourLocked?: boolean;
 };
 
 const toPounds = (value?: number) => {
@@ -51,11 +53,13 @@ export default function ReservationTourSelectionSidebarCard({
   tourDateOptions,
   setShowTourModal,
   setTourDate,
+  tourLocked = false,
 }: ReservationTourSelectionSidebarCardProps) {
   const [dateMenuOpen, setDateMenuOpen] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const lockedByStep = step !== 1;
   const isSelectionLocked = paymentConfirmed || lockedByStep;
+  const isTourChangeLocked = isSelectionLocked || tourLocked;
 
   useEffect(() => {
     setImageLoaded(false);
@@ -130,10 +134,10 @@ export default function ReservationTourSelectionSidebarCard({
             <div className="w-full min-w-0 text-foreground rounded-xl border border-border bg-card overflow-hidden">
               <div
                 className={`relative overflow-hidden ${
-                  isSelectionLocked ? "cursor-not-allowed" : "cursor-pointer"
+                  isTourChangeLocked ? "cursor-not-allowed" : "cursor-pointer"
                 }`}
                 onClick={() => {
-                  if (!isSelectionLocked) setShowTourModal(true);
+                  if (!isTourChangeLocked) setShowTourModal(true);
                 }}
               >
                 <div className="overflow-hidden">
@@ -387,7 +391,7 @@ export default function ReservationTourSelectionSidebarCard({
                     )}
 
                   <div className="pt-3 mt-3 border-t border-border text-right">
-                    {!isSelectionLocked ? (
+                    {!isTourChangeLocked ? (
                       <button
                         type="button"
                         className="text-sm italic underline underline-offset-2 text-[#EF3340] hover:text-[#c92b36] transition-colors"
@@ -397,7 +401,7 @@ export default function ReservationTourSelectionSidebarCard({
                       </button>
                     ) : (
                       <span className="text-xs italic text-muted-foreground">
-                        Tour locked for this step
+                        {tourLocked && !isSelectionLocked ? "Tour set by your held slots" : "Tour locked for this step"}
                       </span>
                     )}
                   </div>
@@ -429,7 +433,7 @@ export default function ReservationTourSelectionSidebarCard({
                 date.
               </p>
 
-              {!isSelectionLocked ? (
+              {!isTourChangeLocked ? (
                 <button
                   type="button"
                   className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#EF3340] px-3.5 py-2 text-sm font-semibold text-white hover:bg-[#d72e3a] transition-colors"

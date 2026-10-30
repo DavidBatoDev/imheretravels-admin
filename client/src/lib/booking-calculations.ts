@@ -893,6 +893,11 @@ export interface BookingCreationInput {
   paidAmount: number;
   originalTourCost: number;
   discountedTourCost?: number | null;
+  /**
+   * Sale bookings price every traveller from their own slot, so guests get
+   * the discounted cost too (by default only the main booker does).
+   */
+  discountAppliesToGuest?: boolean;
   paymentMethod: "Stripe" | "Revolut";
 
   // Group booking (if applicable)
@@ -1055,7 +1060,7 @@ export async function createBookingData(
         input.originalTourCost,
         input.discountedTourCost || null,
         input.reservationFee,
-        input.isMainBooking ?? true,
+        (input.isMainBooking ?? true) || input.discountAppliesToGuest === true,
         0, // No credit at initial booking
         "", // No creditFrom
         allDueDates.p1DueDate,

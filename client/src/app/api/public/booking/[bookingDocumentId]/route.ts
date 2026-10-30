@@ -144,7 +144,8 @@ export async function GET(
       remainingBalance: bookingData.remainingBalance,
       paymentProgress: (() => {
         const totalCost =
-          (bookingData.isMainBooker && bookingData.discountedTourCost
+          ((bookingData.isMainBooker || bookingData.saleEventId) &&
+          bookingData.discountedTourCost
             ? bookingData.discountedTourCost
             : bookingData.originalTourCost) || 0;
         const paid = bookingData.paid || 0;

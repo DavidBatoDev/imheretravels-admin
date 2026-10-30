@@ -56,11 +56,14 @@ export type Step1PersonalReservationSectionProps = {
     maxLength: number;
   };
   safeGetCountryCallingCode: (countryCode: string) => string;
+  /** A Black Friday slot hold fixes the party size. */
+  partyLocked?: boolean;
 };
 
 export default function Step1PersonalReservationSection({
   step,
   paymentConfirmed,
+  partyLocked = false,
   clearing,
   selectedPackage,
   tourDate,
@@ -140,7 +143,7 @@ export default function Step1PersonalReservationSection({
               bookingType={bookingType}
               onBookingTypeChange={handleBookingTypeChange}
               bookingTypeOptions={bookingTypeOptions}
-              paymentConfirmed={paymentConfirmed}
+              paymentConfirmed={paymentConfirmed || partyLocked}
               errors={visibleErrors}
               showValidationFeedback={showValidationFeedback}
               groupSize={groupSize}

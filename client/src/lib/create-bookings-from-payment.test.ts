@@ -510,3 +510,113 @@ describe("createBookingsForReservationPayment - Tanzania Exploration custom pric
     ).rejects.toThrow(/Payment not confirmed/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Black Friday sale payments (slot ladder)
+// ---------------------------------------------------------------------------
+
+const saleMocks = vi.hoisted(() => ({
+  convertHold: vi.fn(),
+  attachBookingsToHold: vi.fn(),
+  refundSaleConflict: vi.fn(),
+}));
+
+vi.mock("@/lib/sale/holds", () => ({
+  convertHold: saleMocks.convertHold,
+  attachBookingsToHold: saleMocks.attachBookingsToHold,
+}));
+vi.mock("@/lib/sale/payment", () => ({
+  refundSaleConflict: saleMocks.refundSaleConflict,
+}));
+
+describe("createBookingsForReservationPayment - sale slot pricing", () => {
+  const SALE_PAYMENT_ID = "sale-payment-duo";
+
+  const seedDuoSalePayment = () => {
+    store.set(`tourPackages/argentina`, {
+      tourCode: "ARW",
+      name: "Argentina's Wonders",
+      pricing: { original: 2199, discounted: null },
+      duration: "11 Days",
+      currentVersion: 1,
+    });
+    store.set(`stripePayments/${SALE_PAYMENT_ID}`, {
+      customer: { email: "lead@example.com", firstName: "Lea", lastName: "Lead" },
+      booking: {
+        type: "Duo Booking",
+        groupSize: 2,
+        guestDetails: [{ email: "guest@example.com", firstName: "Gus", lastName: "Guest" }],
+        id: "PENDING",
+        documentId: "",
+      },
+      tour: { packageId: "argentina", packageName: "Argentina's Wonders", date: "2027-03-10" },
+      payment: {
+        amount: 500,
+        currency: "GBP",
+        status: "reserve_paid",
+        type: "reservationFee",
+        originalPrice: 2199,
+        stripeIntentId: "pi_sale",
+      },
+      sale: {
+        saleId: "bf",
+        saleName: "Black Friday Sale 2026",
+        holdId: "hold123",
+        slotIndexes: [3, 2],
+        slots: [
+          { index: 3, salePrice: 1999, originalPrice: 2199 },
+          { index: 2, salePrice: 1899, originalPrice: 2199 },
+        ],
+      },
+    });
+  };
+
+  beforeEach(() => {
+    store.clear();
+    addedDocs.length = 0;
+    autoIdCounter = 0;
+    saleMocks.convertHold.mockReset();
+    saleMocks.attachBookingsToHold.mockReset();
+    saleMocks.refundSaleConflict.mockReset();
+  });
+
+  it("marks the slots sold and prices each traveller from their own slot, in ladder order", async () => {
+    seedDuoSalePayment();
+    saleMocks.convertHold.mockResolvedValue({ ok: true, hold: {} });
+
+    const result = await createBookingsForReservationPayment({
+      paymentDocId: SALE_PAYMENT_ID,
+      creationLock: "webhook",
+    });
+
+    expect(saleMocks.convertHold).toHaveBeenCalledWith("hold123", SALE_PAYMENT_ID, "pi_sale");
+    expect(result.alreadyExists).toBe(false);
+    const bookings = addedDocs.filter((d) => d.collectionPath === "bookings").map((d) => d.data);
+    expect(bookings).toHaveLength(2);
+
+    const [lead, guest] = bookings;
+    expect(lead.originalTourCost).toBe(2199);
+    expect(lead.discountedTourCost).toBe(1899); // slot 2
+    expect(lead.saleSlotIndex).toBe(2);
+    expect(lead.saleDiscountGBP).toBe(300);
+    expect(lead.remainingBalance).toBe(1899 - 250);
+    expect(guest.discountedTourCost).toBe(1999); // slot 3
+    expect(guest.saleSlotIndex).toBe(3);
+    expect(guest.remainingBalance).toBe(1999 - 250);
+    expect(lead.lockPricing).toBe(true);
+    expect(lead.saleEventId).toBe("bf");
+    expect(saleMocks.attachBookingsToHold).toHaveBeenCalledWith("hold123", result.alreadyExists ? [] : result.bookingDocumentIds);
+  });
+
+  it("refunds and creates no booking when the held slots were taken by someone else", async () => {
+    seedDuoSalePayment();
+    saleMocks.convertHold.mockResolvedValue({ ok: false, reason: "conflict" });
+
+    await expect(
+      createBookingsForReservationPayment({ paymentDocId: SALE_PAYMENT_ID, creationLock: "webhook" }),
+    ).rejects.toMatchObject({ saleConflict: true, status: 409 });
+
+    expect(saleMocks.refundSaleConflict).toHaveBeenCalledWith(SALE_PAYMENT_ID, "pi_sale", "hold123");
+    expect(addedDocs.filter((d) => d.collectionPath === "bookings")).toHaveLength(0);
+  });
+});

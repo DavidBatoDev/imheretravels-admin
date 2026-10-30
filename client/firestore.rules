@@ -14,9 +14,12 @@ service cloud.firestore {
     // them. The admin server reads them with firebase-admin, which bypasses
     // these rules:
     //   guestPassportData: passport-form data for /reports/customers
+    //   saleEvents, saleHolds, saleRateLimits: Black Friday slot inventory and
+    //     holds; only the sale API may change them, so a browser can't free or
+    //     grab slots
     match /{collection}/{document=**} {
       allow read, write: if request.time < timestamp.date(2026, 12, 31)
-        && !(collection in ['guestPassportData']);
+        && !(collection in ['guestPassportData', 'saleEvents', 'saleHolds', 'saleRateLimits']);
     }
   }
 }

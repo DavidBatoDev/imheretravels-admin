@@ -59,6 +59,12 @@ import {
   Eye,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import SaleEventsSection from "@/components/sales/SaleEventsSection";
 
 export default function DiscountedToursTab() {
   const { toast } = useToast();
@@ -80,6 +86,10 @@ export default function DiscountedToursTab() {
   // View event details dialog
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [viewingEvent, setViewingEvent] = useState<DiscountEvent | null>(null);
+
+  // Legacy discount events are kept (the booking sheet looks them up by name)
+  // but tucked away below the sale events.
+  const [legacyOpen, setLegacyOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -189,6 +199,29 @@ export default function DiscountedToursTab() {
 
   return (
     <div className="space-y-8">
+      <SaleEventsSection tours={tours} toursLoading={loading} />
+
+      <Collapsible open={legacyOpen} onOpenChange={setLegacyOpen}>
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex w-full items-center justify-between rounded-lg border bg-card px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span>
+              <span className="font-semibold">Legacy discount events</span>
+              <span className="ml-2 text-sm text-muted-foreground">
+                {events.length} event{events.length !== 1 ? "s" : ""} · date-based
+                discounts used by older bookings
+              </span>
+            </span>
+            {legacyOpen ? (
+              <ChevronUp className="h-5 w-5" aria-hidden />
+            ) : (
+              <ChevronDown className="h-5 w-5" aria-hidden />
+            )}
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pt-4">
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -377,6 +410,8 @@ export default function DiscountedToursTab() {
           )}
         </CardContent>
       </Card>
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Create Event Modal */}
       <CreateDiscountEventModal

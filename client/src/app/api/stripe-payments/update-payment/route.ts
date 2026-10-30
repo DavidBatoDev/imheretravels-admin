@@ -45,6 +45,14 @@ export async function POST(req: NextRequest) {
     const paymentData = paymentDocSnap.data();
     const stripeIntentId = paymentData?.payment?.stripeIntentId;
 
+    // Sale payments are priced by init-payment from the hold; never from the client.
+    if (paymentData?.sale?.holdId) {
+      return NextResponse.json(
+        { error: "Sale reservation fees are set by the server", cannotUpdate: true },
+        { status: 400 }
+      );
+    }
+
     if (!stripeIntentId) {
       return NextResponse.json(
         {

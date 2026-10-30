@@ -339,6 +339,23 @@ export const uploadDiscountEventBanner = async (
 };
 
 // ============================================================================
+// SALE EVENT UPLOAD FUNCTIONS
+// ============================================================================
+
+/** Banner for a sale page (desktop or mobile), stored under `sale-events/banners`. */
+export const uploadSaleBanner = async (file: File): Promise<UploadResult> => {
+  const result = await uploadFile(file, {
+    bucket: STORAGE_BUCKET,
+    folder: "discount-events/banners", // existing Storage-rules path; sale banners share it
+    maxSize: 5 * 1024 * 1024, // 5MB
+    allowedTypes: ["image/jpeg", "image/jpg", "image/png", "image/webp"],
+    generateUniqueName: true,
+  });
+  if (!result.success) console.error(`Failed to upload sale banner:`, result.error);
+  return result;
+};
+
+// ============================================================================
 // DELETE FUNCTIONS
 // ============================================================================
 

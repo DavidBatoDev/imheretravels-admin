@@ -25,6 +25,8 @@ import Step3PaymentPlanSelectorCard from "./components/Step3PaymentPlanSelectorC
 import StepFooterActionsSection from "./components/StepFooterActionsSection";
 import Step1PersonalReservationSection from "./components/Step1PersonalReservationSection";
 import ReservationTourSelectionSidebarCard from "./components/ReservationTourSelectionSidebarCard";
+import SaleHoldBanner from "./components/SaleHoldBanner";
+import { useSaleHold } from "./hooks/effects/useSaleHold";
 import {
   calculateDaysBetween,
   MIN_DAYS_BEFORE_TOUR,
@@ -571,6 +573,11 @@ const Page = () => {
     setCompletedSteps,
   });
 
+  const sale = useSaleHold();
+  const saleHold = sale.hold;
+  const saleLocksSelection =
+    !!saleHold && (sale.phase === "active" || sale.phase === "secured");
+
   const {
     animateHeight,
     handleBookingTypeChange,
@@ -594,6 +601,37 @@ const Page = () => {
     setGuestsHeight,
     ANIM_DURATION,
   });
+
+  // A Black Friday hold fixes the tour and the party size; the date stays free.
+  useEffect(() => {
+    if (!saleHold || !saleLocksSelection || paymentConfirmed || isLoadingPackages) return;
+    if (tourPackage !== saleHold.tourPackageId) {
+      if (tourPackages.some((p) => p.id === saleHold.tourPackageId)) {
+        setTourPackage(saleHold.tourPackageId);
+      }
+      return;
+    }
+    const size = saleHold.partySize;
+    const wanted =
+      size === 1 ? "Single Booking" : size === 2 ? "Duo Booking" : "Group Booking";
+    if (bookingType !== wanted) {
+      void handleBookingTypeChange(wanted);
+    } else if (wanted === "Group Booking" && groupSize !== size) {
+      handleGroupSizeChange(size);
+    }
+  }, [
+    saleHold,
+    saleLocksSelection,
+    paymentConfirmed,
+    isLoadingPackages,
+    tourPackage,
+    tourPackages,
+    setTourPackage,
+    bookingType,
+    groupSize,
+    handleBookingTypeChange,
+    handleGroupSizeChange,
+  ]);
 
   const step1SectionProps = useStep1SectionProps({
     step,
@@ -898,6 +936,7 @@ const Page = () => {
                   setIsCarouselPaused={setIsCarouselPaused}
                   setCarouselIndex={setCarouselIndex}
                   setTourDate={setTourDate}
+                  tourLocked={saleLocksSelection}
                 />
               </div>
             </aside>
@@ -909,7 +948,12 @@ const Page = () => {
                 showTourModal ? "lg:overflow-hidden" : ""
               }`}
             >
-              <div className="mx-auto w-full max-w-[760px]">
+              <div
+                className={`mx-auto w-full max-w-[760px] ${
+                  sale.isSaleHold ? "pb-40 lg:pb-0" : ""
+                }`}
+              >
+                <SaleHoldBanner sale={sale} />
                 <AnimatePresence mode="wait" initial={false} custom={stepSwipeDirection}>
                   <motion.div
                     key={`reservation-step-${step}`}
@@ -921,7 +965,10 @@ const Page = () => {
                     className="space-y-6"
                   >
                     {step === 1 && (
-                      <Step1PersonalReservationSection {...step1SectionProps} />
+                      <Step1PersonalReservationSection
+                        {...step1SectionProps}
+                        partyLocked={saleLocksSelection}
+                      />
                     )}
 
                     {/* STEP 2 - PAYMENT */}
@@ -952,7 +999,14 @@ const Page = () => {
                             paymentDocId={paymentDocId}
                             bookingType={bookingType}
                             numberOfGuests={numberOfPeople}
+                            saleHold={
+                              sale.phase === "active" ? sale.holdParam : null
+                            }
+                            onBeforeConfirm={
+                              sale.isSaleHold ? sale.markPaying : undefined
+                            }
                             onSuccess={(pid, docId) => {
+                              if (sale.isSaleHold) sale.markSecured();
                               handlePaymentSuccess(pid, docId);
                             }}
                             onError={() => {}}

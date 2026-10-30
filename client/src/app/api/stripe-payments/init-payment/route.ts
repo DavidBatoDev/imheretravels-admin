@@ -16,6 +16,8 @@ import {
   limit,
 } from "firebase/firestore";
 import { StripePaymentDocument } from "@/types";
+import { SaleError } from "@/lib/sale/holds";
+import { initSaleReservationPayment } from "@/lib/sale/payment";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
@@ -33,7 +35,32 @@ export async function POST(req: NextRequest) {
       guestData,
       bookingType,
       numberOfGuests,
+      saleHold,
     } = await req.json();
+
+    // Black Friday hold: the server prices the fee and binds the intent to the
+    // held slots; the client's amountGBP is ignored.
+    if (typeof saleHold === "string" && saleHold) {
+      try {
+        const result = await initSaleReservationPayment({
+          holdParam: saleHold,
+          paymentDocId,
+          email,
+        });
+        return NextResponse.json(result);
+      } catch (e) {
+        if (e instanceof SaleError) {
+          const message =
+            e.code === "hold_expired" || e.code === "hold_not_found"
+              ? "Your held slots have expired. Please go back to the sale and try again."
+              : e.code === "tour_date_unavailable"
+                ? "That tour date is no longer available. Please pick another date."
+                : "We couldn't start your sale payment. Please try again.";
+          return NextResponse.json({ error: message, code: e.code }, { status: e.status });
+        }
+        throw e;
+      }
+    }
 
     // Validate required fields
     if (!email || !tourPackage) {

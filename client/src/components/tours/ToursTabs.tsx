@@ -83,7 +83,7 @@ export default function ToursTabs() {
             value="discounted"
             className="data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow transition-all duration-200"
           >
-            Discounted Tours
+            Sales &amp; Discounts
           </TabsTrigger>
         </TabsList>
         </div>

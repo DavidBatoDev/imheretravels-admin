@@ -239,23 +239,10 @@ function DealCard({
       </div>
 
       <div className="flex flex-1 flex-col p-5">
-        <EditTag>
-          <label htmlFor={`${t.key}-title`}>Card title</label>
-        </EditTag>
-        <h3 id={headingId} className="font-sans text-h5-mobile text-midnight md:text-h5-desktop">
-          <InlineInput
-            id={`${t.key}-title`}
-            value={t.displayName}
-            maxLength={80}
-            placeholder="e.g. Argentina"
-            onChange={(e) => onPatch({ displayName: e.target.value })}
-            aria-invalid={!t.displayName.trim()}
-            className="font-sans font-bold"
-          />
+        {/* Card title is the tour name (rename the tour to change it). */}
+        <h3 id={headingId} className="font-sans text-h5-mobile font-bold text-midnight md:text-h5-desktop">
+          {t.displayName || t.tourName}
         </h3>
-        {t.tourName && t.tourName.trim().toLowerCase() !== t.displayName.trim().toLowerCase() && (
-          <p className="mt-1 line-clamp-2 font-body text-b4-mobile text-dark-gray md:text-b4-desktop">{t.tourName}</p>
-        )}
 
         <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 tabular-nums">
           {fromPrice !== null ? (

@@ -360,6 +360,12 @@ export default function SaleEditor({ sale: initialSale, tours, allSales }: SaleE
             onUpload={upload}
           />
 
+          <SaleFixedContent
+            part="how"
+            holdMinutes={Number.isFinite(numOrNaN(draft.holdMinutes)) ? Number(draft.holdMinutes) : 15}
+            example={firstTour ? { name: firstTour.displayName, originalPrice: numOrNaN(firstTour.originalPrice) || 0, slots: firstSlots } : undefined}
+          />
+
           <SaleDealsEditor
             tours={draft.tours}
             tourById={tourById}
@@ -378,10 +384,7 @@ export default function SaleEditor({ sale: initialSale, tours, allSales }: SaleE
             onSkipUnmatched={(key) => setUnmatched((list) => list.filter((x) => x.key !== key))}
           />
 
-          <SaleFixedContent
-            holdMinutes={Number.isFinite(numOrNaN(draft.holdMinutes)) ? Number(draft.holdMinutes) : 15}
-            example={firstTour ? { name: firstTour.displayName, originalPrice: numOrNaN(firstTour.originalPrice) || 0, slots: firstSlots } : undefined}
-          />
+          <SaleFixedContent part="faq" holdMinutes={Number.isFinite(numOrNaN(draft.holdMinutes)) ? Number(draft.holdMinutes) : 15} />
         </main>
       </div>
 

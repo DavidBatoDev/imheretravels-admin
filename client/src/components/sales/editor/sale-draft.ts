@@ -105,7 +105,8 @@ export function draftFromSale(sale: SaleWithInventory): SaleDraft {
         tourSlug: t.tourSlug,
         tourName: t.tourName,
         coverImage: t.coverImage,
-        displayName: t.displayName,
+        // Card title is always the tour name.
+        displayName: t.tourName || t.displayName,
         originalPrice: String(t.originalPrice),
         discounts: slots.length ? slots.map((s) => ({ key: newKey(), value: String(s.discountGBP) })) : emptyLadder(),
         notes: [],
@@ -144,7 +145,7 @@ export function draftFromTour(tour: TourPackage, csv?: CsvTourGroup): DraftTour 
     tourSlug: tour.slug ?? "",
     tourName: tour.name ?? "",
     coverImage: tour.media?.coverImage || undefined,
-    displayName: (tour.cardSubHeader || tour.name || "").slice(0, 80),
+    displayName: (tour.name || tour.cardSubHeader || "").slice(0, 80),
     originalPrice: String(csv?.originalPrice ?? tour.pricing?.original ?? 0),
     discounts: ladder.length ? ladder.map((d) => ({ key: newKey(), value: String(d) })) : emptyLadder(),
     notes: [],

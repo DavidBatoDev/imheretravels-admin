@@ -131,18 +131,11 @@ function TourEditorBody({
         <PanelSectionHead id={`${t.key}-card-head`}>Card</PanelSectionHead>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">
-            <FieldLabel htmlFor={`${t.key}-display`} required>
-              Card title
-            </FieldLabel>
-            <FieldInput
-              id={`${t.key}-display`}
-              value={t.displayName}
-              maxLength={80}
-              onChange={(e) => onPatch({ displayName: e.target.value })}
-              aria-invalid={!t.displayName.trim()}
-              aria-describedby={`${t.key}-display-help`}
-            />
-            <HelpText id={`${t.key}-display-help`}>Usually the country, e.g. “Argentina”.</HelpText>
+            <span className="font-body text-sm font-bold text-midnight">Card title</span>
+            <p className="flex min-h-11 items-center rounded-md border-2 border-dashed border-dark-gray/40 bg-light-grey/50 px-3 font-body text-midnight">
+              {t.displayName || t.tourName}
+            </p>
+            <HelpText id={`${t.key}-display-help`}>The tour&apos;s name. Rename the tour in Tour Packages to change it.</HelpText>
           </div>
           <div className="flex flex-col gap-1.5">
             <FieldLabel htmlFor={`${t.key}-price`} required>

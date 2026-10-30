@@ -207,7 +207,8 @@ export default function SaleSlotTracker({ sale: initial, onClose, onChanged }: S
                         <p className="px-4 py-6 text-sm text-muted-foreground">No slots yet. Save the sale to create them.</p>
                       ) : (
                         <div className="overflow-x-auto">
-                          <Table>
+                          {/* The shared table has no cell padding and <th> centres by default: align every column. */}
+                          <Table className="[&_td:first-child]:pl-4 [&_td:last-child]:pr-4 [&_td:last-child]:text-right [&_td]:px-3 [&_td]:py-2.5 [&_th:first-child]:pl-4 [&_th:last-child]:pr-4 [&_th:last-child]:text-right [&_th]:px-3 [&_th]:text-left [&_th]:align-middle">
                             <TableHeader>
                               <TableRow>
                                 <TableHead className="w-10">#</TableHead>

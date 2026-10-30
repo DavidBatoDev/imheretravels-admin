@@ -48,9 +48,12 @@ function FixedNote() {
 }
 
 export default function SaleFixedContent({
+  part,
   holdMinutes,
   example,
 }: {
+  /** "how" renders How it works (2nd on the page), "faq" the Sale FAQs (last), as on www. */
+  part: "how" | "faq";
   holdMinutes: number;
   example?: { name: string; originalPrice: number; slots: PreviewSlot[] };
 }) {
@@ -69,6 +72,8 @@ export default function SaleFixedContent({
 
   return (
     <>
+      {part === "how" && (
+        <>
       <section aria-labelledby="fixed-how" className="overflow-hidden rounded-[24px] bg-white shadow-medium">
         <div className="px-5 py-8 opacity-80 md:px-8 md:py-10">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -120,6 +125,10 @@ export default function SaleFixedContent({
         </div>
       </section>
 
+        </>
+      )}
+      {part === "faq" && (
+        <>
       <section aria-labelledby="fixed-faq" className="overflow-hidden rounded-[24px] bg-white shadow-medium">
         <div className="px-5 py-8 opacity-80 md:px-8 md:py-10">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -146,6 +155,8 @@ export default function SaleFixedContent({
           </p>
         </div>
       </section>
+        </>
+      )}
     </>
   );
 }

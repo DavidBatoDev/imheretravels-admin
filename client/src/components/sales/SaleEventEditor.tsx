@@ -475,7 +475,7 @@ export default function SaleEventEditor({ sale, tours, isFirstSale, onClose, onS
             e.preventDefault();
           }}
         >
-          <DialogHeader className="relative overflow-hidden rounded-t-lg px-8 pb-6 pt-8 text-white">
+          <DialogHeader className="relative shrink-0 overflow-hidden rounded-t-lg px-8 pb-5 pt-6 text-white">
             {heroImage ? (
               <div className="absolute inset-0 z-0" aria-hidden>
                 <div
@@ -488,10 +488,10 @@ export default function SaleEventEditor({ sale, tours, isFirstSale, onClose, onS
               <div className="absolute inset-0 bg-gradient-to-r from-crimson-red to-light-red" aria-hidden />
             )}
             <div className="relative z-10">
-              <DialogTitle className="mb-2 text-3xl font-bold text-white drop-shadow-lg">
+              <DialogTitle className="mb-1 text-2xl font-bold text-white drop-shadow-lg md:text-3xl">
                 {isEdit ? `Edit ${sale.name}` : "Create Sale Event"}
               </DialogTitle>
-              <DialogDescription className="text-lg text-white/90 drop-shadow-md">
+              <DialogDescription className="text-sm text-white/90 drop-shadow-md md:text-base">
                 A sale page with limited discounted slots per tour. Slot 1 sells first.
               </DialogDescription>
             </div>
@@ -572,11 +572,21 @@ export default function SaleEventEditor({ sale, tours, isFirstSale, onClose, onS
                     </div>
 
                     <div className="flex flex-col gap-2">
-                      <Label>Start</Label>
-                      <DateTimePicker value={startLocal} onChange={setStartLocal} label="Start immediately" />
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <div className="flex h-6 items-center">
+                        <Label>Start</Label>
+                      </div>
+                      <DateTimePicker
+                        value={startLocal}
+                        onChange={setStartLocal}
+                        label="Sale start"
+                        placeholder="Opens as soon as it's Live"
+                        triggerClassName="mt-0 h-10 border border-input bg-background px-3 py-2 text-sm hover:border-primary/50"
+                      />
+                      <div className="flex items-start justify-between gap-3 text-xs text-muted-foreground">
                         <span>
-                          {startLocal ? "Holds open at this time (your local time)." : "No start time: opens as soon as it's Live."}
+                          {startLocal
+                            ? "Before this time the page shows a countdown. Entered in your local time."
+                            : "Set a time to show a countdown preview until the sale opens."}
                           {startLocal && localInputToIso(startLocal) && (
                             <span className="block font-medium text-foreground">
                               UK time:{" "}
@@ -596,7 +606,7 @@ export default function SaleEventEditor({ sale, tours, isFirstSale, onClose, onS
                       </div>
                     </div>
                     <div className="flex flex-col gap-2">
-                      <div className="flex items-center justify-between">
+                      <div className="flex h-6 items-center justify-between">
                         <Label htmlFor="sale-end-tba">End</Label>
                         <div className="flex items-center gap-2">
                           <Switch id="sale-end-tba" checked={endTba} onCheckedChange={setEndTba} />
@@ -606,11 +616,20 @@ export default function SaleEventEditor({ sale, tours, isFirstSale, onClose, onS
                         </div>
                       </div>
                       {endTba ? (
-                        <p className="rounded-md border border-dashed border-border px-3 py-2.5 text-sm text-muted-foreground">
-                          The page shows “End date TBA”. End the sale by setting status to Ended.
+                        <p className="flex h-10 items-center rounded-md border border-dashed border-border px-3 text-sm text-muted-foreground">
+                          The page shows “Ends TBA”.
                         </p>
                       ) : (
-                        <DateTimePicker value={endLocal} onChange={setEndLocal} label="Select end date & time" />
+                        <DateTimePicker
+                          value={endLocal}
+                          onChange={setEndLocal}
+                          label="Sale end"
+                          placeholder="Select end date and time"
+                          triggerClassName="mt-0 h-10 border border-input bg-background px-3 py-2 text-sm hover:border-primary/50"
+                        />
+                      )}
+                      {endTba && (
+                        <p className="text-xs text-muted-foreground">To close the sale early, set Status to Ended.</p>
                       )}
                     </div>
 

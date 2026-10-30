@@ -2,6 +2,7 @@
 
 import React from "react";
 import { createPortal } from "react-dom";
+import { cn } from "@/lib/utils";
 
 interface DateTimePickerProps {
   value: string; // ISO local datetime, e.g. 2025-12-19T06:30
@@ -11,6 +12,10 @@ interface DateTimePickerProps {
   maxYear?: number;
   disabled?: boolean;
   isValid?: boolean;
+  /** Extra classes for the trigger button (merged over the defaults). */
+  triggerClassName?: string;
+  /** Trigger text when no value is set. */
+  placeholder?: string;
 }
 
 function pad(n: number) {
@@ -44,6 +49,8 @@ export default function DateTimePicker({
   maxYear,
   disabled = false,
   isValid = false,
+  triggerClassName,
+  placeholder = "Select date and time",
 }: DateTimePickerProps) {
   const now = new Date();
   const maxAllowedYear = maxYear ?? now.getFullYear() + 10;
@@ -222,7 +229,7 @@ export default function DateTimePicker({
 
   const displayLabel = selectedISO
     ? new Date(selectedISO).toLocaleString()
-    : "Select date and time";
+    : placeholder;
 
   const hours = Array.from({ length: 12 }, (_, i) => (i + 1));
   const minutesList = Array.from({ length: 60 }, (_, i) => i);
@@ -236,13 +243,17 @@ export default function DateTimePicker({
           aria-label={label}
           onClick={() => !disabled && setOpen(true)}
           disabled={disabled}
-          className={`mt-1 block w-full px-4 py-3 rounded-md bg-input text-foreground placeholder:opacity-70 border-2 focus:outline-none text-left disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 hover:shadow-sm ${
-            open
-              ? "border-crimson-red"
-              : isValid
-                ? "border-green-500 pr-12 hover:border-green-500"
-                : "border-border hover:border-primary/50"
-          } focus:border-primary focus:ring-2 focus:ring-primary/20`}
+          className={cn(
+            `mt-1 block w-full px-4 py-3 rounded-md bg-input text-foreground placeholder:opacity-70 border-2 focus:outline-none text-left disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 hover:shadow-sm ${
+              open
+                ? "border-crimson-red"
+                : isValid
+                  ? "border-green-500 pr-12 hover:border-green-500"
+                  : "border-border hover:border-primary/50"
+            } focus:border-primary focus:ring-2 focus:ring-primary/20`,
+            !selectedISO && triggerClassName && "text-muted-foreground",
+            triggerClassName,
+          )}
         >
           {displayLabel}
         </button>

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { randomBytes } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { adminDb } from "@/lib/firebase-admin-db";
@@ -50,6 +51,13 @@ export const SaleInput = z.object({
     bannerUrl: z.string().max(2000).optional(),
     mobileBannerUrl: z.string().max(2000).optional(),
   }),
+  seo: z
+    .object({
+      title: z.string().max(70).optional(),
+      description: z.string().max(200).optional(),
+      ogImage: z.string().max(2000).optional(),
+    })
+    .default({}),
   tours: z.array(SaleTourInput).max(60),
 });
 export type SaleInputT = z.infer<typeof SaleInput>;
@@ -135,11 +143,14 @@ export async function saveSale(saleId: string | null, input: SaleInputT, uid: st
     endAt: input.endAt ? tsFromMs(Date.parse(input.endAt)) : null,
     holdMinutes: input.holdMinutes,
     checkoutMode: input.checkoutMode,
+    seo: Object.fromEntries(Object.entries(input.seo).filter(([, v]) => typeof v === "string" && v.trim() !== "")),
     hero,
     tours,
     updatedAt: FieldValue.serverTimestamp(),
     updatedBy: uid,
     ...(existing?.exists ? {} : { createdAt: FieldValue.serverTimestamp(), createdBy: uid }),
+    // Preview links keep working across saves; only a sale without one gets a token.
+    ...(existing?.get("previewToken") ? {} : { previewToken: randomBytes(18).toString("base64url") }),
   };
   // mergeFields replaces each listed field whole (a nested merge would keep a removed banner).
   await ref.set(fields, { mergeFields: Object.keys(fields) });

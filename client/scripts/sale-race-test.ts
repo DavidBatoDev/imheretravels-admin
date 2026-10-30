@@ -34,6 +34,7 @@ async function main() {
       holdMinutes: 15,
       checkoutMode: "auto",
       hero: { title: "t", subtitle: "s" },
+      seo: {},
       tours: [
         {
           tourPackageId: tour.id,

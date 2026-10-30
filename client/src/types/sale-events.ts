@@ -19,6 +19,13 @@ export interface SaleHero {
   mobileBannerUrl?: string;
 }
 
+export interface SaleSeo {
+  title?: string;
+  description?: string;
+  /** Image shown when the link is shared (1200×630). Falls back to the desktop banner. */
+  ogImage?: string;
+}
+
 export interface SaleTour {
   tourPackageId: string;
   tourSlug: string;
@@ -41,6 +48,10 @@ export interface SaleEvent {
   holdMinutes: number;
   checkoutMode: SaleCheckoutMode;
   hero: SaleHero;
+  /** Search and link-share overrides; blanks fall back to the hero text and banner. */
+  seo: SaleSeo;
+  /** Secret for the private preview link (www /sale-preview/<token>), works in any status. */
+  previewToken: string;
   tours: SaleTour[];
   createdAt?: string | null;
   updatedAt?: string | null;

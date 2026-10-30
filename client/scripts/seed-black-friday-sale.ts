@@ -86,6 +86,7 @@ async function main() {
         title: "Black Friday Sale",
         subtitle: "Our biggest savings of the year on small-group tours. Limited slots per tour: the earlier you book, the more you save.",
       },
+      seo: existing?.seo ?? {},
       tours: input,
     },
     "seed-script",

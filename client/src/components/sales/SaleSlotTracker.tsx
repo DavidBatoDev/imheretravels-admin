@@ -60,6 +60,7 @@ import {
   slotDisplayStatus,
   useNow,
 } from "./sale-utils";
+import { tierOfSlot } from "./editor/sale-draft";
 
 const REFRESH_MS = 10_000;
 
@@ -187,6 +188,7 @@ export default function SaleSlotTracker({ sale: initial, onClose, onChanged }: S
                 {sale.tours.map((tour) => {
                   const inv = sale.inventory[tour.tourPackageId];
                   const sum = inventorySummary(inv, now);
+                  const tiersBySlot = tierOfSlot(inv?.slots ?? []);
                   return (
                     <section key={tour.tourPackageId} aria-labelledby={`trk-${tour.tourPackageId}`} className="rounded-lg border bg-card">
                       <div className="flex flex-wrap items-center gap-3 border-b px-4 py-3">
@@ -214,7 +216,8 @@ export default function SaleSlotTracker({ sale: initial, onClose, onChanged }: S
                           <Table className="[&_td:first-child]:pl-4 [&_td:last-child]:pr-4 [&_td:last-child]:text-right [&_td]:px-3 [&_td]:py-2.5 [&_th:first-child]:pl-4 [&_th:last-child]:pr-4 [&_th:last-child]:text-right [&_th]:px-3 [&_th]:text-left [&_th]:align-middle">
                             <TableHeader>
                               <TableRow>
-                                <TableHead className="w-10">#</TableHead>
+                                <TableHead className="w-12">Slot</TableHead>
+                                <TableHead className="w-12">Tier</TableHead>
                                 <TableHead>Price</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Holder</TableHead>
@@ -233,6 +236,7 @@ export default function SaleSlotTracker({ sale: initial, onClose, onChanged }: S
                                   key={slot.index}
                                   tour={tour}
                                   slot={slot}
+                                  tier={tiersBySlot.get(slot.index) ?? 1}
                                   now={now}
                                   manualMode={sale.checkoutMode === "manual"}
                                   busy={pending === `${tour.tourPackageId}#${slot.index}`}
@@ -359,6 +363,7 @@ export default function SaleSlotTracker({ sale: initial, onClose, onChanged }: S
 function SlotRow({
   tour,
   slot,
+  tier,
   now,
   manualMode,
   busy,
@@ -369,6 +374,8 @@ function SlotRow({
 }: {
   tour: SaleTour;
   slot: SaleSlot;
+  /** Price tier (consecutive slots with the same discount). */
+  tier: number;
   now: number;
   manualMode: boolean;
   busy: boolean;
@@ -386,6 +393,7 @@ function SlotRow({
   return (
     <TableRow className={cn(busy && "opacity-60")}>
       <TableCell className="font-medium">{slot.index}</TableCell>
+      <TableCell className="tabular-nums">{tier}</TableCell>
       <TableCell className="whitespace-nowrap tabular-nums">
         <div className="font-semibold">{formatGBP(slot.salePrice)}</div>
         <div className="text-xs text-muted-foreground">−{formatGBP(slot.discountGBP)}</div>

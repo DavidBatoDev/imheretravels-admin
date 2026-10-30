@@ -221,20 +221,26 @@ export function parseMoney(v: unknown): number {
 export const numOrNaN = (s: string) => (s.trim() === "" ? NaN : Number(s));
 
 // ---------------------------------------------------------------------------
-// CSV import: `Tour,Slots,Original Price,Discount GBP,Sale Price`
+// CSV import: one row per price tier, `Tour,Slots,Discount GBP`
 // ---------------------------------------------------------------------------
+
+/** A price tier: `count` slots (= people) at the same £ discount. */
+export interface PriceTier {
+  discount: number;
+  count: number;
+}
 
 export interface CsvTourGroup {
   /** Tour label as written in the CSV, e.g. "Argentina". */
   label: string;
-  /** Discount £ per slot, ordered by the Slot column. 1 slot = 1 person. */
-  ladder: number[];
+  /** Tiers in file order: tier 1 sells first. Total slots ≤ MAX_SLOTS. */
+  tiers: PriceTier[];
   warnings: string[];
 }
 
 /** Shown in the editor; keep in sync with parseSaleCsv. */
-export const CSV_HEADER_EXAMPLE = "Tour,Slot,Discount GBP";
-export const CSV_ROW_EXAMPLE = "Argentina,1,500";
+export const CSV_HEADER_EXAMPLE = "Tour,Slots,Discount GBP";
+export const CSV_ROW_EXAMPLES = ["Argentina,1,500", "Argentina,2,300", "Argentina,3,200", "Argentina,4,100"];
 
 export interface CsvParseResult {
   groups: CsvTourGroup[];
@@ -251,54 +257,49 @@ export function parseSaleCsv(text: string): CsvParseResult {
     transformHeader: headerKey,
   });
   const errors: string[] = parsed.errors.slice(0, 3).map((e) => `Row ${(e.row ?? 0) + 2}: ${e.message}`);
-  // Only Tour, Slot and Discount GBP are needed; "Slots"/"Discount" are accepted, and
-  // any other column (Original Price, Sale Price…) is ignored: prices come from the tour.
+  // Each row is a price tier, in file order: Tour, Slots (how many people get
+  // this discount), Discount GBP. "Slot count"/"Qty" are accepted for Slots;
+  // other columns (Original Price, Sale Price…) are ignored: prices come from the tour.
   const fields = parsed.meta.fields ?? [];
-  const slotCol = ["slot", "slots", "slotno", "slotnumber"].find((f) => fields.includes(f));
+  const slotsCol = ["slots", "slotcount", "qty", "quantity"].find((f) => fields.includes(f));
   const discountCol = ["discountgbp", "discount"].find((f) => fields.includes(f));
-  const missing = [!fields.includes("tour") && "Tour", !slotCol && "Slot", !discountCol && "Discount GBP"].filter(Boolean);
-  if (missing.length || !slotCol || !discountCol) {
+  const missing = [!fields.includes("tour") && "Tour", !slotsCol && "Slots", !discountCol && "Discount GBP"].filter(Boolean);
+  if (missing.length || !slotsCol || !discountCol) {
     return {
       groups: [],
-      errors: [`Missing column(s): ${missing.join(", ")}. Expected header: ${CSV_HEADER_EXAMPLE} (e.g. ${CSV_ROW_EXAMPLE})`],
+      errors: [`Missing column(s): ${missing.join(", ")}. Expected header: ${CSV_HEADER_EXAMPLE} (e.g. ${CSV_ROW_EXAMPLES[0]})`],
     };
   }
 
-  const byTour = new Map<string, { label: string; rows: { slot: number; discount: number }[] }>();
+  const byTour = new Map<string, { label: string; tiers: PriceTier[] }>();
   parsed.data.forEach((r, i) => {
     const label = (r.tour ?? "").trim();
     if (!label) return;
-    const slot = Number(String(r[slotCol] ?? "").trim());
+    const count = Number(String(r[slotsCol] ?? "").trim());
     const discount = parseMoney(r[discountCol]);
-    if (!Number.isInteger(slot) || slot < 1 || !Number.isFinite(discount) || discount < 0) {
-      errors.push(`Row ${i + 2} (${label}): couldn't read Slot/Discount GBP, skipped`);
+    if (!Number.isInteger(count) || count < 1 || !Number.isFinite(discount) || discount < 0) {
+      errors.push(`Row ${i + 2} (${label}): couldn't read Slots/Discount GBP, skipped`);
       return;
     }
     const key = norm(label);
-    const g = byTour.get(key) ?? { label, rows: [] };
-    g.rows.push({ slot, discount });
+    const g = byTour.get(key) ?? { label, tiers: [] };
+    g.tiers.push({ discount, count });
     byTour.set(key, g);
   });
 
   const groups: CsvTourGroup[] = [];
-  for (const { label, rows } of byTour.values()) {
-    rows.sort((a, b) => a.slot - b.slot);
+  for (const { label, tiers } of byTour.values()) {
     const warnings: string[] = [];
-    const seen = new Set<number>();
-    const ladderRows = rows.filter((r) => {
-      if (seen.has(r.slot)) {
-        warnings.push(`Slot ${r.slot} appears twice; kept the first`);
-        return false;
-      }
-      seen.add(r.slot);
-      return true;
-    });
-    const gaps = ladderRows.some((r, i) => r.slot !== i + 1);
-    if (gaps) warnings.push(`Slot numbers skip (${ladderRows.map((r) => r.slot).join(", ")}); imported in order as slots 1–${Math.min(ladderRows.length, MAX_SLOTS)}`);
-    if (ladderRows.length > MAX_SLOTS) {
-      warnings.push(`Only the first ${MAX_SLOTS} slots were imported (the CSV has ${ladderRows.length})`);
+    const total = tiers.reduce((n, t) => n + t.count, 0);
+    let room = MAX_SLOTS;
+    const kept: PriceTier[] = [];
+    for (const t of tiers) {
+      if (room <= 0) break;
+      kept.push({ discount: t.discount, count: Math.min(t.count, room) });
+      room -= t.count;
     }
-    groups.push({ label, ladder: ladderRows.slice(0, MAX_SLOTS).map((r) => r.discount), warnings });
+    if (total > MAX_SLOTS) warnings.push(`Only the first ${MAX_SLOTS} slots were imported (the CSV has ${total})`);
+    groups.push({ label, tiers: kept, warnings });
   }
   return { groups, errors };
 }

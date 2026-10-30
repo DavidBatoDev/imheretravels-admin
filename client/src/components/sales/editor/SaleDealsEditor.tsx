@@ -1,14 +1,26 @@
 "use client";
 
 import { useRef } from "react";
-import { AlertTriangle, ExternalLink, FileSpreadsheet, ImageIcon, Lock, Package, Plus, SlidersHorizontal, Trash2, Users } from "lucide-react";
+import { AlertTriangle, ExternalLink, FileSpreadsheet, ImageIcon, Lock, Package, Pencil, Plus, SlidersHorizontal, Trash2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { TourPackage } from "@/types/tours";
 import { DragHandle, SortableItem, SortableList, rectSortingStrategy } from "@/components/tours/dnd/SortableList";
 import TourPicker from "../TourPicker";
-import { CSV_HEADER_EXAMPLE, CSV_ROW_EXAMPLE, MAX_SLOTS, formatGBP } from "../sale-utils";
+import { CSV_HEADER_EXAMPLE, CSV_ROW_EXAMPLES, MAX_SLOTS, formatGBP } from "../sale-utils";
 import { HelpText, LockTip } from "./fields";
-import { freeSlots, previewSlots, slotList, tourView, type DraftTour, type Inventory, type PreviewSlot, type TourView, type UnmatchedGroup } from "./sale-draft";
+import {
+  freeTiers,
+  numberList,
+  previewSlots,
+  previewTiers,
+  tourView,
+  type DraftTour,
+  type Inventory,
+  type PreviewSlot,
+  type PreviewTier,
+  type TourView,
+  type UnmatchedGroup,
+} from "./sale-draft";
 
 const PILL_OUTLINE =
   "inline-flex h-10 items-center gap-2 rounded-full border-2 border-midnight bg-white px-5 font-body text-sm font-bold text-midnight transition-colors hover:bg-midnight hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crimson-red focus-visible:ring-offset-2";
@@ -78,13 +90,19 @@ export default function SaleDealsEditor(props: SaleDealsEditorProps) {
           </div>
         </div>
         <HelpText className="mt-3">
-          <span className="font-bold text-midnight">1 slot = 1 person.</span> Each tour links to a tour package: its name, cover and price are read from the tour, and sale
-          prices are that price minus each slot&apos;s discount. Draft tours can be added (they have no public tour page).
+          <span className="font-bold text-midnight">1 slot = 1 person.</span> Each tour links to a tour package (name, cover and price are read from the tour) and has price
+          tiers: a discount and how many people get it. Tier 1 sells first. Draft tours can be added (they have no public tour page).
         </HelpText>
         <HelpText className="mt-1">
-          CSV: one row per slot, header <code className="rounded bg-light-grey px-1 text-midnight">{CSV_HEADER_EXAMPLE}</code>, e.g.{" "}
-          <code className="rounded bg-light-grey px-1 text-midnight">{CSV_ROW_EXAMPLE}</code> (“500 OFF” and “£500” work too; up to {MAX_SLOTS} slots per tour; other columns are
-          ignored). Tours match by country label, then name, then slug.
+          CSV: one row per tier, in order, header <code className="rounded bg-light-grey px-1 text-midnight">{CSV_HEADER_EXAMPLE}</code>, e.g.{" "}
+          {CSV_ROW_EXAMPLES.map((r, i) => (
+            <span key={r}>
+              {i > 0 && " / "}
+              <code className="rounded bg-light-grey px-1 text-midnight">{r}</code>
+            </span>
+          ))}{" "}
+          = 10 slots. <span className="font-bold text-midnight">Slots = how many people get this discount.</span> “500 OFF” and “£500” work; max {MAX_SLOTS} slots per tour;
+          other columns (Original Price, Sale Price…) are ignored. Tours match by country label, then name, then slug.
         </HelpText>
 
         {unmatched.length > 0 && (
@@ -99,7 +117,8 @@ export default function SaleDealsEditor(props: SaleDealsEditorProps) {
                   <div className="min-w-0 flex-1">
                     <div className="font-sans text-sm font-bold text-midnight">{u.group.label}</div>
                     <div className="font-body text-xs text-dark-gray">
-                      {u.group.ladder.length} slot{u.group.ladder.length === 1 ? "" : "s"} · −{u.group.ladder.map((d) => formatGBP(d)).join(" / −")}
+                      {u.group.tiers.length} tier{u.group.tiers.length === 1 ? "" : "s"} · {u.group.tiers.reduce((n, x) => n + x.count, 0)} slots ·{" "}
+                      {u.group.tiers.map((x) => `${x.count}× −${formatGBP(x.discount)}`).join(", ")}
                       {u.reason && ` · ${u.reason}`}
                     </div>
                   </div>
@@ -145,6 +164,7 @@ export default function SaleDealsEditor(props: SaleDealsEditorProps) {
                           tour={t}
                           view={view}
                           slots={previewSlots(inventory, t, view.originalPrice, now)}
+                          tiers={previewTiers(inventory, t, view.originalPrice, now)}
                           hasLocked={props.hasLocked(t)}
                           priorityLabel={`Deal ${i + 1}`}
                           dragHandle={<DragHandle handle={handle} className="flex size-9 items-center justify-center rounded-full bg-white text-midnight shadow-small" />}
@@ -168,6 +188,7 @@ function DealCard({
   tour: t,
   view,
   slots,
+  tiers,
   hasLocked,
   priorityLabel,
   dragHandle,
@@ -177,6 +198,7 @@ function DealCard({
   tour: DraftTour;
   view: TourView;
   slots: PreviewSlot[];
+  tiers: PreviewTier[];
   hasLocked: boolean;
   priorityLabel: string;
   dragHandle: React.ReactNode;
@@ -192,8 +214,10 @@ function DealCard({
   const onHold = slots.filter((s) => s.state === "on_hold").length;
   const sold = slots.filter((s) => s.state === "sold").length;
   const soldOut = slots.length > 0 && sold === slots.length;
-  const missingDiscounts = slots.filter((s) => s.discount === null).length;
-  const free = freeSlots(t, original);
+  const missingDiscounts = tiers.filter((x) => x.discount === null).length;
+  const free = freeTiers(t, original);
+  // Tier a new booking starts in (the one holding the next free slot).
+  const nextTier = next?.state === "available" ? tiers.find((x) => next.index >= x.first && next.index <= x.last)?.tier : undefined;
   const headingId = `deal-${t.key}`;
 
   return (
@@ -281,12 +305,21 @@ function DealCard({
             </>
           )}
         </p>
+        <a
+          href={view.editUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-0.5 inline-flex w-fit items-center gap-1 font-body text-xs font-bold text-midnight underline underline-offset-2 hover:text-crimson-red"
+        >
+          <Pencil className="h-3 w-3" aria-hidden /> Edit price in Tour Packages
+          <span className="sr-only">(opens in a new tab)</span>
+        </a>
 
         <p className="mt-4 flex items-center gap-1.5 font-sans text-xs font-bold text-midnight">
           <Users className="h-3.5 w-3.5" aria-hidden />
           {slots.length} slot{slots.length === 1 ? "" : "s"} · 1 slot = 1 person
         </p>
-        {slots.length > 0 && <CompactLadder slots={slots} nextIndex={next?.state === "available" ? next.index : undefined} />}
+        {tiers.length > 0 && <TierList tiers={tiers} nextTier={nextTier} />}
 
         <p className="mt-3 font-body text-b4-mobile font-medium tabular-nums text-midnight md:text-b4-desktop">
           {slots.length === 0 ? "Slots coming soon" : soldOut ? "Sold out" : `${left} of ${slots.length} left`}
@@ -301,13 +334,13 @@ function DealCard({
         {missingDiscounts > 0 && (
           <p className="mt-2 flex items-center gap-1 font-body text-xs font-medium text-[#B4232E]">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            {missingDiscounts} slot{missingDiscounts === 1 ? " has" : "s have"} no discount yet
+            {missingDiscounts} tier{missingDiscounts === 1 ? " has" : "s have"} no discount yet
           </p>
         )}
         {free.length > 0 && (
           <p className={cn("mt-2 flex items-start gap-1 font-body text-xs", WARN)}>
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-            Slot {slotList(free)} would sell at £0
+            Tier {numberList(free)} would sell at £0
           </p>
         )}
 
@@ -318,7 +351,7 @@ function DealCard({
             className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border-2 border-midnight px-6 py-2.5 font-body text-sm font-bold text-midnight transition-colors hover:bg-midnight hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crimson-red focus-visible:ring-offset-2"
           >
             <SlidersHorizontal className="h-4 w-4" aria-hidden />
-            Edit slots &amp; discounts
+            Edit price tiers
           </button>
         </div>
       </div>
@@ -327,39 +360,33 @@ function DealCard({
 }
 
 /**
- * The ladder at a glance, 5 slots per row so 10–20 slots stay readable:
- * slot number and sale price per cell, in the www slot colours
- * (next up = solid crimson, on hold = dashed amber, sold = grey struck).
+ * The ladder at a glance as tiers ("Tier 1 · 1 slot · £1,699"), so 10–20
+ * slots stay readable. The tier holding the next free slot is highlighted.
  */
-function CompactLadder({ slots, nextIndex }: { slots: PreviewSlot[]; nextIndex?: number }) {
+function TierList({ tiers, nextTier }: { tiers: PreviewTier[]; nextTier?: number }) {
   return (
-    <ol className="mt-2 grid grid-cols-5 gap-1" aria-label="Slot prices, cheapest first">
-      {slots.map((s) => {
-        const isNext = s.index === nextIndex;
+    <ol className="mt-2 flex flex-col gap-1" aria-label="Price tiers, cheapest first">
+      {tiers.map((x) => {
+        const isNext = x.tier === nextTier;
+        const soldOut = x.count > 0 && x.sold === x.count;
+        const left = x.free;
         return (
           <li
-            key={s.index}
+            key={x.tier}
             className={cn(
-              "flex min-h-10 flex-col items-center justify-center rounded-sm px-0.5 py-1 text-center tabular-nums",
-              s.state === "sold"
-                ? "bg-light-grey text-dark-gray"
-                : s.state === "on_hold"
-                  ? "border-2 border-dashed border-vivid-orange bg-light-yellow/40 text-midnight"
-                  : isNext
-                    ? "bg-crimson-red text-white"
-                    : "bg-crimson-red/10 text-midnight",
+              "flex items-center justify-between gap-2 rounded-sm px-2.5 py-1.5 font-body text-xs tabular-nums",
+              soldOut ? "bg-light-grey text-dark-gray" : isNext ? "bg-crimson-red text-white" : "bg-crimson-red/10 text-midnight",
             )}
           >
-            <span className="sr-only">
-              Slot {s.index}, {s.salePrice === null ? "no price yet" : formatGBP(s.salePrice)}
-              {s.discount !== null && `, ${formatGBP(s.discount)} off`}, {s.state === "on_hold" ? "on hold" : s.state}
-              {isNext && ", next up"}
+            <span className="min-w-0 truncate">
+              <span className="font-bold">Tier {x.tier}</span> · {x.count} slot{x.count === 1 ? "" : "s"}
+              {x.discount !== null && <span className={cn(!isNext && !soldOut && "text-dark-gray")}> · −{formatGBP(x.discount)}</span>}
             </span>
-            <span aria-hidden className="font-body text-[0.65rem] font-medium leading-tight">
-              {s.state === "sold" ? "Sold" : s.state === "on_hold" ? "Hold" : `#${s.index}`}
-            </span>
-            <span aria-hidden className={cn("font-body text-[0.75rem] font-bold leading-tight", s.state === "sold" && "line-through decoration-1")}>
-              {s.salePrice === null ? "—" : formatGBP(s.salePrice)}
+            <span className="shrink-0">
+              <span className={cn("font-bold", soldOut && "line-through decoration-1")}>{x.salePrice === null ? "—" : formatGBP(x.salePrice)}</span>
+              <span className={cn("ml-1.5", isNext ? "text-white/90" : "text-dark-gray")}>
+                {soldOut ? "sold out" : x.held > 0 ? `${left} left · ${x.held} held` : `${left} left`}
+              </span>
             </span>
           </li>
         );

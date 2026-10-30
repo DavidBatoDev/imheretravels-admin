@@ -575,7 +575,19 @@ export default function SaleEventEditor({ sale, tours, isFirstSale, onClose, onS
                       <Label>Start</Label>
                       <DateTimePicker value={startLocal} onChange={setStartLocal} label="Start immediately" />
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>{startLocal ? "Holds open at this time (your local time)." : "No start time: opens as soon as it's Live."}</span>
+                        <span>
+                          {startLocal ? "Holds open at this time (your local time)." : "No start time: opens as soon as it's Live."}
+                          {startLocal && localInputToIso(startLocal) && (
+                            <span className="block font-medium text-foreground">
+                              UK time:{" "}
+                              {new Intl.DateTimeFormat("en-GB", {
+                                timeZone: "Europe/London",
+                                dateStyle: "medium",
+                                timeStyle: "short",
+                              }).format(new Date(localInputToIso(startLocal)!))}
+                            </span>
+                          )}
+                        </span>
                         {startLocal && (
                           <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setStartLocal("")}>
                             Clear

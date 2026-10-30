@@ -197,8 +197,15 @@ export default function SaleEventEditor({ sale, tours, isFirstSale, onClose, onS
   const scrollRef = useRef<HTMLDivElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
+  // Draft tours can be sold in a sale too (they just have no public tour page); archived can't.
   const activeTours = useMemo(
-    () => tours.filter((t) => t.status === "active").sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")),
+    () =>
+      tours
+        .filter((t) => t.status === "active" || t.status === "draft")
+        .sort(
+          (a, b) =>
+            Number(a.status !== "active") - Number(b.status !== "active") || (a.name ?? "").localeCompare(b.name ?? ""),
+        ),
     [tours],
   );
   const tourById = useMemo(() => new Map(tours.map((t) => [t.id, t])), [tours]);

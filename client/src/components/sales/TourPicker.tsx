@@ -67,7 +67,12 @@ export default function TourPicker({
         <div className="flex min-w-0 flex-col">
           <span className="truncate">{t.name}</span>
           <span className="truncate text-xs text-muted-foreground">
-            {[t.cardSubHeader, t.pricing?.original ? `£${t.pricing.original}` : null, taken ? "already added" : null]
+            {[
+              t.cardSubHeader,
+              t.pricing?.original ? `£${t.pricing.original}` : null,
+              t.status === "draft" ? "Draft" : null,
+              taken ? "already added" : null,
+            ]
               .filter(Boolean)
               .join(" · ")}
           </span>
@@ -102,7 +107,7 @@ export default function TourPicker({
           <CommandList className="max-h-72">
             <CommandEmpty>No tours found.</CommandEmpty>
             {suggested.length > 0 && <CommandGroup heading="Suggested">{suggested.map(item)}</CommandGroup>}
-            <CommandGroup heading={suggested.length > 0 ? "All active tours" : undefined}>{others.map(item)}</CommandGroup>
+            <CommandGroup heading={suggested.length > 0 ? "All tours" : undefined}>{others.map(item)}</CommandGroup>
           </CommandList>
         </Command>
       </PopoverContent>

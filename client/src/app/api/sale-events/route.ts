@@ -28,7 +28,8 @@ export async function POST(req: NextRequest) {
   }
   try {
     const id = await saveSale(null, parsed.data, auth.uid);
-    await revalidateWww({ paths: [`/${parsed.data.slug}`] });
+    // Whole site: the www nav shows the sale link only while it is live or paused.
+    await revalidateWww({ all: true });
     return NextResponse.json({ id });
   } catch (e) {
     if (e instanceof SaleError) return NextResponse.json({ error: e.code, ...e.details }, { status: e.status });

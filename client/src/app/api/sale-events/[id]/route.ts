@@ -37,7 +37,8 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
   }
   try {
     await saveSale(id, parsed.data, auth.uid);
-    await revalidateWww({ paths: [`/${parsed.data.slug}`] });
+    // Whole site: the www nav shows the sale link only while it is live or paused.
+    await revalidateWww({ all: true });
     return NextResponse.json({ id });
   } catch (e) {
     return saleError(e, "update");

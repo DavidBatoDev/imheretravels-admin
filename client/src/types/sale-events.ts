@@ -53,6 +53,10 @@ export interface SaleEvent {
   hero: SaleHero;
   /** Search and link-share overrides; blanks fall back to the hero text and banner. */
   seo: SaleSeo;
+  /** Extra links: www /<slug> forwards to the sale page. */
+  redirectSlugs: string[];
+  /** Where the sale page sends visitors while draft or ended ("" shows the default page). */
+  fallbackUrl: string;
   /** Secret for the private preview link (www /sale-preview/<token>), works in any status. */
   previewToken: string;
   tours: SaleTour[];

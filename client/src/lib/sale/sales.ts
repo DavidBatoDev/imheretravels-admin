@@ -95,6 +95,8 @@ export const SaleInput = z.object({
       ogImage: z.string().max(2000).optional(),
     })
     .default({}),
+  redirectSlugs: z.array(z.string().min(1).max(80).regex(/^[a-z0-9-]+$/)).max(10).default([]),
+  fallbackUrl: z.string().max(500).regex(/^(\/(?!\/)|https:\/\/)/).or(z.literal("")).default(""),
   tours: z.array(SaleTourInput).max(60),
 });
 export type SaleInputT = z.infer<typeof SaleInput>;
@@ -229,6 +231,8 @@ export async function saveSale(saleId: string | null, input: SaleInputT, uid: st
     holdMinutes: input.holdMinutes,
     checkoutMode: input.checkoutMode,
     seo: Object.fromEntries(Object.entries(input.seo).filter(([, v]) => typeof v === "string" && v.trim() !== "")),
+    redirectSlugs: input.redirectSlugs,
+    fallbackUrl: input.fallbackUrl,
     hero,
     tours,
     updatedAt: FieldValue.serverTimestamp(),

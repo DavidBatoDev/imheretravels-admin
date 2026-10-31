@@ -8,10 +8,7 @@ import { CharCount, FieldInput, FieldLabel, FieldTextarea, HelpText, PanelSectio
 import SaleDrawer from "./SaleDrawer";
 import { SchedulePanel } from "./SaleEditorToolbar";
 import { BannerSlot } from "./SaleHeroEditor";
-import { SEO_DESCRIPTION_MAX, SEO_TITLE_MAX, type SaleDraft } from "./sale-draft";
-
-/** The only sale slug www has a page for today (www/app/black-friday). */
-const WWW_SALE_ROUTES = ["black-friday"];
+import { SEO_DESCRIPTION_MAX, SEO_TITLE_MAX, WWW_SALE_ROUTES, type SaleDraft } from "./sale-draft";
 
 const CHECKOUT_OPTIONS: [SaleCheckoutMode, string, string][] = [
   ["auto", "Automatic (Stripe)", "The customer pays the reservation fee by card in the reservation form."],
@@ -108,6 +105,41 @@ export default function SaleSettingsPanel({
                   <Warn>The website only has a sale page at /{WWW_SALE_ROUTES.join(", /")} right now. Other slugs need a www route first.</Warn>
                 )}
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Redirects ── */}
+        <section aria-labelledby="set-redirects">
+          <PanelSectionHead id="set-redirects">Redirects</PanelSectionHead>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <FieldLabel htmlFor="set-redirect-slugs">Extra links</FieldLabel>
+              <FieldTextarea
+                id="set-redirect-slugs"
+                rows={3}
+                value={draft.redirectSlugs}
+                onChange={(e) => onChange({ redirectSlugs: e.target.value })}
+                placeholder={"bf\nblackfriday2026"}
+                aria-describedby="set-redirect-slugs-help"
+              />
+              <HelpText id="set-redirect-slugs-help">
+                One per line. {WWW_DOMAIN}/bf would forward to the sale page. If a link matches an existing page or tour, that page wins.
+              </HelpText>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <FieldLabel htmlFor="set-fallback-url">Redirect when the sale isn&apos;t live</FieldLabel>
+              <FieldInput
+                id="set-fallback-url"
+                value={draft.fallbackUrl}
+                maxLength={500}
+                onChange={(e) => onChange({ fallbackUrl: e.target.value })}
+                placeholder="/all-tours"
+                aria-describedby="set-fallback-url-help"
+              />
+              <HelpText id="set-fallback-url-help">
+                Sends visitors here from the sale page while it&apos;s Draft or Ended. Start with / or https://. Leave blank to show the 404 or Sale ended page.
+              </HelpText>
             </div>
           </div>
         </section>

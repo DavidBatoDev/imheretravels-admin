@@ -11,6 +11,7 @@ import {
   tierLocks,
   tierOfSlot,
   tiersToLadder,
+  parseRedirectSlugs,
   toSaleInput,
   newSaleDraft,
   type DraftTour,
@@ -103,6 +104,16 @@ describe("tier locking", () => {
     expect(locks[0]).toEqual({ locked: false, minCount: 1, laterLocked: true });
     expect(locks[1]).toEqual({ locked: true, minCount: 2, laterLocked: false });
     expect(locks[2]).toEqual({ locked: false, minCount: 1, laterLocked: false });
+  });
+});
+
+describe("parseRedirectSlugs", () => {
+  it("accepts slugs, slashes and pasted links, one per line or comma separated", () => {
+    expect(parseRedirectSlugs("bf\n/deals/, https://www.imheretravels.com/BF2026 imheretravels.com/sale")).toEqual(["bf", "deals", "bf2026", "sale"]);
+  });
+
+  it("drops blanks and duplicates", () => {
+    expect(parseRedirectSlugs(" \n bf \n bf\n")).toEqual(["bf"]);
   });
 });
 

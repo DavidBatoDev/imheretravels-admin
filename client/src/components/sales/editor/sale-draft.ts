@@ -106,6 +106,9 @@ export interface SaleDraft {
   seoTitle: string;
   seoDescription: string;
   ogImage: string;
+  /** Extra links, one per line. */
+  redirectSlugs: string;
+  fallbackUrl: string;
   tours: DraftTour[];
 }
 
@@ -193,6 +196,8 @@ export function draftFromSale(sale: SaleWithInventory): SaleDraft {
     seoTitle: sale.seo?.title ?? "",
     seoDescription: sale.seo?.description ?? "",
     ogImage: sale.seo?.ogImage ?? "",
+    redirectSlugs: (sale.redirectSlugs ?? []).join("\n"),
+    fallbackUrl: sale.fallbackUrl ?? "",
     tours: sale.tours.map((t) => {
       const ladder = [...(sale.inventory[t.tourPackageId]?.slots ?? [])].sort((a, b) => a.index - b.index).map((s) => s.discountGBP);
       return {
@@ -224,6 +229,8 @@ export function newSaleDraft(isFirstSale: boolean): SaleDraft {
     seoTitle: "",
     seoDescription: "",
     ogImage: "",
+    redirectSlugs: "",
+    fallbackUrl: "",
     tours: [],
   };
 }
@@ -454,6 +461,20 @@ export interface DraftError {
   message: string;
 }
 
+/** The only sale slug www has a page for today (www/app/black-friday). */
+export const WWW_SALE_ROUTES = ["black-friday"];
+
+const MAX_REDIRECT_SLUGS = 10;
+
+/** "bf, imheretravels.com/deals/" → ["bf", "deals"]. Pasted full links are fine. */
+export function parseRedirectSlugs(raw: string): string[] {
+  const slugs = raw
+    .split(/[\s,]+/)
+    .map((s) => s.toLowerCase().replace(/^(https?:\/\/)?(www\.)?imheretravels\.com/, "").replace(/^\/+|\/+$/g, ""))
+    .filter(Boolean);
+  return [...new Set(slugs)];
+}
+
 export function toSaleInput(
   d: SaleDraft,
   opts: { unmatched: number; otherSlugs: string[]; tourById: Map<string, TourPackage>; toursLoaded: boolean },
@@ -465,6 +486,15 @@ export function toSaleInput(
   if (!d.name.trim()) err("page", "Sale name is required");
   if (!/^[a-z0-9-]+$/.test(d.slug)) err("settings", "URL slug can only use lowercase letters, numbers and hyphens");
   else if (opts.otherSlugs.includes(d.slug)) err("settings", `Another sale already uses /${d.slug}`);
+  else if ((d.status === "live" || d.status === "paused") && !WWW_SALE_ROUTES.includes(d.slug)) {
+    err("settings", `A live sale's URL slug must be ${WWW_SALE_ROUTES.join(" or ")}, or the page shows a 404. Use Extra links for other URLs.`);
+  }
+  const redirectSlugs = parseRedirectSlugs(d.redirectSlugs);
+  if (redirectSlugs.some((s) => !/^[a-z0-9-]+$/.test(s))) err("settings", "Extra links can only use lowercase letters, numbers and hyphens");
+  if (redirectSlugs.includes(d.slug)) err("settings", `/${d.slug} is already the sale page, so it can't be an extra link`);
+  if (redirectSlugs.length > MAX_REDIRECT_SLUGS) err("settings", `Use at most ${MAX_REDIRECT_SLUGS} extra links`);
+  const fallbackUrl = d.fallbackUrl.trim();
+  if (fallbackUrl && !/^(\/(?!\/)|https:\/\/)/.test(fallbackUrl)) err("settings", "The redirect link must start with / or https://");
   const hold = Number(d.holdMinutes);
   if (!Number.isInteger(hold) || hold < 1 || hold > 60) err("settings", "Hold minutes must be a whole number from 1 to 60");
   const startAt = localInputToIso(d.startLocal);
@@ -511,6 +541,8 @@ export function toSaleInput(
         mobileBannerUrl: d.mobileBannerUrl.trim(),
       },
       seo: { title: d.seoTitle.trim(), description: d.seoDescription.trim(), ogImage: d.ogImage.trim() },
+      redirectSlugs,
+      fallbackUrl,
       tours,
     },
   };

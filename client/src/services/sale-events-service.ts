@@ -42,6 +42,8 @@ export interface SaleInput {
   hero: SaleHero;
   /** Blank strings are dropped on save (the page falls back to hero text and banner). */
   seo: SaleSeo;
+  redirectSlugs: string[];
+  fallbackUrl: string;
   tours: SaleTourInput[];
 }
 

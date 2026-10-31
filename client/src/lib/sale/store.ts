@@ -67,6 +67,8 @@ export function serializeSale(snap: DocumentSnapshot<DocumentData>): SaleEvent {
     checkoutMode: d.checkoutMode ?? "auto",
     hero: { title: "", subtitle: "", ...(d.hero ?? {}) },
     seo: { ...(d.seo ?? {}) },
+    redirectSlugs: d.redirectSlugs ?? [],
+    fallbackUrl: d.fallbackUrl ?? "",
     previewToken: d.previewToken ?? "",
     tours: (d.tours ?? []).slice().sort((a: { order: number }, b: { order: number }) => a.order - b.order),
     createdAt: toIso(d.createdAt),

@@ -84,8 +84,20 @@ export function useSaleHold() {
 
   useEffect(() => {
     // A hold mid-payment is protected on the server; don't show it as ended.
-    if (phase === "active" && hold && !hold.paying && msLeft <= 0) setPhase("expired");
-  }, [phase, hold, msLeft]);
+    if (phase === "active" && hold && !hold.paying && msLeft <= 0) {
+      setPhase("expired");
+      // Give the slots back right away instead of after the server's grace
+      // period, so the next customer can take them. (The server refuses this
+      // for a hold whose payment has started.)
+      const parts = splitHoldParam(holdParam);
+      if (parts) {
+        void fetch(`/api/public/sale/holds/${encodeURIComponent(parts.holdId)}/release`, {
+          method: "POST",
+          headers: { "X-Hold-Token": parts.token },
+        }).catch(() => {});
+      }
+    }
+  }, [phase, hold, msLeft, holdParam]);
 
   /** Pressing Pay: locks the slots for payment. Returns false when the hold has ended. */
   const markPaying = useCallback(async (): Promise<boolean> => {

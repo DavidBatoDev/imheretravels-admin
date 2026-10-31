@@ -101,11 +101,11 @@ export default function SaleEditorToolbar(p: ToolbarProps) {
         <button type="button" className={cn(PILL, p.scheduleOpen ? PILL_ON : PILL_IDLE, compact && "h-8 px-3 text-xs")} title={scheduleSummary(p.schedule)}>
           <Clock className="h-4 w-4 shrink-0" aria-hidden />
           {!compact && <span className="hidden max-w-[16rem] truncate 2xl:inline">{scheduleSummary(p.schedule)}</span>}
-          <span className={cn(!compact && "hidden xl:inline 2xl:hidden")}>Schedule</span>
-          {!compact && <span className="sr-only xl:hidden">Schedule</span>}
+          <span className={cn(!compact && "2xl:hidden")}>Schedule</span>
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-80 p-4" align="end">
+        <p className="mb-1 font-sans text-sm font-bold text-midnight">Schedule</p>
         <SchedulePanel {...p.schedule} onChange={p.onSchedule} />
       </PopoverContent>
     </Popover>
@@ -279,15 +279,12 @@ export default function SaleEditorToolbar(p: ToolbarProps) {
   );
 }
 
-function SchedulePanel({ startLocal, endTba, endLocal, onChange }: ScheduleValue & { onChange: (patch: Partial<ScheduleValue>) => void }) {
+export function SchedulePanel({ startLocal, endTba, endLocal, onChange }: ScheduleValue & { onChange: (patch: Partial<ScheduleValue>) => void }) {
   const startIso = localInputToIso(startLocal);
   const endIso = localInputToIso(endLocal);
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <p className="font-sans text-sm font-bold text-midnight">Schedule</p>
-        <HelpText>Enter times in your local time; the UK time is shown underneath.</HelpText>
-      </div>
+      <HelpText>Enter times in your local time; the UK time is shown underneath.</HelpText>
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between">
           <FieldLabel htmlFor="sched-start">Start</FieldLabel>
@@ -312,10 +309,10 @@ function SchedulePanel({ startLocal, endTba, endLocal, onChange }: ScheduleValue
         <HelpText id="sched-start-help">
           {startIso ? (
             <>
-              <span className="font-bold text-midnight">UK time: {ukDateTime(startIso)}</span>. Before this the page shows a countdown.
+              <span className="font-bold text-midnight">UK time: {ukDateTime(startIso)}</span>. Before this the page shows a countdown. The sale must also be set to Live, or the page stays hidden.
             </>
           ) : (
-            "No start time: holds open as soon as the sale is Live."
+            "No start time: holds open as soon as the sale is set to Live."
           )}
         </HelpText>
       </div>

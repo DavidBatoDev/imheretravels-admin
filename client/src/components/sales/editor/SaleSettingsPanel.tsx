@@ -6,6 +6,7 @@ import type { SaleCheckoutMode } from "@/types/sale-events";
 import { WWW_DOMAIN, WWW_ORIGIN, publicSaleUrl, salePreviewUrl } from "../sale-utils";
 import { CharCount, FieldInput, FieldLabel, FieldTextarea, HelpText, PanelSectionHead } from "./fields";
 import SaleDrawer from "./SaleDrawer";
+import { SchedulePanel } from "./SaleEditorToolbar";
 import { BannerSlot } from "./SaleHeroEditor";
 import { SEO_DESCRIPTION_MAX, SEO_TITLE_MAX, type SaleDraft } from "./sale-draft";
 
@@ -56,8 +57,14 @@ export default function SaleSettingsPanel({
   const previewLink = previewToken ? salePreviewUrl(previewToken) : null;
 
   return (
-    <SaleDrawer open={open} onOpenChange={(o) => !o && onClose()} icon={Settings} title="Sale settings" description="URL, booking rules, search & sharing">
+    <SaleDrawer open={open} onOpenChange={(o) => !o && onClose()} icon={Settings} title="Sale settings" description="Dates, URL, booking rules, search & sharing">
       <div className="flex flex-col gap-8">
+        {/* ── Schedule ── */}
+        <section aria-labelledby="set-schedule">
+          <PanelSectionHead id="set-schedule">Start &amp; end dates</PanelSectionHead>
+          <SchedulePanel startLocal={draft.startLocal} endTba={draft.endTba} endLocal={draft.endLocal} onChange={onChange} />
+        </section>
+
         {/* ── Page & URL ── */}
         <section aria-labelledby="set-url">
           <PanelSectionHead id="set-url">Page &amp; URL</PanelSectionHead>

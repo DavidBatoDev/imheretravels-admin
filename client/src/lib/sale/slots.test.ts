@@ -1,9 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { effectiveStatus, isSaleOpen, pickSlots, publicState, salePriceFor, type SlotLike } from "./slots";
+import { effectiveStatus, isSaleOpen, lostSlots, pickSlots, publicState, salePriceFor, type SlotLike } from "./slots";
 
 const NOW = 1_800_000_000_000;
 const ladder = (...statuses: SlotLike["status"][]): SlotLike[] =>
   statuses.map((status, i) => ({ index: i + 1, status, heldUntilMs: status === "held" || status === "paying" ? NOW + 60_000 : null }));
+
+describe("lostSlots", () => {
+  it("reports shown slots that are held, sold or gone from the ladder", () => {
+    const slots = ladder("held", "sold", "available");
+    expect(lostSlots(slots, [1, 2, 3, 4], NOW)).toEqual([1, 2, 4]);
+  });
+
+  it("ignores earlier slots freeing up: the shown ones are still there", () => {
+    expect(lostSlots(ladder("available", "available", "available"), [2, 3], NOW)).toEqual([]);
+  });
+
+  it("treats an expired hold as free again", () => {
+    const expired: SlotLike = { index: 1, status: "held", heldUntilMs: NOW - 1 };
+    expect(lostSlots([expired], [1], NOW)).toEqual([]);
+  });
+
+  it("finds nothing lost when no slots were sent", () => {
+    expect(lostSlots(ladder("sold"), [], NOW)).toEqual([]);
+  });
+});
 
 describe("pickSlots", () => {
   it("takes the lowest free slots in ladder order", () => {

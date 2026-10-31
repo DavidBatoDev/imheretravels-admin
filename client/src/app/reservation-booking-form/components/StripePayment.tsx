@@ -16,11 +16,17 @@ const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
   ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
   : null;
 
+/** Shortest time the "Payment successful" modal stays up, so it can be read. */
+const SUCCESS_MODAL_MIN_MS = 1500;
+
 interface PaymentFormProps {
   clientSecret: string;
   paymentDocId: string | null;
-  onSuccess?: (paymentIntentId?: string, paymentDocId?: string) => void;
-  onPaymentSuccess?: (paymentDocId: string) => void;
+  onSuccess?: (
+    paymentIntentId?: string,
+    paymentDocId?: string,
+  ) => void | Promise<void>;
+  onPaymentSuccess?: (paymentDocId: string) => void | Promise<void>;
   onError: (error: string) => void;
   onProcessingChange?: (processing: boolean) => void;
   isGuestBooking?: boolean;
@@ -63,6 +69,27 @@ function PaymentForm({
   const popupWindowRef = useRef<Window | null>(null);
   const isPaymentSucceeded =
     modalStatus === "success" || (!!message && message.includes("succeeded"));
+
+  // Saving the booking can take a while after Stripe succeeds (on production it
+  // waits for the webhook), so the modal stays up until that has finished.
+  const finishPayment = async (paymentIntentId: string) => {
+    try {
+      await Promise.all([
+        new Promise((resolve) => setTimeout(resolve, SUCCESS_MODAL_MIN_MS)),
+        isGuestBooking && onPaymentSuccess && paymentDocId
+          ? onPaymentSuccess(paymentDocId)
+          : onSuccess?.(paymentIntentId, paymentDocId || undefined),
+      ]);
+    } finally {
+      // Close helper popup if open
+      try {
+        popupWindowRef.current?.close();
+      } catch {}
+      setIsProcessing(false);
+      onProcessingChange?.(false);
+      setShowModal(false);
+    }
+  };
 
   const openRedirectPopup = () => {
     try {
@@ -205,27 +232,7 @@ function PaymentForm({
             "Your reservation fee has been processed. Securing your spot...",
           );
 
-          // Close helper popup if open
-          try {
-            popupWindowRef.current?.close();
-          } catch {}
-
-          // Trigger success callback after a brief delay
-          setTimeout(() => {
-            console.log("Invoking success callback...");
-            if (isGuestBooking && onPaymentSuccess && paymentDocId) {
-              console.log("Calling onPaymentSuccess with:", paymentDocId);
-              onPaymentSuccess(paymentDocId);
-            } else if (onSuccess) {
-              console.log("Calling onSuccess with:", paymentIntent.id);
-              onSuccess(paymentIntent.id, paymentDocId || undefined);
-            } else {
-              console.warn(
-                "No callback available; neither onPaymentSuccess nor onSuccess defined",
-              );
-            }
-            setShowModal(false);
-          }, 2000);
+          void finishPayment(paymentIntent.id);
 
           return;
         }
@@ -347,10 +354,6 @@ function PaymentForm({
       return;
     }
 
-    if (onBeforeConfirm && !(await onBeforeConfirm())) {
-      return;
-    }
-
     setIsProcessing(true);
     onProcessingChange?.(true);
     setMessage(null);
@@ -363,6 +366,13 @@ function PaymentForm({
     setModalStatus("processing");
     setModalMessage("Processing your payment...");
     setModalDetail("Please wait while we securely process your transaction.");
+
+    if (onBeforeConfirm && !(await onBeforeConfirm())) {
+      setIsProcessing(false);
+      onProcessingChange?.(false);
+      setShowModal(false);
+      return;
+    }
 
     // Get return URL for Revolut Pay and other redirect-based payment methods
     const returnUrl = `${window.location.origin}${window.location.pathname}`;
@@ -497,21 +507,7 @@ function PaymentForm({
             "Your reservation fee has been processed. Securing your spot...",
           );
 
-          // Keep modal open briefly before calling success
-          setTimeout(() => {
-            if (isGuestBooking && onPaymentSuccess && paymentDocId) {
-              onPaymentSuccess(paymentDocId);
-            } else if (onSuccess) {
-              onSuccess(paymentIntent.id, paymentDocId || undefined);
-            }
-            // Close helper popup if open
-            try {
-              popupWindowRef.current?.close();
-            } catch {}
-            setIsProcessing(false);
-            onProcessingChange?.(false);
-            setShowModal(false);
-          }, 2000);
+          void finishPayment(paymentIntent.id);
           break;
 
         case "processing":
@@ -801,7 +797,8 @@ function PaymentForm({
                 {modalDetail}
               </p>
 
-              {modalStatus === "processing" && (
+              {(modalStatus === "processing" ||
+                modalStatus === "success") && (
                 <div className="flex items-center justify-center gap-2">
                   <div
                     className="h-2 w-2 rounded-full bg-primary animate-bounce"
@@ -974,8 +971,11 @@ interface StripePaymentProps {
   amountGBP?: number;
   bookingId?: string;
   paymentDocId?: string | null;
-  onSuccess?: (paymentIntentId?: string, paymentDocId?: string) => void;
-  onPaymentSuccess?: (paymentDocId: string) => void;
+  onSuccess?: (
+    paymentIntentId?: string,
+    paymentDocId?: string,
+  ) => void | Promise<void>;
+  onPaymentSuccess?: (paymentDocId: string) => void | Promise<void>;
   onPaymentDocIdCreated?: (paymentDocId: string) => void;
   onBack?: () => void;
   onError?: (message: string) => void;

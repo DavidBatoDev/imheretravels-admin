@@ -45,6 +45,17 @@ export function pickSlots<T extends SlotLike>(slots: T[], partySize: number, now
   return free.length >= partySize ? free.slice(0, partySize) : null;
 }
 
+/**
+ * Which of the slots a customer was shown have gone since. A claim is refused
+ * on these, so nobody ends up holding a slot at a price they never saw.
+ */
+export function lostSlots(slots: SlotLike[], shown: number[], nowMs: number): number[] {
+  return shown.filter((index) => {
+    const slot = slots.find((s) => s.index === index);
+    return !slot || effectiveStatus(slot, nowMs) !== "available";
+  });
+}
+
 export function salePriceFor(originalPrice: number, discountGBP: number): number {
   return Math.max(0, Math.round((originalPrice - discountGBP) * 100) / 100);
 }

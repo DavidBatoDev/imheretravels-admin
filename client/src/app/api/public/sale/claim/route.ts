@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { claimSlots } from "@/lib/sale/holds";
-import { MAX_PARTY_SIZE } from "@/lib/sale/slots";
+import { MAX_PARTY_SIZE, MAX_SLOTS } from "@/lib/sale/slots";
 import { SALE_LIMITS, clientIp, errorResponse, json, preflight, rateLimit } from "@/lib/sale/http";
 
 /**
@@ -14,6 +14,8 @@ const Body = z.object({
   tourPackageId: z.string().min(1).max(128).regex(/^[^/]+$/),
   partySize: z.number().int().min(1).max(MAX_PARTY_SIZE),
   email: z.string().trim().email().max(254),
+  /** Slots on screen when Hold was tapped; if one has gone the claim is refused so the new price can be shown. */
+  shownSlots: z.array(z.number().int().min(1).max(MAX_SLOTS)).max(MAX_PARTY_SIZE).optional(),
   /** Honeypot: real visitors never fill this. */
   website: z.string().max(0).optional(),
 });

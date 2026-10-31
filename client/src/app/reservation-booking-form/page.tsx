@@ -1029,14 +1029,16 @@ const Page = () => {
                             bookingType={bookingType}
                             numberOfGuests={numberOfPeople}
                             saleHold={
-                              sale.phase === "active" ? sale.holdParam : null
+                              sale.phase === "active" || sale.phase === "secured"
+                                ? sale.holdParam
+                                : null
                             }
                             onBeforeConfirm={
                               sale.isSaleHold ? sale.markPaying : undefined
                             }
-                            onSuccess={(pid, docId) => {
+                            onSuccess={async (pid, docId) => {
                               if (sale.isSaleHold) sale.markSecured();
-                              handlePaymentSuccess(pid, docId);
+                              await handlePaymentSuccess(pid, docId);
                             }}
                             onError={() => {}}
                             onProcessingChange={(p) => setStep2Processing(p)}

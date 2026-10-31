@@ -10,7 +10,9 @@ import {
   PAYING_EXTENSION_MS,
   effectiveStatus,
   isSaleOpen,
+  lostSlots,
   pickSlots,
+  publicState,
   salePriceFor,
 } from "./slots";
 import { tourPriceInfo } from "./pricing";
@@ -141,6 +143,8 @@ export interface ClaimInput {
   tourPackageId: string;
   partySize: number;
   email: string;
+  /** Slot indexes the customer was looking at when they tapped Hold. */
+  shownSlots?: number[];
 }
 
 export async function claimSlots(input: ClaimInput): Promise<SaleHoldView & { token: string }> {
@@ -197,10 +201,15 @@ export async function claimSlots(input: ClaimInput): Promise<SaleHoldView & { to
     let slots = storedSlotsWithMs(invSnap.get("slots")) as SlotWithMs[];
     if (sameTour) slots = slots.map((s) => (s.holdId === sameTour.id && s.status !== "sold" ? freed(s) : s));
 
+    // The availability feed is cached briefly, so refusals carry the live states.
+    const states = () => slots.map((s) => ({ index: s.index, state: publicState(s, now) }));
     const picked = pickSlots(slots, partySize, now);
     if (!picked) {
       const left = slots.filter((s) => effectiveStatus(s, now) === "available").length;
-      throw new SaleError(409, "not_enough_slots", { left });
+      throw new SaleError(409, "not_enough_slots", { left, states: states() });
+    }
+    if (lostSlots(slots, input.shownSlots ?? [], now).length > 0) {
+      throw new SaleError(409, "slots_changed", { states: states() });
     }
 
     const holdMs = Math.max(1, Number(sale.holdMinutes) || 15) * 60_000;

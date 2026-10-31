@@ -22,6 +22,8 @@ type ReservationTourSelectionSidebarCardProps = {
   setTourDate: (value: string) => void;
   /** A Black Friday slot hold fixes the tour; the date stays selectable. */
   tourLocked?: boolean;
+  /** Sale price for the whole party while slots are held (replaces the regular tour cost). */
+  saleTotal?: number | null;
 };
 
 const toPounds = (value?: number) => {
@@ -54,6 +56,7 @@ export default function ReservationTourSelectionSidebarCard({
   setShowTourModal,
   setTourDate,
   tourLocked = false,
+  saleTotal = null,
 }: ReservationTourSelectionSidebarCardProps) {
   const [dateMenuOpen, setDateMenuOpen] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -329,8 +332,10 @@ export default function ReservationTourSelectionSidebarCard({
                     {hasSelectedDate && (
                       <div className="w-full max-w-full xl:w-[190px] rounded-lg border border-border bg-background px-3 py-2 text-xs leading-tight space-y-2">
                         <div className="flex items-center justify-between border-b border-border pb-1.5">
-                          <span className="font-medium text-muted-foreground">Total Tour Cost</span>
-                          <span className="font-semibold text-[15px]">{toPounds(selectedTourCost)}</span>
+                          <span className="font-medium text-muted-foreground">
+                            {saleTotal != null ? "Sale price (your party)" : "Total Tour Cost"}
+                          </span>
+                          <span className="font-semibold text-[15px]">{toPounds(saleTotal ?? selectedTourCost)}</span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="font-medium text-muted-foreground">Reservation Fee</span>

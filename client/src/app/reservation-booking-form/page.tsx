@@ -404,6 +404,17 @@ const Page = () => {
     setTourDate,
   });
 
+  const sale = useSaleHold();
+  const saleHold = sale.hold;
+  const saleLocksSelection =
+    !!saleHold && (sale.phase === "active" || sale.phase === "secured");
+
+  // Sale holds: each traveller pays their own slot's price (slot order = traveller order).
+  const saleTravellerPrices =
+    saleHold && (sale.phase === "active" || sale.phase === "secured")
+      ? [...saleHold.slots].sort((a, b) => a.index - b.index).map((s) => s.salePrice)
+      : null;
+
   const {
     availablePaymentTerm,
     selectedTourPrice,
@@ -423,6 +434,7 @@ const Page = () => {
     paymentPlans,
     activePaymentTab,
     setPaymentPlans,
+    saleTravellerPrices,
   });
 
   const { progressValue, stepDescription } = useReservationStepPresentation({
@@ -572,11 +584,6 @@ const Page = () => {
     setPaymentConfirmed,
     setCompletedSteps,
   });
-
-  const sale = useSaleHold();
-  const saleHold = sale.hold;
-  const saleLocksSelection =
-    !!saleHold && (sale.phase === "active" || sale.phase === "secured");
 
   const {
     animateHeight,
@@ -844,7 +851,9 @@ const Page = () => {
     previousStepRef.current = step;
   }, [step]);
 
-  const shouldCenterRightPanel = step === 1;
+  // With a sale hold the countdown bar sits above the form, so start at the top
+  // instead of centring (centring pushed the form heading under the bar).
+  const shouldCenterRightPanel = step === 1 && !sale.isSaleHold;
 
   return (
     <div
@@ -937,6 +946,11 @@ const Page = () => {
                   setCarouselIndex={setCarouselIndex}
                   setTourDate={setTourDate}
                   tourLocked={saleLocksSelection}
+                  saleTotal={
+                    saleLocksSelection && saleHold
+                      ? saleHold.slots.reduce((sum, s) => sum + s.salePrice, 0)
+                      : null
+                  }
                 />
               </div>
             </aside>

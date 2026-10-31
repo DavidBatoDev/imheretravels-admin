@@ -49,6 +49,8 @@ type UseReservationPaymentPlanningOptions = {
   paymentPlans: PersonPaymentPlan[];
   activePaymentTab: number;
   setPaymentPlans: React.Dispatch<React.SetStateAction<PersonPaymentPlan[]>>;
+  /** Per-traveller sale prices while a Black Friday hold is active (traveller 0 = main booker). */
+  saleTravellerPrices?: number[] | null;
 };
 
 export const useReservationPaymentPlanning = ({
@@ -63,15 +65,27 @@ export const useReservationPaymentPlanning = ({
   paymentPlans,
   activePaymentTab,
   setPaymentPlans,
+  saleTravellerPrices = null,
 }: UseReservationPaymentPlanningOptions) => {
   const availablePaymentTerm = useMemo(
     () => getAvailablePaymentTermForDate(tourDate),
     [tourDate],
   );
 
+  // Black Friday holds price each traveller from their own slot; otherwise the
+  // date's custom price or the tour price, as before.
   const selectedTourPrice = useMemo(
-    () => (selectedDateDetail?.customOriginal ?? selectedPackage?.price) || 0,
-    [selectedDateDetail, selectedPackage],
+    () =>
+      saleTravellerPrices?.[activePaymentTab] ??
+      ((selectedDateDetail?.customOriginal ?? selectedPackage?.price) || 0),
+    [saleTravellerPrices, activePaymentTab, selectedDateDetail, selectedPackage],
+  );
+  const totalPartyPrice = useMemo(
+    () =>
+      saleTravellerPrices
+        ? saleTravellerPrices.reduce((sum, p) => sum + p, 0)
+        : selectedTourPrice * numberOfPeople,
+    [saleTravellerPrices, selectedTourPrice, numberOfPeople],
   );
 
   const availablePaymentPlans = useMemo<AvailablePaymentPlan[]>(() => {
@@ -98,7 +112,7 @@ export const useReservationPaymentPlanning = ({
       .filter((term) => term.monthsRequired && term.monthsRequired <= maxMonths)
       .map((term) => {
         const monthsRequired = term.monthsRequired ?? 0;
-        const totalTourPrice = selectedTourPrice * numberOfPeople;
+        const totalTourPrice = totalPartyPrice;
         return {
           id: term.id,
           type: term.paymentPlanType,
@@ -117,8 +131,7 @@ export const useReservationPaymentPlanning = ({
   }, [
     availablePaymentTerm,
     paymentTerms,
-    selectedTourPrice,
-    numberOfPeople,
+    totalPartyPrice,
     tourDate,
     depositAmount,
   ]);

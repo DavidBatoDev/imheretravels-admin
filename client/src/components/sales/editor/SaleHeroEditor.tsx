@@ -26,6 +26,7 @@ interface SaleHeroEditorProps {
   phase: SalePhase;
   isDraft: boolean;
   startAt: string | null;
+  endAt: string | null;
   upTo: number;
   hasTours: boolean;
   /** www shows the first tour's cover (desktop only) when there's no banner. */
@@ -38,10 +39,16 @@ interface SaleHeroEditorProps {
 
 /** The sale page hero, editable in place. Mirrors www `SaleHero`. */
 export default function SaleHeroEditor(props: SaleHeroEditorProps) {
-  const { title, subtitle, bannerUrl, mobileBannerUrl, onChange, statusText, phase, isDraft, startAt, upTo, hasTours, fallbackImage, mode, onModeChange, uploading, onUpload } = props;
+  const { title, subtitle, bannerUrl, mobileBannerUrl, onChange, statusText, phase, isDraft, startAt, endAt, upTo, hasTours, fallbackImage, mode, onModeChange, uploading, onUpload } = props;
   const mobile = mode === "mobile";
   const live = phase === "live";
-  const now = useNow(1000, phase === "upcoming" && !!startAt);
+  const countdown =
+    phase === "upcoming" && startAt
+      ? { to: startAt, label: "Sale opens in" }
+      : phase === "live" && endAt
+        ? { to: endAt, label: "Sale ends in" }
+        : null;
+  const now = useNow(1000, !!countdown);
 
   const desktopSrc = bannerUrl || mobileBannerUrl || fallbackImage;
   const mobileSrc = mobileBannerUrl || bannerUrl || (mobile ? undefined : fallbackImage);
@@ -160,12 +167,12 @@ export default function SaleHeroEditor(props: SaleHeroEditorProps) {
                 />
               </div>
 
-              {phase === "upcoming" && startAt && (
+              {countdown && (
                 <div className="mt-6" aria-hidden>
-                  <p className="font-body text-b4-mobile font-medium uppercase tracking-wider text-white/70 md:text-b4-desktop">Sale opens in</p>
+                  <p className="font-body text-b4-mobile font-medium uppercase tracking-wider text-white/70 md:text-b4-desktop">{countdown.label}</p>
                   <div className="mt-2 flex gap-2 sm:gap-3">
                     {COUNTDOWN_UNITS.map((u, i) => {
-                      const left = Math.max(0, Date.parse(startAt) - now);
+                      const left = Math.max(0, Date.parse(countdown.to) - now);
                       const v = Math.floor((i === 0 ? left : left % COUNTDOWN_UNITS[i - 1].ms) / u.ms);
                       return (
                         <div key={u.label} className="flex min-w-16 flex-col items-center rounded-md bg-white/10 px-3 py-2.5">

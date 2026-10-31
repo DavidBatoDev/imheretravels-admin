@@ -353,6 +353,7 @@ export default function SaleEditor({ sale: initialSale, tours, allSales }: SaleE
             phase={phase}
             isDraft={draft.status === "draft"}
             startAt={startIso}
+            endAt={endIso}
             upTo={maxDiscount(draft)}
             hasTours={draft.tours.length > 0}
             fallbackImage={firstView?.coverImage}

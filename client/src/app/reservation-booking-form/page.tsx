@@ -881,7 +881,8 @@ const Page = () => {
       </div>
 
       {/* Theme Toggle Button */}
-      <div className="fixed top-6 right-6 z-50">
+      {/* On phones the sale countdown bar takes the top edge; keep the toggle out of its way. */}
+      <div className={`fixed top-6 right-6 z-50 ${sale.isSaleHold ? "hidden lg:block" : ""}`}>
         <ThemeToggle />
       </div>
 

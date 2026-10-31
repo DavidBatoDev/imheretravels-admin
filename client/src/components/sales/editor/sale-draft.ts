@@ -461,8 +461,14 @@ export interface DraftError {
   message: string;
 }
 
-/** The only sale slug www has a page for today (www/app/black-friday). */
-export const WWW_SALE_ROUTES = ["black-friday"];
+/** Top-level www pages: these win over a sale at the same URL, so the sale would never show. */
+const WWW_RESERVED_SLUGS = new Set([
+  "about-us", "all-destinations", "all-tours", "api", "contact-us", "destinations", "faqs", "hosted-tours",
+  "join-our-community", "personalized-tours", "philippines-destinations", "pre-departure",
+  "pre-departure-information", "privacy-policy", "reservation-confirmed", "resident-hosts", "reviews",
+  "sale-preview", "terms-and-conditions", "tours", "travel-information", "travel-requirements",
+  "travel-safety", "why-us",
+]);
 
 const MAX_REDIRECT_SLUGS = 10;
 
@@ -486,12 +492,12 @@ export function toSaleInput(
   if (!d.name.trim()) err("page", "Sale name is required");
   if (!/^[a-z0-9-]+$/.test(d.slug)) err("settings", "URL slug can only use lowercase letters, numbers and hyphens");
   else if (opts.otherSlugs.includes(d.slug)) err("settings", `Another sale already uses /${d.slug}`);
-  else if ((d.status === "live" || d.status === "paused") && !WWW_SALE_ROUTES.includes(d.slug)) {
-    err("settings", `A live sale's URL slug must be ${WWW_SALE_ROUTES.join(" or ")}, or the page shows a 404. Use Extra links for other URLs.`);
-  }
+  else if (WWW_RESERVED_SLUGS.has(d.slug)) err("settings", `/${d.slug} is already a page on the website. Choose another URL slug.`);
   const redirectSlugs = parseRedirectSlugs(d.redirectSlugs);
   if (redirectSlugs.some((s) => !/^[a-z0-9-]+$/.test(s))) err("settings", "Extra links can only use lowercase letters, numbers and hyphens");
   if (redirectSlugs.includes(d.slug)) err("settings", `/${d.slug} is already the sale page, so it can't be an extra link`);
+  const reservedLink = redirectSlugs.find((s) => WWW_RESERVED_SLUGS.has(s));
+  if (reservedLink) err("settings", `/${reservedLink} is already a page on the website, so it can't be an extra link`);
   if (redirectSlugs.length > MAX_REDIRECT_SLUGS) err("settings", `Use at most ${MAX_REDIRECT_SLUGS} extra links`);
   const fallbackUrl = d.fallbackUrl.trim();
   if (fallbackUrl && !/^(\/(?!\/)|https:\/\/)/.test(fallbackUrl)) err("settings", "The redirect link must start with / or https://");

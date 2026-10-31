@@ -118,6 +118,28 @@ describe("parseRedirectSlugs", () => {
 });
 
 describe("toSaleInput", () => {
+  const input = (patch: Partial<ReturnType<typeof newSaleDraft>>) =>
+    toSaleInput({ ...newSaleDraft(false), name: "Sale", slug: "black-friday-2026", status: "paused", ...patch }, {
+      unmatched: 0,
+      otherSlugs: [],
+      tourById: new Map(),
+      toursLoaded: true,
+    });
+
+  it("lets a live sale use any URL slug that isn't a website page", () => {
+    expect(input({}).errors).toEqual([]);
+    expect(input({ redirectSlugs: "black-friday\nblackfriday", fallbackUrl: "/" }).input).toMatchObject({
+      slug: "black-friday-2026",
+      redirectSlugs: ["black-friday", "blackfriday"],
+      fallbackUrl: "/",
+    });
+  });
+
+  it("refuses slugs and extra links that are already website pages", () => {
+    expect(input({ slug: "tours" }).errors.map((e) => e.message)).toEqual(["/tours is already a page on the website. Choose another URL slug."]);
+    expect(input({ redirectSlugs: "faqs" }).errors.map((e) => e.message)).toEqual(["/faqs is already a page on the website, so it can't be an extra link"]);
+  });
+
   it("expands tiers to the flat ladder the API stores", () => {
     const d = newSaleDraft(true);
     d.tours = [draftFromTour(tour("A"), { label: "A", tiers: [{ discount: 500, count: 1 }, { discount: 300, count: 2 }], warnings: [] })];

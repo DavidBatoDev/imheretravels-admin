@@ -8,7 +8,7 @@ import { CharCount, FieldInput, FieldLabel, FieldTextarea, HelpText, PanelSectio
 import SaleDrawer from "./SaleDrawer";
 import { SchedulePanel } from "./SaleEditorToolbar";
 import { BannerSlot } from "./SaleHeroEditor";
-import { SEO_DESCRIPTION_MAX, SEO_TITLE_MAX, WWW_SALE_ROUTES, type SaleDraft } from "./sale-draft";
+import { SEO_DESCRIPTION_MAX, SEO_TITLE_MAX, type SaleDraft } from "./sale-draft";
 
 const CHECKOUT_OPTIONS: [SaleCheckoutMode, string, string][] = [
   ["auto", "Automatic (Stripe)", "The customer pays the reservation fee by card in the reservation form."],
@@ -100,9 +100,8 @@ export default function SaleSettingsPanel({
                   <span className="sr-only">(opens in a new tab)</span>
                 </a>
                 {slugTaken && <Warn tone="error">Another sale already uses /{draft.slug}.</Warn>}
-                {savedSlug && savedSlug !== draft.slug && <Warn>Changing the slug breaks links already shared to /{savedSlug}.</Warn>}
-                {draft.slug && !WWW_SALE_ROUTES.includes(draft.slug) && (
-                  <Warn>The website only has a sale page at /{WWW_SALE_ROUTES.join(", /")} right now. Other slugs need a www route first.</Warn>
+                {savedSlug && savedSlug !== draft.slug && (
+                  <Warn>Links already shared to /{savedSlug} will stop working unless you add {savedSlug} to Extra links below.</Warn>
                 )}
               </div>
             </div>

@@ -10,6 +10,7 @@
 // save. The tour's name, slug, cover and price always come from the tour
 // package, so the editor never edits them.
 
+import { tourPriceInfo } from "@/lib/sale/pricing";
 import type { SaleInput, SaleWithInventory } from "@/services/sale-events-service";
 import type { SaleCheckoutMode, SaleSlot, SaleStatus } from "@/types/sale-events";
 import type { TourPackage } from "@/types/tours";
@@ -161,7 +162,9 @@ export function tourView(t: DraftTour, pkg: TourPackage | undefined): TourView {
   return {
     name: pkg.name || t.saved.name,
     coverImage: pkg.media?.coverImage || t.saved.coverImage,
-    originalPrice: Number(pkg.pricing?.original) || 0,
+    // Same "from" price the sale page shows: the cheapest upcoming date's price
+    // (a date's own price when set, else the tour's).
+    originalPrice: tourPriceInfo(Number(pkg.pricing?.original) || 0, pkg.travelDates).fromPrice,
     status: pkg.status,
     publicUrl: pkg.status === "active" && pkg.slug ? `${WWW_ORIGIN}/tours/${pkg.slug}` : null,
     editUrl,

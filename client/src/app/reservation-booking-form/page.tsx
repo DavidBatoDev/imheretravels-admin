@@ -409,10 +409,24 @@ const Page = () => {
   const saleLocksSelection =
     !!saleHold && (sale.phase === "active" || sale.phase === "secured");
 
-  // Sale holds: each traveller pays their own slot's price (slot order = traveller order).
+  // Sale holds: each traveller pays their own slot's price (slot order = traveller
+  // order). Once a date is picked the discount comes off that date's price (its own
+  // price if it has one); before that, the hold's "from" prices.
+  const saleDatePrice =
+    tourDate && selectedPackage
+      ? typeof selectedDateDetail?.customOriginal === "number" && selectedDateDetail.customOriginal > 0
+        ? selectedDateDetail.customOriginal
+        : (selectedPackage as { price?: number }).price ?? null
+      : null;
   const saleTravellerPrices =
     saleHold && (sale.phase === "active" || sale.phase === "secured")
-      ? [...saleHold.slots].sort((a, b) => a.index - b.index).map((s) => s.salePrice)
+      ? [...saleHold.slots]
+          .sort((a, b) => a.index - b.index)
+          .map((s) => {
+            if (saleDatePrice == null) return s.salePrice;
+            const discount = s.discountGBP ?? Math.max(0, s.originalPrice - s.salePrice);
+            return Math.max(0, Math.round((saleDatePrice - discount) * 100) / 100);
+          })
       : null;
 
   const {
@@ -947,8 +961,8 @@ const Page = () => {
                   setTourDate={setTourDate}
                   tourLocked={saleLocksSelection}
                   saleTotal={
-                    saleLocksSelection && saleHold
-                      ? saleHold.slots.reduce((sum, s) => sum + s.salePrice, 0)
+                    saleLocksSelection && saleTravellerPrices
+                      ? saleTravellerPrices.reduce((sum, p) => sum + p, 0)
                       : null
                   }
                 />
@@ -964,10 +978,10 @@ const Page = () => {
             >
               <div
                 className={`mx-auto w-full max-w-[760px] ${
-                  sale.isSaleHold ? "pb-40 lg:pb-0" : ""
+                  sale.isSaleHold ? "pt-12 lg:pt-0" : ""
                 }`}
               >
-                <SaleHoldBanner sale={sale} />
+                <SaleHoldBanner sale={sale} prices={saleTravellerPrices} />
                 <AnimatePresence mode="wait" initial={false} custom={stepSwipeDirection}>
                   <motion.div
                     key={`reservation-step-${step}`}

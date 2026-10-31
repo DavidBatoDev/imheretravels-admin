@@ -5,6 +5,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin-db";
 import { SaleError, linkPaymentToHold, requireActiveHold } from "./holds";
 import { parseHoldParam, toMs } from "./store";
+import { datePrice, slotPrice } from "./pricing";
 
 const stripe = () => new Stripe(process.env.STRIPE_SECRET_KEY!);
 
@@ -19,11 +20,11 @@ function dateKey(v: unknown): string | null {
  * (or the chosen date's custom deposit, as the form shows it) × party size.
  * The amount the browser sends is never trusted for a sale.
  */
-async function reservationFeeFor(tourPackageId: string, tourDate: string | undefined, partySize: number) {
+async function priceForDate(tourPackageId: string, tourDate: string | undefined, partySize: number) {
   const tour = await adminDb().collection("tourPackages").doc(tourPackageId).get();
   if (!tour.exists) throw new SaleError(404, "tour_not_found");
   const pricing = tour.get("pricing") ?? {};
-  const dates: { startDate: unknown; customDeposit?: number | null; hasCustomDeposit?: boolean; isAvailable?: boolean }[] =
+  const dates: { startDate: unknown; customDeposit?: number | null; hasCustomDeposit?: boolean; isAvailable?: boolean; customOriginal?: number | null }[] =
     tour.get("travelDates") ?? [];
   const date = tourDate ? dates.find((d) => d.isAvailable !== false && dateKey(d.startDate) === tourDate) : undefined;
   if (tourDate && !date) throw new SaleError(409, "tour_date_unavailable");
@@ -31,7 +32,11 @@ async function reservationFeeFor(tourPackageId: string, tourDate: string | undef
     date?.hasCustomDeposit === true && typeof date.customDeposit === "number"
       ? date.customDeposit
       : (pricing.deposit ?? 250);
-  return Math.round(perPerson * partySize * 100) / 100;
+  return {
+    fee: Math.round(perPerson * partySize * 100) / 100,
+    // The sale discount comes off the date's own price when it has one.
+    datePrice: datePrice(Number(pricing.original) || 0, date as { customOriginal?: number | null } | undefined),
+  };
 }
 
 /**
@@ -63,7 +68,15 @@ export async function initSaleReservationPayment(opts: {
     await stripe().paymentIntents.cancel(data.payment.stripeIntentId).catch(() => {});
   }
 
-  const amountGBP = await reservationFeeFor(hold.tourPackageId, data.tour?.date || undefined, hold.partySize);
+  const priced = await priceForDate(hold.tourPackageId, data.tour?.date || undefined, hold.partySize);
+  const amountGBP = priced.fee;
+  // Exact per-slot prices for the chosen date (the hold had "from" prices).
+  const slots = [...hold.slots]
+    .sort((a, b) => a.index - b.index)
+    .map((s) => {
+      const discountGBP = typeof s.discountGBP === "number" ? s.discountGBP : Math.max(0, s.originalPrice - s.salePrice);
+      return { index: s.index, discountGBP, originalPrice: priced.datePrice, salePrice: slotPrice(priced.datePrice, discountGBP) };
+    });
   const amountPence = Math.round(amountGBP * 100);
 
   let intent: Stripe.PaymentIntent | null = null;
@@ -102,7 +115,7 @@ export async function initSaleReservationPayment(opts: {
     );
   }
 
-  const originalPrice = hold.slots[0]?.originalPrice ?? 0;
+  const originalPrice = priced.datePrice;
   await docRef.update({
     "payment.stripeIntentId": intent.id,
     "payment.clientSecret": intent.client_secret,
@@ -115,11 +128,11 @@ export async function initSaleReservationPayment(opts: {
       holdId: parsed.holdId,
       slotIndexes: hold.slotIndexes,
       // Slot prices in ladder order; traveller i (0 = main booker) pays slots[i].
-      slots: [...hold.slots].sort((a, b) => a.index - b.index),
+      slots,
     },
     "timestamps.updatedAt": FieldValue.serverTimestamp(),
   });
-  await linkPaymentToHold(parsed.holdId, parsed.token, opts.paymentDocId, intent.id);
+  await linkPaymentToHold(parsed.holdId, parsed.token, opts.paymentDocId, intent.id, slots);
 
   return { clientSecret: intent.client_secret!, paymentDocId: opts.paymentDocId, amountGBP };
 }

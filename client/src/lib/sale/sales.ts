@@ -6,6 +6,7 @@ import { z } from "zod";
 import { adminDb } from "@/lib/firebase-admin-db";
 import type { PublicSaleAvailability, SaleEvent, SaleInventory } from "@/types/sale-events";
 import { MAX_PARTY_SIZE, MAX_SLOTS, effectiveStatus, isSaleOpen, publicState, salePriceFor } from "./slots";
+import { tourPriceInfo } from "./pricing";
 import { SaleError } from "./holds";
 import {
   SALE_COL,
@@ -46,8 +47,9 @@ export interface TourFacts {
   name: string;
   slug: string;
   coverImage: string;
-  /** Base original price per person (`pricing.original`). */
+  /** "From" price per person: lowest upcoming date price (date's own price, else `pricing.original`). */
   originalPrice: number;
+  pricesVary: boolean;
 }
 
 /** Live tour data for sale tours, keyed by tourPackages id. Missing tours are absent. */
@@ -63,7 +65,10 @@ export async function tourFacts(ids: string[]): Promise<Map<string, TourFacts>> 
       // The www tour page and the reservation form both key on `slug`.
       slug: s.get("slug") || "",
       coverImage: s.get("media.coverImage") ?? "",
-      originalPrice: Number(s.get("pricing.original")) || 0,
+      ...(() => {
+        const info = tourPriceInfo(Number(s.get("pricing.original")) || 0, s.get("travelDates"));
+        return { originalPrice: info.fromPrice, pricesVary: info.pricesVary };
+      })(),
     });
   }
   return out;
@@ -121,7 +126,15 @@ export async function getSale(saleId: string): Promise<SaleWithInventory | null>
   const tours = sale.tours.map((t) => {
     const f = facts.get(t.tourPackageId);
     return f
-      ? { ...t, tourName: f.name, displayName: f.name, tourSlug: f.slug, coverImage: f.coverImage || t.coverImage, originalPrice: f.originalPrice }
+      ? {
+          ...t,
+          tourName: f.name,
+          displayName: f.name,
+          tourSlug: f.slug,
+          coverImage: f.coverImage || t.coverImage,
+          originalPrice: f.originalPrice,
+          pricesVary: f.pricesVary,
+        }
       : t;
   });
   const priceOf = new Map(tours.map((t) => [t.tourPackageId, t.originalPrice]));
@@ -170,6 +183,8 @@ export async function getPublicAvailability(saleId: string): Promise<PublicSaleA
         left: free.length,
         onHold: pub.filter((s) => s.state === "on_hold").length,
         nextPrice: free[0]?.salePrice ?? null,
+        fromPrice: t.originalPrice,
+        pricesVary: !!t.pricesVary,
       };
     }),
   };

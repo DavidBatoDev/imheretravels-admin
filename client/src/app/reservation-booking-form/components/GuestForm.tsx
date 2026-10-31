@@ -477,7 +477,7 @@ const GuestForm = memo(
                   }`}
                 >
                   <span
-                    className={`text-muted-foreground mr-2 select-none ${
+                    className={`shrink-0 text-muted-foreground mr-2 select-none ${
                       paymentConfirmed ? "opacity-50" : ""
                     }`}
                   >
@@ -494,7 +494,7 @@ const GuestForm = memo(
                       handleChange("whatsAppNumber", value.slice(0, maxLen));
                     }}
                     placeholder="123 456 7890"
-                    className={`flex-1 bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground/60 ${
+                    className={`w-full min-w-0 flex-1 truncate bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground/60 ${
                       paymentConfirmed
                         ? "opacity-50 text-muted-foreground cursor-not-allowed"
                         : ""

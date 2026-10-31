@@ -405,7 +405,7 @@ export default function MainBookerFormSection({
                 }`}
               >
                 <span
-                  className={`text-muted-foreground mr-2 select-none ${paymentConfirmed ? "opacity-50" : ""}`}
+                  className={`shrink-0 text-muted-foreground mr-2 select-none ${paymentConfirmed ? "opacity-50" : ""}`}
                 >
                   +{safeGetCountryCallingCode(whatsAppCountry)}
                 </span>
@@ -453,7 +453,7 @@ export default function MainBookerFormSection({
                   disabled={paymentConfirmed}
                   placeholder="123 456 7890"
                   maxLength={getCountryData(whatsAppCountry).maxLength}
-                  className={`flex-1 bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground/60 ${paymentConfirmed ? "opacity-50 text-muted-foreground cursor-not-allowed" : ""}`}
+                  className={`w-full min-w-0 flex-1 truncate bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground/60 ${paymentConfirmed ? "opacity-50 text-muted-foreground cursor-not-allowed" : ""}`}
                 />
               </div>
               {whatsAppNumber &&

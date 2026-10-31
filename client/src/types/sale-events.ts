@@ -32,7 +32,10 @@ export interface SaleTour {
   /** Card title on the sale page, e.g. "Argentina". */
   displayName: string;
   tourName: string;
+  /** "From" price: the lowest upcoming date price (a date's own price, else the tour's). */
   originalPrice: number;
+  /** Upcoming dates have different prices, so the sale price depends on the date. */
+  pricesVary?: boolean;
   coverImage?: string;
   order: number;
 }
@@ -97,7 +100,8 @@ export interface SaleHoldView {
   tourName: string;
   displayName: string;
   partySize: number;
-  slots: { index: number; salePrice: number; originalPrice: number; paymentLinkUrl?: string | null }[];
+  /** salePrice/originalPrice are "from" prices until a date is chosen; discountGBP is fixed. */
+  slots: { index: number; salePrice: number; originalPrice: number; discountGBP?: number; paymentLinkUrl?: string | null }[];
   status: HoldStatus;
   paying: boolean;
   /** What the countdown shows; the server keeps the hold a little longer. */
@@ -115,6 +119,9 @@ export interface PublicTourAvailability {
   left: number;
   onHold: number;
   nextPrice: number | null;
+  /** Lowest upcoming date price the slot prices are based on. */
+  fromPrice?: number;
+  pricesVary?: boolean;
 }
 
 export interface PublicSaleAvailability {

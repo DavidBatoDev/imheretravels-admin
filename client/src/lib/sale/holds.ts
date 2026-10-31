@@ -13,6 +13,7 @@ import {
   pickSlots,
   salePriceFor,
 } from "./slots";
+import { tourPriceInfo } from "./pricing";
 import {
   SALE_COL,
   holdRef,
@@ -60,7 +61,7 @@ interface StoredHold {
   displayName: string;
   partySize: number;
   slotIndexes: number[];
-  slots: { index: number; salePrice: number; originalPrice: number }[];
+  slots: { index: number; salePrice: number; originalPrice: number; discountGBP?: number }[];
   email: string;
   tokenHash: string;
   status: HoldStatus;
@@ -168,7 +169,11 @@ export async function claimSlots(input: ClaimInput): Promise<SaleHoldView & { to
     if (!tour || !invSnap.exists) throw new SaleError(404, "tour_not_in_sale");
     // Prices come from the tour's current original price, not a stored copy.
     const tourSnap = await tx.get(db.collection("tourPackages").doc(input.tourPackageId));
-    const basePrice = Number(tourSnap.get("pricing.original")) || Number(tour.originalPrice) || 0;
+    // "From" price until the customer picks a date; init-payment re-prices on the date.
+    const basePrice = tourPriceInfo(
+      Number(tourSnap.get("pricing.original")) || Number(tour.originalPrice) || 0,
+      tourSnap.get("travelDates"),
+    ).fromPrice;
     const tourName: string = tourSnap.get("name") || tour.tourName || "";
     const tourSlug: string = tourSnap.get("slug") || tour.tourSlug || "";
 
@@ -255,7 +260,12 @@ export async function claimSlots(input: ClaimInput): Promise<SaleHoldView & { to
       displayName: tourName,
       partySize,
       slotIndexes: picked.map((s) => s.index),
-      slots: picked.map((s) => ({ index: s.index, salePrice: salePriceFor(basePrice, s.discountGBP), originalPrice: basePrice })),
+      slots: picked.map((s) => ({
+        index: s.index,
+        discountGBP: s.discountGBP,
+        salePrice: salePriceFor(basePrice, s.discountGBP),
+        originalPrice: basePrice,
+      })),
       email,
       tokenHash,
       status: "active",
@@ -337,7 +347,13 @@ export async function markPaying(holdId: string, token: string): Promise<SaleHol
 }
 
 /** Records the PaymentIntent on the hold and its slots (init-payment). */
-export async function linkPaymentToHold(holdId: string, token: string, paymentDocId: string, intentId: string) {
+export async function linkPaymentToHold(
+  holdId: string,
+  token: string,
+  paymentDocId: string,
+  intentId: string,
+  pricedSlots?: StoredHold["slots"],
+) {
   const db = adminDb();
   await db.runTransaction(async (tx) => {
     const { snap, hold } = await loadHold(tx, holdId, token);
@@ -346,7 +362,7 @@ export async function linkPaymentToHold(holdId: string, token: string, paymentDo
     const slots = storedSlotsWithMs(inv.get("slots")) as SlotWithMs[];
     const next = slots.map((s) => (s.holdId === holdId ? { ...s, paymentDocId, stripeIntentId: intentId } : s));
     tx.update(iRef, { slots: next.map(toStored) });
-    tx.update(snap.ref, { paymentDocId, stripeIntentId: intentId });
+    tx.update(snap.ref, { paymentDocId, stripeIntentId: intentId, ...(pricedSlots ? { slots: pricedSlots } : {}) });
   });
 }
 

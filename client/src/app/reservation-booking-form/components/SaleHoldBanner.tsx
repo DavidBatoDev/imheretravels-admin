@@ -26,11 +26,19 @@ function formatClock(ms: number) {
  * Sticky countdown for a Black Friday slot hold. Only the person holding the
  * slots ever sees this; other visitors just see "On hold" on the sale page.
  */
-export default function SaleHoldBanner({ sale }: { sale: UseSaleHoldResult }) {
+export default function SaleHoldBanner({
+  sale,
+  prices,
+}: {
+  sale: UseSaleHoldResult;
+  /** Per-slot prices for the chosen date, in slot order (falls back to the hold's). */
+  prices?: number[] | null;
+}) {
   const { hold, phase, msLeft } = sale;
   const [announcement, setAnnouncement] = useState("");
   const announced = useRef(new Set<string>());
   const [leaving, setLeaving] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   // Screen readers hear the time at 5 and 1 minutes, not every second.
   useEffect(() => {
@@ -52,7 +60,9 @@ export default function SaleHoldBanner({ sale }: { sale: UseSaleHoldResult }) {
   const ended = phase === "expired" || phase === "invalid";
   const urgent = phase === "active" && msLeft < 120_000;
   const slotsLabel = hold ? `${hold.partySize} ${hold.partySize === 1 ? "slot" : "slots"}` : "slots";
-  const total = hold?.slots.reduce((sum, s) => sum + s.salePrice, 0) ?? 0;
+  const ordered = hold ? [...hold.slots].sort((a, b) => a.index - b.index) : [];
+  const priceOf = (i: number) => prices?.[i] ?? ordered[i]?.salePrice ?? 0;
+  const total = ordered.reduce((sum, _s, i) => sum + priceOf(i), 0);
 
   const changeParty = async () => {
     setLeaving(true);
@@ -62,68 +72,78 @@ export default function SaleHoldBanner({ sale }: { sale: UseSaleHoldResult }) {
 
   return (
     <>
+      {/* Slim one-line bar: pinned to the top on phones (the form's buttons are at
+          the bottom), sticky inside the form panel on desktop. Details expand on tap. */}
       <div
-        className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 lg:sticky lg:inset-x-auto lg:bottom-auto lg:top-2 lg:z-30 lg:mb-4"
+        className="fixed inset-x-0 top-0 z-[60] px-2 pt-[max(0.375rem,env(safe-area-inset-top))] lg:sticky lg:inset-x-auto lg:top-2 lg:z-30 lg:mb-3 lg:px-0 lg:pt-0"
         role="status"
       >
         <div
-          className={`rounded-2xl border px-4 py-3 shadow-lg backdrop-blur transition-colors ${
+          className={`mx-auto max-w-[760px] rounded-full border shadow-md backdrop-blur transition-colors ${
             phase === "secured"
               ? "border-emerald-500/40 bg-emerald-50/95 text-emerald-900 dark:bg-emerald-950/80 dark:text-emerald-100"
               : urgent
                 ? "border-[#EF3340] bg-[#EF3340] text-white"
                 : "border-[#EF3340]/30 bg-card/95 text-foreground"
-          }`}
+          } ${detailsOpen ? "rounded-2xl" : ""}`}
         >
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-wider opacity-80">
-                {hold?.saleName || "Black Friday Sale"}
-              </p>
-              <p className="truncate text-sm font-semibold">
-                {phase === "secured"
-                  ? `${slotsLabel} secured · ${hold?.displayName ?? ""}`
-                  : hold?.paying
-                    ? `Confirming payment · ${slotsLabel} protected`
-                    : `${slotsLabel} held · ${hold?.displayName ?? ""}`}
-              </p>
-            </div>
-            {phase === "active" && (
+          <div className="flex h-10 items-center gap-2 pl-3 pr-1.5 text-sm">
+            {phase === "secured" ? (
+              <svg className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                <path fillRule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-8 8a1 1 0 01-1.4 0l-4-4a1 1 0 111.4-1.4L8 12.6l7.3-7.3a1 1 0 011.4 0z" clipRule="evenodd" />
+              </svg>
+            ) : (
               <span
-                className={`shrink-0 rounded-full px-3 py-1 text-lg font-bold tabular-nums ${
-                  urgent ? "bg-white/20" : "bg-[#EF3340]/10 text-[#EF3340]"
-                }`}
+                className={`shrink-0 font-bold tabular-nums ${urgent ? "" : "text-[#EF3340]"}`}
                 aria-label={`${formatClock(msLeft)} left`}
               >
                 {formatClock(msLeft)}
               </span>
             )}
+            <span className="min-w-0 flex-1 truncate font-semibold">
+              {phase === "secured"
+                ? `${slotsLabel} secured`
+                : hold?.paying
+                  ? `Confirming payment · ${slotsLabel} protected`
+                  : `${slotsLabel} held for you`}
+              <span className="font-normal opacity-75"> · {hold?.displayName ?? ""}</span>
+            </span>
+            {hold && phase !== "secured" && (
+              <button
+                type="button"
+                onClick={() => setDetailsOpen((o) => !o)}
+                aria-expanded={detailsOpen}
+                className="shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold underline-offset-2 hover:underline"
+              >
+                {detailsOpen ? "Hide" : "Details"}
+              </button>
+            )}
           </div>
 
-          {hold && phase !== "secured" && (
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs opacity-90">
-              {hold.slots.map((s) => (
-                <span key={s.index} className="tabular-nums">
-                  Slot {s.index} · {gbp(s.salePrice)}
-                </span>
-              ))}
-              {hold.slots.length > 1 && <span className="font-semibold tabular-nums">Total {gbp(total)}</span>}
-              {phase === "active" && !hold.paying && (
-                <button
-                  type="button"
-                  onClick={changeParty}
-                  disabled={leaving}
-                  className="ml-auto underline underline-offset-2 disabled:opacity-50"
-                >
-                  Change party
-                </button>
-              )}
+          {hold && detailsOpen && phase !== "secured" && (
+            <div className="border-t border-current/10 px-4 pb-3 pt-2 text-xs">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 opacity-90">
+                {ordered.map((s, i) => (
+                  <span key={s.index} className="tabular-nums">
+                    Slot {s.index} · {gbp(priceOf(i))}
+                  </span>
+                ))}
+                {hold.slots.length > 1 && <span className="font-semibold tabular-nums">Total {gbp(total)}</span>}
+                {phase === "active" && !hold.paying && (
+                  <button
+                    type="button"
+                    onClick={changeParty}
+                    disabled={leaving}
+                    className="ml-auto underline underline-offset-2 disabled:opacity-50"
+                  >
+                    Change party
+                  </button>
+                )}
+              </div>
+              <p className="mt-1 opacity-75">
+                Only you can see this timer. Pay the reservation fee before it ends to secure your slots.
+              </p>
             </div>
-          )}
-          {phase === "active" && !hold?.paying && (
-            <p className="mt-1 text-[11px] opacity-75">
-              Only you can see this timer. Pay the reservation fee before it ends to secure your slots.
-            </p>
           )}
         </div>
         <div aria-live="polite" className="sr-only">
